@@ -11,3 +11,6 @@ readme = "Readme.md"
 exclude = ["/.github", "/tests", "/res"]
 
 [dependencies]
+bitvec = "1.0.0"
+object = "0.28.2"
+thiserror = "1.0.30"
