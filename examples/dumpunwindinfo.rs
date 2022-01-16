@@ -2,7 +2,8 @@ use std::{fs::File, io::Read};
 
 use object::ObjectSection;
 use rul::compact_unwind_info::{
-    Arm64Opcode, CompactUnwindInfoHeader, CompressedEntryBitfield, OpcodeBitfield,
+    Arm64Opcode, CompactUnwindInfoHeader, CompressedEntryBitfield, CompressedPage, OpcodeBitfield,
+    RegularPage, PAGE_KIND_COMPRESSED, PAGE_KIND_REGULAR,
 };
 
 fn main() {
@@ -37,50 +38,57 @@ fn main() {
     println!();
     for page in pages {
         let first_address = page.first_address();
-        let page_start_offset = page.page_offset();
-        if page.is_regular_page(data).unwrap() {
-            let page = page.parse_regular_page(data).unwrap();
-            let entries = page.entries(data, page_start_offset).unwrap();
-            println!(
-                "{:08x} Regular page with {} entries",
-                first_address,
-                entries.len()
-            );
-            for entry in entries {
-                let instruction_address = entry.instruction_address();
-                let opcode = entry.opcode();
-                match Arm64Opcode::try_from(&opcode) {
-                    Ok(opcode) => println!("{:08x} {}", instruction_address, opcode),
-                    Err(_) => println!("{:08x} with unknown opcode kind", instruction_address),
+        let page_offset = page.page_offset();
+        match page.page_kind(data).unwrap() {
+            PAGE_KIND_REGULAR => {
+                let page = RegularPage::parse(data, page_offset.into()).unwrap();
+                let entries = page.entries(data, page_offset).unwrap();
+                println!(
+                    "0x{:08x}: Regular page with {} entries",
+                    first_address,
+                    entries.len()
+                );
+                for entry in entries {
+                    print_entry(entry.instruction_address(), entry.opcode());
                 }
+                println!();
             }
-            println!();
-        } else {
-            let page = page.parse_compressed_page(data).unwrap();
-            let entries = page.entries(data, page_start_offset).unwrap();
-            let local_opcodes = page.local_opcodes(data, page_start_offset).unwrap();
-            println!(
-                "{:08x} Compressed page with {} entries and {} local opcodes",
-                first_address,
-                entries.len(),
-                local_opcodes.len()
-            );
-            for entry in entries {
-                let entry = CompressedEntryBitfield::from(entry);
-                let instruction_address = first_address + entry.relative_instruction_address();
-                let opcode_index = entry.opcode_index() as usize;
-                let opcode = if opcode_index < global_opcode_count {
-                    &global_opcodes[opcode_index]
-                } else {
-                    &local_opcodes[opcode_index - global_opcode_count]
-                };
-                let opcode = OpcodeBitfield::from(opcode);
-                match Arm64Opcode::try_from(&opcode) {
-                    Ok(opcode) => println!("{:08x} {}", instruction_address, opcode),
-                    Err(_) => println!("{:08x} with unknown opcode kind", instruction_address),
+            PAGE_KIND_COMPRESSED => {
+                let page = CompressedPage::parse(data, page_offset.into()).unwrap();
+                let entries = page.entries(data, page_offset).unwrap();
+                let local_opcodes = page.local_opcodes(data, page_offset).unwrap();
+                println!(
+                    "0x{:08x}: Compressed page with {} entries and {} local opcodes",
+                    first_address,
+                    entries.len(),
+                    local_opcodes.len()
+                );
+                for entry in entries {
+                    let entry = CompressedEntryBitfield::new((*entry).into());
+                    let instruction_address = first_address + entry.relative_instruction_address();
+                    let opcode_index = entry.opcode_index() as usize;
+                    let opcode: u32 = if opcode_index < global_opcode_count {
+                        global_opcodes[opcode_index].into()
+                    } else {
+                        local_opcodes[opcode_index - global_opcode_count].into()
+                    };
+                    print_entry(instruction_address, opcode);
                 }
+                println!();
             }
-            println!();
+            _ => {}
         }
+    }
+}
+
+fn print_entry(instruction_address: u32, opcode: u32) {
+    let opcode = OpcodeBitfield::new(opcode);
+    match Arm64Opcode::parse(&opcode) {
+        Some(opcode) => println!("  0x{:08x}: {}", instruction_address, opcode),
+        None => println!(
+            "  0x{:08x}: unknown opcode kind {}",
+            instruction_address,
+            opcode.kind()
+        ),
     }
 }
