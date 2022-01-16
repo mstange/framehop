@@ -2,8 +2,194 @@ use std::fmt::Display;
 
 use super::{
     nice::OpcodeBitfield, OPCODE_KIND_ARM64_DWARF, OPCODE_KIND_ARM64_FRAMEBASED,
-    OPCODE_KIND_ARM64_FRAMELESS, OPCODE_KIND_NULL,
+    OPCODE_KIND_ARM64_FRAMELESS, OPCODE_KIND_NULL, OPCODE_KIND_X86_DWARF,
+    OPCODE_KIND_X86_FRAMEBASED, OPCODE_KIND_X86_FRAMELESS_IMMEDIATE,
+    OPCODE_KIND_X86_FRAMELESS_INDIRECT,
 };
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum OpcodeRegX86 {
+    Ebx,
+    Ecx,
+    Edx,
+    Edi,
+    Esi,
+    Ebp,
+}
+
+impl OpcodeRegX86 {
+    pub fn parse(n: u32) -> Option<Self> {
+        match n {
+            1 => Some(OpcodeRegX86::Ebx),
+            2 => Some(OpcodeRegX86::Ecx),
+            3 => Some(OpcodeRegX86::Edx),
+            4 => Some(OpcodeRegX86::Edi),
+            5 => Some(OpcodeRegX86::Esi),
+            6 => Some(OpcodeRegX86::Ebp),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum OpcodeRegX86_64 {
+    Rbx,
+    R12,
+    R13,
+    R14,
+    R15,
+    Rbp,
+}
+
+impl OpcodeRegX86_64 {
+    pub fn parse(n: u32) -> Option<Self> {
+        match n {
+            1 => Some(OpcodeRegX86_64::Rbx),
+            2 => Some(OpcodeRegX86_64::R12),
+            3 => Some(OpcodeRegX86_64::R13),
+            4 => Some(OpcodeRegX86_64::R14),
+            5 => Some(OpcodeRegX86_64::R15),
+            6 => Some(OpcodeRegX86_64::Rbp),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum OpcodeX86 {
+    Null,
+    FrameBased {
+        stack_offset_in_bytes: u16,
+        saved_regs: [Option<OpcodeRegX86>; 5],
+    },
+    FramelessImmediate {
+        stack_size_in_bytes: u16,
+        saved_regs: [Option<OpcodeRegX86>; 6],
+    },
+    FramelessIndirect,
+    Dwarf {
+        eh_frame_fde: u32,
+    },
+}
+
+impl OpcodeX86 {
+    pub fn parse(opcode: &OpcodeBitfield) -> Option<Self> {
+        let opcode = match opcode.kind() {
+            OPCODE_KIND_NULL => OpcodeX86::Null,
+            OPCODE_KIND_X86_FRAMEBASED => OpcodeX86::FrameBased {
+                stack_offset_in_bytes: (((opcode.0 >> 16) & 0xff) as u16) * 4,
+                saved_regs: [
+                    OpcodeRegX86::parse((opcode.0 >> 12) & 0b111),
+                    OpcodeRegX86::parse((opcode.0 >> 9) & 0b111),
+                    OpcodeRegX86::parse((opcode.0 >> 6) & 0b111),
+                    OpcodeRegX86::parse((opcode.0 >> 3) & 0b111),
+                    OpcodeRegX86::parse(opcode.0 & 0b111),
+                ],
+            },
+            OPCODE_KIND_X86_FRAMELESS_IMMEDIATE => OpcodeX86::FramelessImmediate {
+                stack_size_in_bytes: (((opcode.0 >> 16) & 0xff) as u16) * 4,
+                saved_regs: [None, None, None, None, None, None],
+            },
+            OPCODE_KIND_X86_FRAMELESS_INDIRECT => OpcodeX86::FramelessIndirect,
+            OPCODE_KIND_X86_DWARF => OpcodeX86::Dwarf {
+                eh_frame_fde: (opcode.0 & 0xffffff),
+            },
+            _ => return None,
+        };
+        Some(opcode)
+    }
+}
+
+impl Display for OpcodeX86 {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            OpcodeX86::Null => {
+                write!(f, "(uncovered)")?;
+            }
+            OpcodeX86::FrameBased { .. } => {
+                write!(f, "frame-based")?;
+            }
+            OpcodeX86::FramelessImmediate { .. } => {
+                write!(f, "frameless immediate")?;
+            }
+            OpcodeX86::FramelessIndirect { .. } => {
+                write!(f, "frameless indirect")?;
+            }
+            OpcodeX86::Dwarf { eh_frame_fde } => {
+                write!(f, "(check eh_frame FDE 0x{:x})", eh_frame_fde)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum OpcodeX86_64 {
+    Null,
+    FrameBased {
+        stack_offset_in_bytes: u16,
+        saved_regs: [Option<OpcodeRegX86_64>; 5],
+    },
+    FramelessImmediate {
+        stack_size_in_bytes: u16,
+        saved_regs: [Option<OpcodeRegX86_64>; 6],
+    },
+    FramelessIndirect,
+    Dwarf {
+        eh_frame_fde: u32,
+    },
+}
+
+impl OpcodeX86_64 {
+    pub fn parse(opcode: &OpcodeBitfield) -> Option<Self> {
+        let opcode = match opcode.kind() {
+            OPCODE_KIND_NULL => OpcodeX86_64::Null,
+            OPCODE_KIND_X86_FRAMEBASED => OpcodeX86_64::FrameBased {
+                stack_offset_in_bytes: (((opcode.0 >> 16) & 0xff) as u16) * 8,
+                saved_regs: [
+                    OpcodeRegX86_64::parse((opcode.0 >> 12) & 0b111),
+                    OpcodeRegX86_64::parse((opcode.0 >> 9) & 0b111),
+                    OpcodeRegX86_64::parse((opcode.0 >> 6) & 0b111),
+                    OpcodeRegX86_64::parse((opcode.0 >> 3) & 0b111),
+                    OpcodeRegX86_64::parse(opcode.0 & 0b111),
+                ],
+            },
+            OPCODE_KIND_X86_FRAMELESS_IMMEDIATE => OpcodeX86_64::FramelessImmediate {
+                stack_size_in_bytes: (((opcode.0 >> 16) & 0xff) as u16) * 8,
+                saved_regs: [None, None, None, None, None, None],
+            },
+            OPCODE_KIND_X86_FRAMELESS_INDIRECT => OpcodeX86_64::FramelessIndirect,
+            OPCODE_KIND_X86_DWARF => OpcodeX86_64::Dwarf {
+                eh_frame_fde: (opcode.0 & 0xffffff),
+            },
+            _ => return None,
+        };
+        Some(opcode)
+    }
+}
+
+impl Display for OpcodeX86_64 {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            OpcodeX86_64::Null => {
+                write!(f, "(uncovered)")?;
+            }
+            OpcodeX86_64::FrameBased { .. } => {
+                write!(f, "frame-based")?;
+            }
+            OpcodeX86_64::FramelessImmediate { .. } => {
+                write!(f, "frameless immediate")?;
+            }
+            OpcodeX86_64::FramelessIndirect { .. } => {
+                write!(f, "frameless indirect")?;
+            }
+            OpcodeX86_64::Dwarf { eh_frame_fde } => {
+                write!(f, "(check eh_frame FDE 0x{:x})", eh_frame_fde)?;
+            }
+        }
+        Ok(())
+    }
+}
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum OpcodeArm64 {

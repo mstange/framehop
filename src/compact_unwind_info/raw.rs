@@ -315,6 +315,7 @@ impl RegularEntry {
 
 pub const OPCODE_KIND_NULL: u8 = 0;
 
+pub const OPCODE_KIND_X86_FRAMEBASED: u8 = 1;
 pub const OPCODE_KIND_X86_FRAMELESS_IMMEDIATE: u8 = 2;
 pub const OPCODE_KIND_X86_FRAMELESS_INDIRECT: u8 = 3;
 pub const OPCODE_KIND_X86_DWARF: u8 = 4;

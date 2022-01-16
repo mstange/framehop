@@ -1,9 +1,9 @@
-use std::{fs::File, io::Read};
+use std::{fmt::Display, fs::File, io::Read};
 
-use object::ObjectSection;
+use object::{Architecture, ObjectSection};
 use rul::compact_unwind_info::{
-    OpcodeArm64, CompactUnwindInfoHeader, CompressedEntryBitfield, CompressedPage, OpcodeBitfield,
-    RegularPage, PAGE_KIND_COMPRESSED, PAGE_KIND_REGULAR,
+    CompactUnwindInfoHeader, CompressedEntryBitfield, CompressedPage, OpcodeArm64, OpcodeBitfield,
+    OpcodeX86, OpcodeX86_64, RegularPage, PAGE_KIND_COMPRESSED, PAGE_KIND_REGULAR,
 };
 
 fn main() {
@@ -25,6 +25,7 @@ fn main() {
         .section_by_name_bytes(b"__unwind_info")
         .expect("Could not find __unwind_info section");
     let data = unwind_info_data_section.data().unwrap();
+    let arch = file.architecture();
 
     let header = CompactUnwindInfoHeader::parse(data).unwrap();
     let global_opcodes = header.global_opcodes(data).unwrap();
@@ -49,7 +50,7 @@ fn main() {
                     entries.len()
                 );
                 for entry in entries {
-                    print_entry(entry.instruction_address(), entry.opcode());
+                    print_entry(entry.instruction_address(), entry.opcode(), arch);
                 }
                 println!();
             }
@@ -72,7 +73,7 @@ fn main() {
                     } else {
                         local_opcodes[opcode_index - global_opcode_count].into()
                     };
-                    print_entry(instruction_address, opcode);
+                    print_entry(instruction_address, opcode, arch);
                 }
                 println!();
             }
@@ -81,14 +82,29 @@ fn main() {
     }
 }
 
-fn print_entry(instruction_address: u32, opcode: u32) {
+fn print_entry(instruction_address: u32, opcode: u32, arch: Architecture) {
     let opcode = OpcodeBitfield::new(opcode);
-    match OpcodeArm64::parse(&opcode) {
+    let kind = opcode.kind();
+    match arch {
+        Architecture::I386 => {
+            print_entry_impl(instruction_address, OpcodeX86::parse(&opcode), kind);
+        }
+        Architecture::X86_64 => {
+            print_entry_impl(instruction_address, OpcodeX86_64::parse(&opcode), kind);
+        }
+        Architecture::Aarch64 => {
+            print_entry_impl(instruction_address, OpcodeArm64::parse(&opcode), kind);
+        }
+        _ => {}
+    }
+}
+
+fn print_entry_impl(instruction_address: u32, opcode: Option<impl Display>, kind: u8) {
+    match opcode {
         Some(opcode) => println!("  0x{:08x}: {}", instruction_address, opcode),
         None => println!(
             "  0x{:08x}: unknown opcode kind {}",
-            instruction_address,
-            opcode.kind()
+            instruction_address, kind
         ),
     }
 }
