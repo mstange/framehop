@@ -2,7 +2,7 @@ use std::{fs::File, io::Read};
 
 use object::ObjectSection;
 use rul::compact_unwind_info::{
-    Arm64Opcode, CompactUnwindInfoHeader, CompressedEntryBitfield, CompressedPage, OpcodeBitfield,
+    OpcodeArm64, CompactUnwindInfoHeader, CompressedEntryBitfield, CompressedPage, OpcodeBitfield,
     RegularPage, PAGE_KIND_COMPRESSED, PAGE_KIND_REGULAR,
 };
 
@@ -83,7 +83,7 @@ fn main() {
 
 fn print_entry(instruction_address: u32, opcode: u32) {
     let opcode = OpcodeBitfield::new(opcode);
-    match Arm64Opcode::parse(&opcode) {
+    match OpcodeArm64::parse(&opcode) {
         Some(opcode) => println!("  0x{:08x}: {}", instruction_address, opcode),
         None => println!(
             "  0x{:08x}: unknown opcode kind {}",

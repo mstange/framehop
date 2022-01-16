@@ -6,7 +6,7 @@ use super::{
 };
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum Arm64Opcode {
+pub enum OpcodeArm64 {
     Null,
     Frameless {
         stack_size_in_bytes: u16,
@@ -29,17 +29,17 @@ pub enum Arm64Opcode {
     },
 }
 
-impl Arm64Opcode {
+impl OpcodeArm64 {
     pub fn parse(opcode: &OpcodeBitfield) -> Option<Self> {
         let opcode = match opcode.kind() {
-            OPCODE_KIND_NULL => Arm64Opcode::Null,
-            OPCODE_KIND_ARM64_FRAMELESS => Arm64Opcode::Frameless {
+            OPCODE_KIND_NULL => OpcodeArm64::Null,
+            OPCODE_KIND_ARM64_FRAMELESS => OpcodeArm64::Frameless {
                 stack_size_in_bytes: (((opcode.0 >> 12) & 0b1111_1111_1111) as u16) * 16,
             },
-            OPCODE_KIND_ARM64_DWARF => Arm64Opcode::Dwarf {
+            OPCODE_KIND_ARM64_DWARF => OpcodeArm64::Dwarf {
                 eh_frame_fde: (opcode.0 & 0xffffff),
             },
-            OPCODE_KIND_ARM64_FRAMEBASED => Arm64Opcode::FrameBased {
+            OPCODE_KIND_ARM64_FRAMEBASED => OpcodeArm64::FrameBased {
                 d14_and_d15_saved: ((opcode.0 >> 8) & 1) == 1,
                 d12_and_d13_saved: ((opcode.0 >> 7) & 1) == 1,
                 d10_and_d11_saved: ((opcode.0 >> 6) & 1) == 1,
@@ -56,13 +56,13 @@ impl Arm64Opcode {
     }
 }
 
-impl Display for Arm64Opcode {
+impl Display for OpcodeArm64 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Arm64Opcode::Null => {
+            OpcodeArm64::Null => {
                 write!(f, "(uncovered)")?;
             }
-            Arm64Opcode::Frameless {
+            OpcodeArm64::Frameless {
                 stack_size_in_bytes,
             } => {
                 if *stack_size_in_bytes == 0 {
@@ -71,10 +71,10 @@ impl Display for Arm64Opcode {
                     write!(f, "CFA=reg31+{}", stack_size_in_bytes)?;
                 }
             }
-            Arm64Opcode::Dwarf { eh_frame_fde } => {
+            OpcodeArm64::Dwarf { eh_frame_fde } => {
                 write!(f, "(check eh_frame FDE 0x{:x})", eh_frame_fde)?;
             }
-            Arm64Opcode::FrameBased {
+            OpcodeArm64::FrameBased {
                 d14_and_d15_saved,
                 d12_and_d13_saved,
                 d10_and_d11_saved,
