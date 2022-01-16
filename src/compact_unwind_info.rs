@@ -248,7 +248,7 @@ impl TryFrom<&OpcodeBitfield> for Arm64Opcode {
     fn try_from(opcode: &OpcodeBitfield) -> std::result::Result<Self, Self::Error> {
         match opcode.opcode_kind() {
             2 => Ok(Arm64Opcode::Frameless {
-                stack_size_in_bytes: ((opcode.0 >> 12) & 0b1111_1111_1111) as u16,
+                stack_size_in_bytes: (((opcode.0 >> 12) & 0b1111_1111_1111) as u16) * 16,
             }),
             3 => Ok(Arm64Opcode::Dwarf {
                 eh_frame_cie: (opcode.0 & 0xffffff),
