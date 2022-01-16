@@ -1,4 +1,4 @@
-use std::fmt::{Debug, LowerHex};
+use std::fmt::{Debug, Display, LowerHex};
 use std::result;
 
 use object::read::ReadRef;
@@ -225,7 +225,7 @@ pub enum Arm64Opcode {
         stack_size_in_bytes: u16,
     },
     Dwarf {
-        eh_frame_cie: u32,
+        eh_frame_fde: u32,
     },
     FrameBased {
         // Whether each register pair was pushed
@@ -242,6 +242,59 @@ pub enum Arm64Opcode {
     },
 }
 
+impl Display for Arm64Opcode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Arm64Opcode::Frameless {
+                stack_size_in_bytes,
+            } => {
+                if *stack_size_in_bytes == 0 {
+                    write!(f, "CFA=reg31")?;
+                } else {
+                    write!(f, "CFA=reg31+{}", stack_size_in_bytes)?;
+                }
+            }
+            Arm64Opcode::Dwarf { eh_frame_fde } => {
+                write!(f, "(check eh_frame FDE 0x{:x})", eh_frame_fde)?;
+            }
+            Arm64Opcode::FrameBased {
+                d14_and_d15_saved,
+                d12_and_d13_saved,
+                d10_and_d11_saved,
+                d8_and_d9_saved,
+                x27_and_x28_saved,
+                x25_and_x26_saved,
+                x23_and_x24_saved,
+                x21_and_x22_saved,
+                x19_and_x20_saved,
+            } => {
+                write!(f, "CFA=reg29: reg31=reg29+16")?;
+                let mut offset = 16;
+                let mut next_pair = |pair_saved, a, b| {
+                    if pair_saved {
+                        let r = write!(f, " {}=[CFA+{}] {}=[CFA+{}]", a, offset, b, offset + 8);
+                        offset += 16;
+                        r
+                    } else {
+                        Ok(())
+                    }
+                };
+                next_pair(*x19_and_x20_saved, "reg19", "reg20")?;
+                next_pair(*x21_and_x22_saved, "reg21", "reg22")?;
+                next_pair(*x23_and_x24_saved, "reg23", "reg24")?;
+                next_pair(*x25_and_x26_saved, "reg25", "reg26")?;
+                next_pair(*x27_and_x28_saved, "reg27", "reg28")?;
+                next_pair(*d8_and_d9_saved, "reg8", "reg9")?;
+                next_pair(*d10_and_d11_saved, "reg10", "reg11")?;
+                next_pair(*d12_and_d13_saved, "reg12", "reg13")?;
+                next_pair(*d14_and_d15_saved, "reg14", "reg15")?;
+                write!(f, " reg30=[CFA+8] reg29=[CFA]")?;
+            }
+        }
+        Ok(())
+    }
+}
+
 impl TryFrom<&OpcodeBitfield> for Arm64Opcode {
     type Error = ();
 
@@ -251,7 +304,7 @@ impl TryFrom<&OpcodeBitfield> for Arm64Opcode {
                 stack_size_in_bytes: (((opcode.0 >> 12) & 0b1111_1111_1111) as u16) * 16,
             }),
             3 => Ok(Arm64Opcode::Dwarf {
-                eh_frame_cie: (opcode.0 & 0xffffff),
+                eh_frame_fde: (opcode.0 & 0xffffff),
             }),
             4 => Ok(Arm64Opcode::FrameBased {
                 d14_and_d15_saved: ((opcode.0 >> 8) & 1) == 1,

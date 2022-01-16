@@ -1,0 +1,55 @@
+
+fixtures/query-api:	file format mach-o arm64
+
+.debug_frame contents:
+
+
+.eh_frame contents:
+
+00000000 00000010 00000000 CIE
+  Format:                DWARF32
+  Version:               1
+  Augmentation:          "zR"
+  Code alignment factor: 1
+  Data alignment factor: -8
+  Return address column: 30
+  Augmentation data:     10
+
+  DW_CFA_def_cfa: reg31 +0
+
+  CFA=reg31
+
+00000014 0000001c 00000018 FDE cie=00000000 pc=10000fae4...10000fb4c
+  Format:       DWARF32
+  DW_CFA_advance_loc: 56
+  DW_CFA_def_cfa_offset: +32
+  DW_CFA_offset: reg30 -8
+  DW_CFA_offset: reg29 -16
+
+  0x10000fae4: CFA=reg31
+  0x10000fb1c: CFA=reg31+32: reg29=[CFA-16], reg30=[CFA-8]
+
+00000034 00000024 00000038 FDE cie=00000000 pc=10000fb4c...10000fbe8
+  Format:       DWARF32
+  DW_CFA_advance_loc: 16
+  DW_CFA_def_cfa_offset: +64
+  DW_CFA_offset: reg30 -8
+  DW_CFA_offset: reg29 -16
+  DW_CFA_offset: reg19 -24
+  DW_CFA_offset: reg20 -32
+  DW_CFA_offset: reg21 -40
+  DW_CFA_offset: reg22 -48
+
+  0x10000fb4c: CFA=reg31
+  0x10000fb5c: CFA=reg31+64: reg19=[CFA-24], reg20=[CFA-32], reg21=[CFA-40], reg22=[CFA-48], reg29=[CFA-16], reg30=[CFA-8]
+
+0000005c 0000001c 00000060 FDE cie=00000000 pc=10000fbe8...10000fbf0
+  Format:       DWARF32
+  DW_CFA_advance_loc: 4
+  DW_CFA_def_cfa_offset: +16
+  DW_CFA_offset: reg30 -8
+  DW_CFA_offset: reg29 -16
+
+  0x10000fbe8: CFA=reg31
+  0x10000fbec: CFA=reg31+16: reg29=[CFA-16], reg30=[CFA-8]
+

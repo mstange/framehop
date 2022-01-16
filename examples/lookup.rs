@@ -1,8 +1,7 @@
 use std::{fs::File, io::Read};
 
 use rul::compact_unwind_info::{
-    CompactUnwindInfoHeader, CompressedEntry, CompressedEntryBitfield, Opcode, OpcodeBitfield,
-    PageEntry, RegularEntry,
+    CompactUnwindInfoHeader, CompressedEntryBitfield, OpcodeBitfield, PageEntry, RegularEntry,
 };
 
 fn main() {
