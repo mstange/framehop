@@ -1,7 +1,5 @@
 use std::fmt::Display;
 
-use crate::display_utils::RelativeOffset;
-
 use super::{
     nice::OpcodeBitfield, OPCODE_KIND_ARM64_DWARF, OPCODE_KIND_ARM64_FRAMEBASED,
     OPCODE_KIND_ARM64_FRAMELESS, OPCODE_KIND_NULL, OPCODE_KIND_X86_DWARF,
@@ -20,7 +18,7 @@ pub enum OpcodeRegX86 {
 }
 
 impl OpcodeRegX86 {
-    pub fn parse(n: u32) -> Option<Self> {
+    pub fn parse(n: u8) -> Option<Self> {
         match n {
             1 => Some(OpcodeRegX86::Ebx),
             2 => Some(OpcodeRegX86::Ecx),
@@ -103,17 +101,31 @@ impl OpcodeX86 {
             OPCODE_KIND_X86_FRAMEBASED => OpcodeX86::FrameBased {
                 stack_offset_in_bytes: (((opcode.0 >> 16) & 0xff) as u16) * 4,
                 saved_regs: [
-                    OpcodeRegX86::parse((opcode.0 >> 12) & 0b111),
-                    OpcodeRegX86::parse((opcode.0 >> 9) & 0b111),
-                    OpcodeRegX86::parse((opcode.0 >> 6) & 0b111),
-                    OpcodeRegX86::parse((opcode.0 >> 3) & 0b111),
-                    OpcodeRegX86::parse(opcode.0 & 0b111),
+                    OpcodeRegX86::parse(((opcode.0 >> 12) & 0b111) as u8),
+                    OpcodeRegX86::parse(((opcode.0 >> 9) & 0b111) as u8),
+                    OpcodeRegX86::parse(((opcode.0 >> 6) & 0b111) as u8),
+                    OpcodeRegX86::parse(((opcode.0 >> 3) & 0b111) as u8),
+                    OpcodeRegX86::parse((opcode.0 & 0b111) as u8),
                 ],
             },
-            OPCODE_KIND_X86_FRAMELESS_IMMEDIATE => OpcodeX86::FramelessImmediate {
-                stack_size_in_bytes: (((opcode.0 >> 16) & 0xff) as u16) * 4,
-                saved_regs: [None, None, None, None, None, None],
-            },
+            OPCODE_KIND_X86_FRAMELESS_IMMEDIATE => {
+                let stack_size_in_bytes = (((opcode.0 >> 16) & 0xff) as u16) * 4;
+                let register_count = (opcode.0 >> 10) & 0b111;
+                let register_permutation = opcode.0 & 0b11_1111_1111;
+                let saved_registers =
+                    decode_permutation(register_count, register_permutation).ok()?;
+                OpcodeX86::FramelessImmediate {
+                    stack_size_in_bytes,
+                    saved_regs: [
+                        OpcodeRegX86::parse(saved_registers[0]),
+                        OpcodeRegX86::parse(saved_registers[1]),
+                        OpcodeRegX86::parse(saved_registers[2]),
+                        OpcodeRegX86::parse(saved_registers[3]),
+                        OpcodeRegX86::parse(saved_registers[4]),
+                        OpcodeRegX86::parse(saved_registers[5]),
+                    ],
+                }
+            }
             OPCODE_KIND_X86_FRAMELESS_INDIRECT => OpcodeX86::FramelessIndirect,
             OPCODE_KIND_X86_DWARF => OpcodeX86::Dwarf {
                 eh_frame_fde: (opcode.0 & 0xffffff),
@@ -134,20 +146,37 @@ impl Display for OpcodeX86 {
                 stack_offset_in_bytes,
                 saved_regs,
             } => {
-                write!(f, "CFA=reg6:")?;
                 // ebp was set to esp before the saved registers were pushed.
-                // The first pushed register is at ebp - 4, the last at ebp - stack_offset_in_bytes.
-                let mut offset = -(*stack_offset_in_bytes as i32);
+                // The first pushed register is at ebp - 4 (== CFA - 12), the last at ebp - stack_offset_in_bytes.
+                write!(f, "CFA=reg6+8: reg6=[CFA-8] reg16=[CFA-4]")?;
+                let max_count = (*stack_offset_in_bytes / 4) as usize;
+                let mut offset = *stack_offset_in_bytes + 8; // + 2 for rbp, return address
+                for reg in saved_regs.iter().rev().take(max_count) {
+                    if let Some(reg) = reg {
+                        write!(f, ", {}=[CFA-{}]", reg.dwarf_name(), offset)?;
+                    }
+                    offset -= 4;
+                }
+            }
+            OpcodeX86::FramelessImmediate {
+                stack_size_in_bytes,
+                saved_regs,
+            } => {
+                if *stack_size_in_bytes == 0 {
+                    write!(f, "CFA=reg7:",)?;
+                } else {
+                    write!(f, "CFA=reg7+{}:", *stack_size_in_bytes)?;
+                }
+                write!(f, " reg16=[CFA-8]")?;
+                let mut offset = 2 * 4;
                 for reg in saved_regs.iter().rev() {
                     if let Some(reg) = reg {
-                        write!(f, " {}=[CFA{}]", reg.dwarf_name(), &RelativeOffset(offset))?;
+                        write!(f, ", {}=[CFA-{}]", reg.dwarf_name(), offset)?;
+                        offset += 4;
+                    } else {
+                        break;
                     }
-                    offset += 4;
                 }
-                write!(f, " reg7=reg6+8 reg6=[CFA] reg16=[CFA+4]",)?;
-            }
-            OpcodeX86::FramelessImmediate { .. } => {
-                write!(f, "frameless immediate")?;
             }
             OpcodeX86::FramelessIndirect { .. } => {
                 write!(f, "frameless indirect")?;
