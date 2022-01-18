@@ -13,3 +13,6 @@ exclude = ["/.github", "/tests", "/res"]
 [dependencies]
 object = "0.28.2"
 thiserror = "1.0.30"
+
+[profile.release]
+debug = true

@@ -1,209 +1,209 @@
 Compact unwind info with 3 pages and 73 global opcodes
 
 0x00000fa0: Compressed page with 478 entries and 125 local opcodes
-  0x00000fa0: frameless immediate
-  0x00001020: frameless immediate
-  0x00001030: frameless immediate
-  0x00001130: frameless immediate
-  0x00001140: frameless immediate
-  0x00001480: frameless immediate
-  0x00001570: frameless immediate
+  0x00000fa0: CFA=reg7+32: reg16=[CFA-8], reg6=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x00001020: CFA=reg7+8: reg16=[CFA-8]
+  0x00001030: CFA=reg7+64: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg3=[CFA-40]
+  0x00001130: CFA=reg7+8: reg16=[CFA-8]
+  0x00001140: CFA=reg7+160: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00001480: CFA=reg7+8: reg16=[CFA-8]
+  0x00001570: CFA=reg7+80: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg13=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
   0x00001870: (check eh_frame FDE 0x160)
   0x00001880: (check eh_frame FDE 0x180)
   0x00001890: (check eh_frame FDE 0x1a0)
   0x000018a0: (check eh_frame FDE 0x1c0)
-  0x000018b0: frameless immediate
-  0x000018f0: frameless immediate
-  0x000019d0: frameless immediate
-  0x00001a20: frameless immediate
+  0x000018b0: CFA=reg7+32: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x000018f0: CFA=reg7+48: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x000019d0: CFA=reg7+32: reg16=[CFA-8]
+  0x00001a20: CFA=reg7+32: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
   0x00001a60: (check eh_frame FDE 0x220)
-  0x00001af0: frameless immediate
-  0x00001d10: frameless immediate
-  0x00002570: frameless immediate
-  0x00002e30: frameless immediate
-  0x00003040: frameless immediate
-  0x00003e50: frameless immediate
-  0x00004fb0: frameless immediate
-  0x00006380: frameless immediate
-  0x000067f0: frameless immediate
+  0x00001af0: CFA=reg7+176: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x00001d10: CFA=reg7+224: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00002570: CFA=reg7+160: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00002e30: CFA=reg7+80: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00003040: CFA=reg7+160: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00003e50: CFA=reg7+272: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00004fb0: CFA=reg7+288: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00006380: CFA=reg7+96: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg13=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
+  0x000067f0: CFA=reg7+224: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
   0x00006a10: (check eh_frame FDE 0x358)
-  0x00006a30: frameless immediate
-  0x00006e10: frameless immediate
-  0x00006e60: frameless immediate
-  0x00007e70: frameless immediate
-  0x00007ec0: frameless immediate
-  0x00008860: frameless immediate
-  0x00008920: frameless immediate
-  0x00008a50: frameless immediate
-  0x00008b30: frameless immediate
+  0x00006a30: CFA=reg7+80: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00006e10: CFA=reg7+16: reg16=[CFA-8], reg3=[CFA-16]
+  0x00006e60: CFA=reg7+96: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00007e70: CFA=reg7+32: reg16=[CFA-8]
+  0x00007ec0: CFA=reg7+112: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00008860: CFA=reg7+48: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
+  0x00008920: CFA=reg7+48: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
+  0x00008a50: CFA=reg7+32: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x00008b30: CFA=reg7+32: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
   0x00008d50: (check eh_frame FDE 0x378)
   0x00008de0: frameless indirect
-  0x00009360: frameless immediate
-  0x000093c0: frameless immediate
-  0x000096e0: frameless immediate
-  0x00009710: frameless immediate
-  0x00009d70: frameless immediate
-  0x0000ae70: frameless immediate
-  0x0000af60: frameless immediate
-  0x0000bf30: frameless immediate
-  0x0000bfa0: frameless immediate
-  0x0000c1a0: frameless immediate
-  0x0000c660: frameless immediate
-  0x0000c9a0: frameless immediate
-  0x0000cd50: frameless immediate
-  0x0000d1f0: frameless immediate
-  0x0000d560: frameless immediate
-  0x0000d670: frameless immediate
-  0x0000d7e0: frameless immediate
-  0x0000e030: frameless immediate
-  0x0000e480: frameless immediate
-  0x000106d0: frameless immediate
-  0x000107e0: frameless immediate
-  0x00010b70: frameless immediate
-  0x00010f00: frameless immediate
-  0x00011870: frameless immediate
-  0x00011c60: frameless immediate
-  0x00012440: frameless immediate
-  0x00012580: frameless immediate
-  0x00012ea0: frameless immediate
-  0x00013250: frameless immediate
-  0x00013380: frameless immediate
+  0x00009360: CFA=reg7+16: reg16=[CFA-8], reg3=[CFA-16]
+  0x000093c0: CFA=reg7+32: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x000096e0: CFA=reg7+16: reg16=[CFA-8], reg3=[CFA-16]
+  0x00009710: CFA=reg7+256: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00009d70: CFA=reg7+96: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0000ae70: CFA=reg7+64: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
+  0x0000af60: CFA=reg7+112: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0000bf30: CFA=reg7+80: reg16=[CFA-8]
+  0x0000bfa0: CFA=reg7+192: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
+  0x0000c1a0: CFA=reg7+112: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
+  0x0000c660: CFA=reg7+16: reg16=[CFA-8]
+  0x0000c9a0: CFA=reg7+80: reg16=[CFA-8]
+  0x0000cd50: CFA=reg7+128: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0000d1f0: CFA=reg7+16: reg16=[CFA-8]
+  0x0000d560: CFA=reg7+64: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0000d670: CFA=reg7+48: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
+  0x0000d7e0: CFA=reg7+96: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0000e030: CFA=reg7+64: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg3=[CFA-40]
+  0x0000e480: CFA=reg7+320: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x000106d0: CFA=reg7+16: reg16=[CFA-8], reg3=[CFA-16]
+  0x000107e0: CFA=reg7+16: reg16=[CFA-8]
+  0x00010b70: CFA=reg7+96: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x00010f00: CFA=reg7+64: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x00011870: CFA=reg7+48: reg16=[CFA-8], reg3=[CFA-16]
+  0x00011c60: CFA=reg7+144: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00012440: CFA=reg7+16: reg16=[CFA-8]
+  0x00012580: CFA=reg7+64: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x00012ea0: CFA=reg7+224: reg16=[CFA-8], reg3=[CFA-16]
+  0x00013250: CFA=reg7+32: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x00013380: CFA=reg7+80: reg16=[CFA-8], reg3=[CFA-16]
   0x00013430: (check eh_frame FDE 0x3f0)
-  0x00013440: frameless immediate
+  0x00013440: CFA=reg7+80: reg16=[CFA-8], reg3=[CFA-16]
   0x000134f0: (check eh_frame FDE 0x410)
   0x00013500: (check eh_frame FDE 0x430)
   0x00013510: (check eh_frame FDE 0x470)
-  0x00013520: frameless immediate
-  0x000135d0: frameless immediate
-  0x000136a0: frameless immediate
-  0x00013760: frameless immediate
-  0x000137e0: frameless immediate
+  0x00013520: CFA=reg7+80: reg16=[CFA-8], reg3=[CFA-16]
+  0x000135d0: CFA=reg7+96: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x000136a0: CFA=reg7+80: reg16=[CFA-8], reg3=[CFA-16]
+  0x00013760: CFA=reg7+80: reg16=[CFA-8]
+  0x000137e0: CFA=reg7+96: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
   0x000138a0: (check eh_frame FDE 0x4c8)
   0x000138b0: (check eh_frame FDE 0x4e8)
-  0x000138c0: frameless immediate
+  0x000138c0: CFA=reg7+48: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
   0x000139f0: frameless indirect
-  0x00013e20: frameless immediate
+  0x00013e20: CFA=reg7+32: reg16=[CFA-8], reg3=[CFA-16]
   0x00013ed0: (check eh_frame FDE 0x5c0)
   0x00013ee0: (check eh_frame FDE 0x5e0)
-  0x00013ef0: frameless immediate
-  0x00013f00: frameless immediate
-  0x000140c0: frameless immediate
-  0x00014410: frameless immediate
-  0x00014590: frameless immediate
-  0x000146c0: frameless immediate
-  0x00014880: frameless immediate
-  0x00014a60: frameless immediate
-  0x00014a90: frameless immediate
-  0x00014ae0: frameless immediate
-  0x00014c50: frameless immediate
-  0x00014d50: frameless immediate
-  0x00014d90: frameless immediate
-  0x00014e10: frameless immediate
-  0x00014ee0: frameless immediate
-  0x00015060: frameless immediate
-  0x00015200: frameless immediate
-  0x00015230: frameless immediate
-  0x000152e0: frameless immediate
+  0x00013ef0: CFA=reg7+16: reg16=[CFA-8]
+  0x00013f00: CFA=reg7+336: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x000140c0: CFA=reg7+128: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00014410: CFA=reg7+64: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
+  0x00014590: CFA=reg7+64: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x000146c0: CFA=reg7+32: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x00014880: CFA=reg7+48: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
+  0x00014a60: CFA=reg7+16: reg16=[CFA-8], reg3=[CFA-16]
+  0x00014a90: CFA=reg7+32: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x00014ae0: CFA=reg7+128: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
+  0x00014c50: CFA=reg7+272: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x00014d50: CFA=reg7+32: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x00014d90: CFA=reg7+16: reg16=[CFA-8], reg3=[CFA-16]
+  0x00014e10: CFA=reg7+32: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x00014ee0: CFA=reg7+48: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x00015060: CFA=reg7+48: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
+  0x00015200: CFA=reg7+16: reg16=[CFA-8], reg3=[CFA-16]
+  0x00015230: CFA=reg7+64: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x000152e0: CFA=reg7+32: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
   0x00015360: (check eh_frame FDE 0xf38)
-  0x00015370: frameless immediate
-  0x000153a0: frameless immediate
-  0x00015490: frameless immediate
-  0x00015610: frameless immediate
-  0x00015770: frameless immediate
-  0x00015880: frameless immediate
-  0x00015b00: frameless immediate
-  0x00015d70: frameless immediate
-  0x00015f00: frameless immediate
-  0x000161a0: frameless immediate
+  0x00015370: CFA=reg7+16: reg16=[CFA-8], reg3=[CFA-16]
+  0x000153a0: CFA=reg7+16: reg16=[CFA-8]
+  0x00015490: CFA=reg7+32: reg16=[CFA-8]
+  0x00015610: CFA=reg7+48: reg16=[CFA-8], reg6=[CFA-16], reg3=[CFA-24]
+  0x00015770: CFA=reg7+16: reg16=[CFA-8], reg3=[CFA-16]
+  0x00015880: CFA=reg7+96: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00015b00: CFA=reg7+144: reg16=[CFA-8]
+  0x00015d70: CFA=reg7+128: reg16=[CFA-8]
+  0x00015f00: CFA=reg7+144: reg16=[CFA-8]
+  0x000161a0: CFA=reg7+128: reg16=[CFA-8]
   0x00016360: (check eh_frame FDE 0x10a0)
-  0x00016380: frameless immediate
-  0x00017f90: frameless immediate
-  0x00018080: frameless immediate
+  0x00016380: CFA=reg7+1312: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00017f90: CFA=reg7+32: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x00018080: CFA=reg7+16: reg16=[CFA-8]
   0x000180b0: (check eh_frame FDE 0x1150)
   0x000180d0: (check eh_frame FDE 0x1190)
-  0x00018120: frameless immediate
+  0x00018120: CFA=reg7+48: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
   0x000182f0: (check eh_frame FDE 0x11d0)
   0x00018300: (check eh_frame FDE 0x11f0)
-  0x00018310: frameless immediate
-  0x000183e0: frameless immediate
-  0x00018460: frameless immediate
+  0x00018310: CFA=reg7+720: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x000183e0: CFA=reg7+32: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x00018460: CFA=reg7+16: reg16=[CFA-8], reg3=[CFA-16]
   0x00018500: (check eh_frame FDE 0x1288)
-  0x00018530: frameless immediate
-  0x00018660: frameless immediate
-  0x000188a0: frameless immediate
-  0x0001a020: frameless immediate
-  0x0001a8e0: frameless immediate
+  0x00018530: CFA=reg7+64: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00018660: CFA=reg7+112: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg13=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
+  0x000188a0: CFA=reg7+192: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0001a020: CFA=reg7+112: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0001a8e0: CFA=reg7+160: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
   0x0001b3b0: (check eh_frame FDE 0x14a0)
   0x0001b3f0: (check eh_frame FDE 0x14d8)
   0x0001b400: (check eh_frame FDE 0x1558)
-  0x0001b4e0: frameless immediate
-  0x0001bd40: frameless immediate
-  0x0001bde0: frameless immediate
+  0x0001b4e0: CFA=reg7+144: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0001bd40: CFA=reg7+48: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg13=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
+  0x0001bde0: CFA=reg7+32: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
   0x0001be40: (check eh_frame FDE 0x1578)
-  0x0001be50: frameless immediate
+  0x0001be50: CFA=reg7+64: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
   0x0001bf00: (check eh_frame FDE 0x15b8)
-  0x0001bf30: frameless immediate
-  0x0001c0e0: frameless immediate
-  0x0001ce20: frameless immediate
-  0x0001d060: frameless immediate
+  0x0001bf30: CFA=reg7+80: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0001c0e0: CFA=reg7+176: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0001ce20: CFA=reg7+80: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0001d060: CFA=reg7+48: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg13=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
   0x0001d150: (check eh_frame FDE 0x1638)
-  0x0001d160: frameless immediate
-  0x0001d1e0: frameless immediate
-  0x0001d270: frameless immediate
-  0x0001d290: frameless immediate
-  0x0001d300: frameless immediate
-  0x0001d4a0: frameless immediate
-  0x0001d540: frameless immediate
+  0x0001d160: CFA=reg7+32: reg16=[CFA-8], reg6=[CFA-16], reg3=[CFA-24]
+  0x0001d1e0: CFA=reg7+32: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x0001d270: CFA=reg7+16: reg16=[CFA-8]
+  0x0001d290: CFA=reg7+32: reg16=[CFA-8]
+  0x0001d300: CFA=reg7+64: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0001d4a0: CFA=reg7+32: reg16=[CFA-8], reg6=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x0001d540: CFA=reg7+496: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
   0x00024370: (check eh_frame FDE 0x16c8)
-  0x00024420: frameless immediate
-  0x000244c0: frameless immediate
+  0x00024420: CFA=reg7+64: reg16=[CFA-8]
+  0x000244c0: CFA=reg7+48: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg3=[CFA-40]
   0x00024670: (check eh_frame FDE 0x16e8)
   0x000246e0: (check eh_frame FDE 0x1708)
   0x000248d0: frameless indirect
-  0x00024950: frameless immediate
-  0x00024980: frameless immediate
-  0x00024a50: frameless immediate
-  0x00024b00: frameless immediate
-  0x00024b70: frameless immediate
+  0x00024950: CFA=reg7+16: reg16=[CFA-8], reg3=[CFA-16]
+  0x00024980: CFA=reg7+96: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x00024a50: CFA=reg7+48: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x00024b00: CFA=reg7+32: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x00024b70: CFA=reg7+64: reg16=[CFA-8], reg3=[CFA-16]
   0x00024c20: (check eh_frame FDE 0x1800)
   0x00024c70: (check eh_frame FDE 0x1820)
-  0x00024e20: frameless immediate
-  0x00024e50: frameless immediate
+  0x00024e20: CFA=reg7+32: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x00024e50: CFA=reg7+16: reg16=[CFA-8], reg3=[CFA-16]
   0x00024e70: (check eh_frame FDE 0x1860)
-  0x00024ea0: frameless immediate
-  0x00024f90: frameless immediate
-  0x00025de0: frameless immediate
-  0x00025f50: frameless immediate
+  0x00024ea0: CFA=reg7+48: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg13=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
+  0x00024f90: CFA=reg7+32: reg16=[CFA-8], reg6=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x00025de0: CFA=reg7+64: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00025f50: CFA=reg7+16: reg16=[CFA-8]
   0x00025f70: frameless indirect
-  0x000272a0: frameless immediate
-  0x00027470: frameless immediate
-  0x00027540: frameless immediate
-  0x00027760: frameless immediate
-  0x00027850: frameless immediate
-  0x00027950: frameless immediate
-  0x00027a80: frameless immediate
-  0x00027cf0: frameless immediate
-  0x00027fb0: frameless immediate
-  0x00028130: frameless immediate
-  0x000281f0: frameless immediate
+  0x000272a0: CFA=reg7+80: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00027470: CFA=reg7+32: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x00027540: CFA=reg7+32: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x00027760: CFA=reg7+16: reg16=[CFA-8], reg3=[CFA-16]
+  0x00027850: CFA=reg7+16: reg16=[CFA-8]
+  0x00027950: CFA=reg7+16: reg16=[CFA-8], reg3=[CFA-16]
+  0x00027a80: CFA=reg7+32: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x00027cf0: CFA=reg7+64: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00027fb0: CFA=reg7+32: reg16=[CFA-8], reg6=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x00028130: CFA=reg7+40: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg3=[CFA-40]
+  0x000281f0: CFA=reg7+56: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
   0x000283a0: (check eh_frame FDE 0x18a0)
-  0x00028400: frameless immediate
-  0x000284d0: frameless immediate
-  0x000285a0: frameless immediate
-  0x00028900: frameless immediate
-  0x00028ad0: frameless immediate
-  0x00028c30: frameless immediate
-  0x00028de0: frameless immediate
-  0x00029070: frameless immediate
-  0x00029be0: frameless immediate
-  0x0002a310: frameless immediate
-  0x0002a420: frameless immediate
-  0x0002a960: frameless immediate
+  0x00028400: CFA=reg7+16: reg16=[CFA-8]
+  0x000284d0: CFA=reg7+32: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x000285a0: CFA=reg7+80: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00028900: CFA=reg7+96: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x00028ad0: CFA=reg7+80: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00028c30: CFA=reg7+528: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
+  0x00028de0: CFA=reg7+240: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
+  0x00029070: CFA=reg7+272: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00029be0: CFA=reg7+64: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0002a310: CFA=reg7+16: reg16=[CFA-8], reg3=[CFA-16]
+  0x0002a420: CFA=reg7+48: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
+  0x0002a960: CFA=reg7+48: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
   0x0002adc0: (check eh_frame FDE 0x1918)
-  0x0002ae10: frameless immediate
-  0x0002ae20: frameless immediate
-  0x0002ae40: frameless immediate
-  0x0002ae90: frameless immediate
+  0x0002ae10: CFA=reg7+8: reg16=[CFA-8]
+  0x0002ae20: CFA=reg7+16: reg16=[CFA-8]
+  0x0002ae40: CFA=reg7+48: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
+  0x0002ae90: CFA=reg7+48: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg13=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
   0x0002aef0: (check eh_frame FDE 0x1e0)
   0x0002af00: (check eh_frame FDE 0x200)
   0x0002af10: (check eh_frame FDE 0x240)
@@ -214,79 +214,79 @@ Compact unwind info with 3 pages and 73 global opcodes
   0x0002af60: (check eh_frame FDE 0x2e0)
   0x0002af80: (check eh_frame FDE 0x300)
   0x0002af90: (check eh_frame FDE 0x320)
-  0x0002afa0: frameless immediate
-  0x0002b020: frameless immediate
-  0x0002b910: frameless immediate
-  0x0002bb10: frameless immediate
-  0x0002bd00: frameless immediate
-  0x0002bdd0: frameless immediate
+  0x0002afa0: CFA=reg7+32: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x0002b020: CFA=reg7+176: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0002b910: CFA=reg7+224: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0002bb10: CFA=reg7+1488: reg16=[CFA-8], reg3=[CFA-16]
+  0x0002bd00: CFA=reg7+48: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
+  0x0002bdd0: CFA=reg7+1488: reg16=[CFA-8], reg3=[CFA-16]
   0x0002bef0: (check eh_frame FDE 0x398)
-  0x0002bf00: frameless immediate
+  0x0002bf00: CFA=reg7+1504: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
   0x0002c040: (check eh_frame FDE 0x3b8)
-  0x0002c050: frameless immediate
-  0x0002c160: frameless immediate
-  0x0002c2b0: frameless immediate
+  0x0002c050: CFA=reg7+32: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x0002c160: CFA=reg7+48: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
+  0x0002c2b0: CFA=reg7+32: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
   0x0002c320: (check eh_frame FDE 0x450)
   0x0002c330: (check eh_frame FDE 0x490)
-  0x0002c340: frameless immediate
-  0x0002c380: frameless immediate
-  0x0002c390: frameless immediate
-  0x0002c400: frameless immediate
-  0x0002c4b0: frameless immediate
-  0x0002c570: frameless immediate
-  0x0002c5c0: frameless immediate
-  0x0002c780: frameless immediate
-  0x0002c7e0: frameless immediate
-  0x0002c900: frameless immediate
-  0x0002c970: frameless immediate
-  0x0002ca50: frameless immediate
-  0x0002cd00: frameless immediate
-  0x0002d260: frameless immediate
-  0x0002d380: frameless immediate
-  0x0002d410: frameless immediate
-  0x0002d480: frameless immediate
-  0x0002d550: frameless immediate
-  0x0002db00: frameless immediate
-  0x0002dc20: frameless immediate
-  0x0002de00: frameless immediate
-  0x0002e210: frameless immediate
-  0x0002e350: frameless immediate
-  0x0002e390: frameless immediate
-  0x0002e4d0: frameless immediate
-  0x0002ebe0: frameless immediate
-  0x0002ed80: frameless immediate
-  0x0002ee40: frameless immediate
-  0x0002f1b0: frameless immediate
-  0x0002f250: frameless immediate
-  0x0002f2d0: frameless immediate
-  0x0002f420: frameless immediate
+  0x0002c340: CFA=reg7+16: reg16=[CFA-8], reg3=[CFA-16]
+  0x0002c380: CFA=reg7+16: reg16=[CFA-8]
+  0x0002c390: CFA=reg7+64: reg16=[CFA-8]
+  0x0002c400: CFA=reg7+80: reg16=[CFA-8], reg3=[CFA-16]
+  0x0002c4b0: CFA=reg7+96: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x0002c570: CFA=reg7+48: reg16=[CFA-8], reg3=[CFA-16]
+  0x0002c5c0: CFA=reg7+96: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg13=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
+  0x0002c780: CFA=reg7+16: reg16=[CFA-8]
+  0x0002c7e0: CFA=reg7+48: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x0002c900: CFA=reg7+48: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
+  0x0002c970: CFA=reg7+48: reg16=[CFA-8]
+  0x0002ca50: CFA=reg7+128: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0002cd00: CFA=reg7+96: reg16=[CFA-8], reg6=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x0002d260: CFA=reg7+80: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x0002d380: CFA=reg7+48: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x0002d410: CFA=reg7+32: reg16=[CFA-8]
+  0x0002d480: CFA=reg7+64: reg16=[CFA-8]
+  0x0002d550: CFA=reg7+160: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0002db00: CFA=reg7+32: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x0002dc20: CFA=reg7+48: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
+  0x0002de00: CFA=reg7+128: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0002e210: CFA=reg7+80: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0002e350: CFA=reg7+16: reg16=[CFA-8]
+  0x0002e390: CFA=reg7+160: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0002e4d0: CFA=reg7+304: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0002ebe0: CFA=reg7+96: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x0002ed80: CFA=reg7+80: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x0002ee40: CFA=reg7+544: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0002f1b0: CFA=reg7+48: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x0002f250: CFA=reg7+32: reg16=[CFA-8], reg6=[CFA-16], reg3=[CFA-24]
+  0x0002f2d0: CFA=reg7+96: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0002f420: CFA=reg7+80: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg13=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
   0x0002f500: (check eh_frame FDE 0x520)
-  0x0002f510: frameless immediate
+  0x0002f510: CFA=reg7+16: reg16=[CFA-8], reg3=[CFA-16]
   0x0002f560: (check eh_frame FDE 0x540)
   0x0002f570: (check eh_frame FDE 0x560)
-  0x0002f590: frameless immediate
-  0x0002f830: frameless immediate
-  0x000301f0: frameless immediate
-  0x00030bf0: frameless immediate
+  0x0002f590: CFA=reg7+112: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0002f830: CFA=reg7+384: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x000301f0: CFA=reg7+160: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00030bf0: CFA=reg7+16: reg16=[CFA-8]
   0x00030c50: (check eh_frame FDE 0x580)
-  0x00030c60: frameless immediate
-  0x00030cf0: frameless immediate
-  0x00030d40: frameless immediate
-  0x00030da0: frameless immediate
-  0x00031070: frameless immediate
+  0x00030c60: CFA=reg7+16: reg16=[CFA-8]
+  0x00030cf0: CFA=reg7+32: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x00030d40: CFA=reg7+16: reg16=[CFA-8], reg3=[CFA-16]
+  0x00030da0: CFA=reg7+464: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00031070: CFA=reg7+16: reg16=[CFA-8]
   0x00031180: (check eh_frame FDE 0x5a0)
-  0x00031190: frameless immediate
-  0x00031800: frameless immediate
-  0x000319d0: frameless immediate
-  0x00031b80: frameless immediate
-  0x00031d90: frameless immediate
-  0x00031fb0: frameless immediate
-  0x00032000: frameless immediate
-  0x00032078: frameless immediate
-  0x00032140: frameless immediate
-  0x000321b0: frameless immediate
-  0x00032220: frameless immediate
-  0x000322c0: frameless immediate
+  0x00031190: CFA=reg7+112: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00031800: CFA=reg7+16: reg16=[CFA-8]
+  0x000319d0: CFA=reg7+80: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00031b80: CFA=reg7+416: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00031d90: CFA=reg7+432: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00031fb0: CFA=reg7+32: reg16=[CFA-8], reg3=[CFA-16]
+  0x00032000: CFA=reg7+16: reg16=[CFA-8]
+  0x00032078: CFA=reg7+48: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg13=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
+  0x00032140: CFA=reg7+16: reg16=[CFA-8]
+  0x000321b0: CFA=reg7+48: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
+  0x00032220: CFA=reg7+32: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x000322c0: CFA=reg7+224: reg16=[CFA-8]
   0x00032380: (check eh_frame FDE 0x600)
   0x00032390: (check eh_frame FDE 0x620)
   0x000323a0: (check eh_frame FDE 0x640)
@@ -298,369 +298,369 @@ Compact unwind info with 3 pages and 73 global opcodes
   0x00032400: (check eh_frame FDE 0x700)
   0x00032420: (check eh_frame FDE 0x720)
   0x00032440: (check eh_frame FDE 0x740)
-  0x00032460: frameless immediate
-  0x000327d0: frameless immediate
-  0x00032ea0: frameless immediate
-  0x00033050: frameless immediate
-  0x00036750: frameless immediate
-  0x00036960: frameless immediate
-  0x000369b0: frameless immediate
+  0x00032460: CFA=reg7+128: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x000327d0: CFA=reg7+448: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00032ea0: CFA=reg7+80: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
+  0x00033050: CFA=reg7+320: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00036750: CFA=reg7+96: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00036960: CFA=reg7+16: reg16=[CFA-8], reg3=[CFA-16]
+  0x000369b0: CFA=reg7+16: reg16=[CFA-8]
   0x00036a20: frameless indirect
-  0x00037b50: frameless immediate
-  0x00037e40: frameless immediate
-  0x00038a50: frameless immediate
-  0x00038d60: frameless immediate
-  0x00039030: frameless immediate
-  0x00039170: frameless immediate
-  0x0003a950: frameless immediate
-  0x0003aba0: frameless immediate
-  0x0003b110: frameless immediate
-  0x0003b340: frameless immediate
-  0x0003b4e0: frameless immediate
-  0x0003b670: frameless immediate
-  0x0003b9e0: frameless immediate
-  0x0003ba60: frameless immediate
-  0x0003bb80: frameless immediate
-  0x0003bd80: frameless immediate
-  0x0003c0e0: frameless immediate
-  0x0003c2b0: frameless immediate
-  0x0003c430: frameless immediate
-  0x0003c460: frameless immediate
-  0x0003c580: frameless immediate
-  0x0003c930: frameless immediate
-  0x0003c9f0: frameless immediate
-  0x0003cc50: frameless immediate
-  0x0003ce10: frameless immediate
-  0x0003cec0: frameless immediate
-  0x0003d090: frameless immediate
-  0x0003d160: frameless immediate
-  0x0003d4f0: frameless immediate
-  0x0003d530: frameless immediate
-  0x0003d670: frameless immediate
-  0x0003d6e0: frameless immediate
-  0x0003d820: frameless immediate
-  0x0003d8c0: frameless immediate
-  0x0003ddb0: frameless immediate
-  0x0003de80: frameless immediate
-  0x0003e3e0: frameless immediate
-  0x0003e5e0: frameless immediate
-  0x0003e800: frameless immediate
-  0x0003e970: frameless immediate
-  0x0003ea30: frameless immediate
-  0x0003ebe0: frameless immediate
-  0x0003ecd0: frameless immediate
-  0x0003ed80: frameless immediate
-  0x0003eee0: frameless immediate
-  0x0003ef70: frameless immediate
-  0x0003efd0: frameless immediate
-  0x0003f030: frameless immediate
-  0x0003f0f0: frameless immediate
-  0x0003f110: frameless immediate
-  0x0003f240: frameless immediate
+  0x00037b50: CFA=reg7+64: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00037e40: CFA=reg7+192: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
+  0x00038a50: CFA=reg7+48: reg16=[CFA-8], reg6=[CFA-16], reg3=[CFA-24]
+  0x00038d60: CFA=reg7+112: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00039030: CFA=reg7+64: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00039170: CFA=reg7+144: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0003a950: CFA=reg7+48: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x0003aba0: CFA=reg7+784: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0003b110: CFA=reg7+48: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x0003b340: CFA=reg7+64: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg3=[CFA-40]
+  0x0003b4e0: CFA=reg7+160: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg3=[CFA-40]
+  0x0003b670: CFA=reg7+80: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg3=[CFA-40]
+  0x0003b9e0: CFA=reg7+80: reg16=[CFA-8], reg3=[CFA-16]
+  0x0003ba60: CFA=reg7+64: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
+  0x0003bb80: CFA=reg7+80: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0003bd80: CFA=reg7+160: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0003c0e0: CFA=reg7+112: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0003c2b0: CFA=reg7+48: reg16=[CFA-8], reg6=[CFA-16], reg3=[CFA-24]
+  0x0003c430: CFA=reg7+16: reg16=[CFA-8]
+  0x0003c460: CFA=reg7+48: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x0003c580: CFA=reg7+80: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0003c930: CFA=reg7+48: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg3=[CFA-40]
+  0x0003c9f0: CFA=reg7+48: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x0003cc50: CFA=reg7+48: reg16=[CFA-8], reg3=[CFA-16]
+  0x0003ce10: CFA=reg7+16: reg16=[CFA-8]
+  0x0003cec0: CFA=reg7+48: reg16=[CFA-8], reg3=[CFA-16]
+  0x0003d090: CFA=reg7+48: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x0003d160: CFA=reg7+48: reg16=[CFA-8], reg3=[CFA-16]
+  0x0003d4f0: CFA=reg7+16: reg16=[CFA-8]
+  0x0003d530: CFA=reg7+48: reg16=[CFA-8], reg6=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x0003d670: CFA=reg7+32: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x0003d6e0: CFA=reg7+48: reg16=[CFA-8], reg6=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x0003d820: CFA=reg7+16: reg16=[CFA-8]
+  0x0003d8c0: CFA=reg7+176: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0003ddb0: CFA=reg7+80: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0003de80: CFA=reg7+176: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
+  0x0003e3e0: CFA=reg7+96: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
+  0x0003e5e0: CFA=reg7+128: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0003e800: CFA=reg7+32: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x0003e970: CFA=reg7+48: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x0003ea30: CFA=reg7+112: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0003ebe0: CFA=reg7+16: reg16=[CFA-8]
+  0x0003ecd0: CFA=reg7+32: reg16=[CFA-8], reg3=[CFA-16]
+  0x0003ed80: CFA=reg7+80: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
+  0x0003eee0: CFA=reg7+64: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
+  0x0003ef70: CFA=reg7+32: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x0003efd0: CFA=reg7+16: reg16=[CFA-8], reg3=[CFA-16]
+  0x0003f030: CFA=reg7+80: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg13=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
+  0x0003f0f0: CFA=reg7+16: reg16=[CFA-8], reg3=[CFA-16]
+  0x0003f110: CFA=reg7+176: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
+  0x0003f240: CFA=reg7+32: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
   0x0003f2c0: (check eh_frame FDE 0x760)
   0x0003f2d0: (check eh_frame FDE 0x780)
   0x0003f2e0: (check eh_frame FDE 0x7a0)
-  0x0003f2f0: frameless immediate
-  0x0003f390: frameless immediate
-  0x0003f400: frameless immediate
-  0x0003f550: frameless immediate
+  0x0003f2f0: CFA=reg7+80: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
+  0x0003f390: CFA=reg7+16: reg16=[CFA-8]
+  0x0003f400: CFA=reg7+48: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x0003f550: CFA=reg7+16: reg16=[CFA-8], reg3=[CFA-16]
   0x0003f5a0: (check eh_frame FDE 0x7c0)
   0x0003f5b0: (check eh_frame FDE 0x7e0)
-  0x0003f5d0: frameless immediate
+  0x0003f5d0: CFA=reg7+32: reg16=[CFA-8], reg3=[CFA-16]
   0x0003f640: (check eh_frame FDE 0x800)
   0x0003f650: (check eh_frame FDE 0x820)
   0x0003f670: (check eh_frame FDE 0x840)
   0x0003f680: (check eh_frame FDE 0x860)
   0x0003f6a0: (check eh_frame FDE 0x880)
-  0x0003f6b0: frameless immediate
+  0x0003f6b0: CFA=reg7+32: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
   0x0003f730: (check eh_frame FDE 0x8a0)
   0x0003f740: (check eh_frame FDE 0x8c0)
-  0x0003f750: frameless immediate
-  0x0003f760: frameless immediate
-  0x0003f7d0: frameless immediate
-  0x0003f820: frameless immediate
-  0x0003f8d0: frameless immediate
-  0x0003f940: frameless immediate
-  0x0003fba0: frameless immediate
-  0x0003fd20: frameless immediate
-  0x0003fe90: frameless immediate
-  0x0003ff30: frameless immediate
-  0x00040040: frameless immediate
+  0x0003f750: CFA=reg7+16: reg16=[CFA-8]
+  0x0003f760: CFA=reg7+32: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x0003f7d0: CFA=reg7+48: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
+  0x0003f820: CFA=reg7+96: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
+  0x0003f8d0: CFA=reg7+48: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x0003f940: CFA=reg7+160: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg13=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
+  0x0003fba0: CFA=reg7+48: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x0003fd20: CFA=reg7+80: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0003fe90: CFA=reg7+64: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
+  0x0003ff30: CFA=reg7+112: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg13=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
+  0x00040040: CFA=reg7+48: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
   0x000400f0: (check eh_frame FDE 0x8e0)
-  0x00040110: frameless immediate
+  0x00040110: CFA=reg7+16: reg16=[CFA-8], reg3=[CFA-16]
   0x00040170: (check eh_frame FDE 0x900)
   0x00040190: (check eh_frame FDE 0x920)
-  0x000401a0: frameless immediate
-  0x000401c0: frameless immediate
-  0x00040220: frameless immediate
-  0x000402c0: frameless immediate
-  0x000402f0: frameless immediate
-  0x00040360: frameless immediate
-  0x000403f0: frameless immediate
-  0x00040470: frameless immediate
-  0x00040550: frameless immediate
-  0x000406c0: frameless immediate
-  0x00040760: frameless immediate
-  0x000407a0: frameless immediate
-  0x00040990: frameless immediate
-  0x00040aa0: frameless immediate
-  0x00040c30: frameless immediate
-  0x00040d50: frameless immediate
+  0x000401a0: CFA=reg7+16: reg16=[CFA-8], reg3=[CFA-16]
+  0x000401c0: CFA=reg7+32: reg16=[CFA-8], reg3=[CFA-16]
+  0x00040220: CFA=reg7+64: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
+  0x000402c0: CFA=reg7+16: reg16=[CFA-8], reg3=[CFA-16]
+  0x000402f0: CFA=reg7+32: reg16=[CFA-8], reg6=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x00040360: CFA=reg7+32: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x000403f0: CFA=reg7+16: reg16=[CFA-8]
+  0x00040470: CFA=reg7+48: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
+  0x00040550: CFA=reg7+96: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x000406c0: CFA=reg7+32: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x00040760: CFA=reg7+32: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x000407a0: CFA=reg7+32: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x00040990: CFA=reg7+48: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x00040aa0: CFA=reg7+48: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg13=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
+  0x00040c30: CFA=reg7+80: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg13=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
+  0x00040d50: CFA=reg7+64: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
   0x00040e60: (check eh_frame FDE 0x940)
   0x00040e70: (check eh_frame FDE 0x960)
-  0x00040e80: frameless immediate
-  0x00040f80: frameless immediate
-  0x000424e0: frameless immediate
-  0x000425e0: frameless immediate
+  0x00040e80: CFA=reg7+160: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
+  0x00040f80: CFA=reg7+1536: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x000424e0: CFA=reg7+272: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x000425e0: CFA=reg7+32: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
   0x00042640: (check eh_frame FDE 0x980)
-  0x00042670: frameless immediate
-  0x00042740: frameless immediate
-  0x000427a0: frameless immediate
-  0x000429f0: frameless immediate
-  0x00042a90: frameless immediate
+  0x00042670: CFA=reg7+96: reg16=[CFA-8], reg6=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x00042740: CFA=reg7+32: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x000427a0: CFA=reg7+96: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x000429f0: CFA=reg7+48: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg3=[CFA-40]
+  0x00042a90: CFA=reg7+32: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
   0x00042bc0: (check eh_frame FDE 0x9a0)
-  0x00042c10: frameless immediate
-  0x00042ce0: frameless immediate
-  0x00042d50: frameless immediate
-  0x00042de0: frameless immediate
-  0x000430a0: frameless immediate
-  0x00043120: frameless immediate
-  0x00043160: frameless immediate
-  0x000432d0: frameless immediate
-  0x00043360: frameless immediate
-  0x00043560: frameless immediate
-  0x00044960: frameless immediate
-  0x00047c50: frameless immediate
-  0x00047d10: frameless immediate
+  0x00042c10: CFA=reg7+48: reg16=[CFA-8], reg3=[CFA-16]
+  0x00042ce0: CFA=reg7+16: reg16=[CFA-8]
+  0x00042d50: CFA=reg7+80: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg3=[CFA-40]
+  0x00042de0: CFA=reg7+16: reg16=[CFA-8]
+  0x000430a0: CFA=reg7+80: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x00043120: CFA=reg7+16: reg16=[CFA-8]
+  0x00043160: CFA=reg7+112: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x000432d0: CFA=reg7+16: reg16=[CFA-8]
+  0x00043360: CFA=reg7+112: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00043560: CFA=reg7+576: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00044960: CFA=reg7+512: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00047c50: CFA=reg7+48: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
+  0x00047d10: CFA=reg7+64: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
   0x00047e50: (check eh_frame FDE 0x9c0)
   0x00047f00: (check eh_frame FDE 0x9e0)
-  0x00047f60: frameless immediate
-  0x00048060: frameless immediate
-  0x000480c0: frameless immediate
-  0x00048130: frameless immediate
-  0x000481e0: frameless immediate
-  0x00048380: frameless immediate
+  0x00047f60: CFA=reg7+32: reg16=[CFA-8], reg6=[CFA-16], reg3=[CFA-24]
+  0x00048060: CFA=reg7+16: reg16=[CFA-8], reg3=[CFA-16]
+  0x000480c0: CFA=reg7+48: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg13=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
+  0x00048130: CFA=reg7+16: reg16=[CFA-8], reg3=[CFA-16]
+  0x000481e0: CFA=reg7+64: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00048380: CFA=reg7+32: reg16=[CFA-8], reg6=[CFA-16], reg3=[CFA-24]
   0x00048480: (check eh_frame FDE 0xa00)
-  0x00048530: frameless immediate
+  0x00048530: CFA=reg7+48: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg13=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
   0x00048590: (check eh_frame FDE 0xa20)
-  0x00048600: frameless immediate
+  0x00048600: CFA=reg7+48: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg13=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
   0x00048730: (check eh_frame FDE 0xa40)
-  0x000487c0: frameless immediate
-  0x00048830: frameless immediate
+  0x000487c0: CFA=reg7+64: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x00048830: CFA=reg7+32: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
   0x00048890: (check eh_frame FDE 0xa60)
-  0x00048920: frameless immediate
-  0x000489a0: frameless immediate
-  0x00048d80: frameless immediate
-  0x00048f80: frameless immediate
-  0x00049020: frameless immediate
-  0x00049100: frameless immediate
+  0x00048920: CFA=reg7+48: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
+  0x000489a0: CFA=reg7+368: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00048d80: CFA=reg7+96: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg13=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
+  0x00048f80: CFA=reg7+64: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x00049020: CFA=reg7+32: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x00049100: CFA=reg7+96: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
   0x00049260: (check eh_frame FDE 0xa80)
   0x00049270: (check eh_frame FDE 0xaa0)
-  0x00049280: frameless immediate
+  0x00049280: CFA=reg7+16: reg16=[CFA-8], reg3=[CFA-16]
   0x000492b0: (check eh_frame FDE 0xac0)
   0x000492d0: (check eh_frame FDE 0xae0)
   0x000492e0: (check eh_frame FDE 0xb00)
   0x000492f0: (check eh_frame FDE 0xb20)
-  0x00049330: frameless immediate
-  0x000496c0: frameless immediate
-  0x00049750: frameless immediate
-  0x00049830: frameless immediate
+  0x00049330: CFA=reg7+288: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x000496c0: CFA=reg7+48: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x00049750: CFA=reg7+32: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x00049830: CFA=reg7+48: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
   0x00049890: (check eh_frame FDE 0xb40)
-  0x000498a0: frameless immediate
-  0x00049d10: frameless immediate
-  0x00049e10: frameless immediate
-  0x00049ec0: frameless immediate
-  0x0004a010: frameless immediate
-  0x0004a1d0: frameless immediate
-  0x0004a4b0: frameless immediate
-  0x0004a5e0: frameless immediate
-  0x0004a660: frameless immediate
-  0x0004a780: frameless immediate
-  0x0004a950: frameless immediate
-  0x0004a9b0: frameless immediate
-  0x0004abe0: frameless immediate
+  0x000498a0: CFA=reg7+96: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00049d10: CFA=reg7+240: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x00049e10: CFA=reg7+48: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg13=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
+  0x00049ec0: CFA=reg7+64: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0004a010: CFA=reg7+272: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0004a1d0: CFA=reg7+288: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0004a4b0: CFA=reg7+32: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x0004a5e0: CFA=reg7+16: reg16=[CFA-8], reg3=[CFA-16]
+  0x0004a660: CFA=reg7+112: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0004a780: CFA=reg7+64: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0004a950: CFA=reg7+16: reg16=[CFA-8]
+  0x0004a9b0: CFA=reg7+48: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x0004abe0: CFA=reg7+80: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
 
 0x0004ad10: Compressed page with 326 entries and 97 local opcodes
-  0x0004ad10: frameless immediate
-  0x0004ad90: frameless immediate
-  0x0004b050: frameless immediate
-  0x0004b0f0: frameless immediate
-  0x0004b150: frameless immediate
-  0x0004b260: frameless immediate
-  0x0004bb80: frameless immediate
-  0x0004bef0: frameless immediate
-  0x0004c120: frameless immediate
-  0x0004c410: frameless immediate
-  0x0004c8f0: frameless immediate
-  0x0004c9a0: frameless immediate
-  0x0004ca40: frameless immediate
-  0x0004cae0: frameless immediate
-  0x0004cbb0: frameless immediate
-  0x0004cc40: frameless immediate
-  0x0004cce0: frameless immediate
-  0x0004cf50: frameless immediate
-  0x0004cff0: frameless immediate
-  0x0004d160: frameless immediate
-  0x0004d320: frameless immediate
-  0x0004d480: frameless immediate
-  0x0004d590: frameless immediate
-  0x0004d650: frameless immediate
-  0x0004d710: frameless immediate
-  0x0004d760: frameless immediate
-  0x0004d970: frameless immediate
-  0x0004da30: frameless immediate
-  0x0004dab0: frameless immediate
-  0x0004ddf0: frameless immediate
+  0x0004ad10: CFA=reg7+16: reg16=[CFA-8], reg3=[CFA-16]
+  0x0004ad90: CFA=reg7+48: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg13=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
+  0x0004b050: CFA=reg7+48: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
+  0x0004b0f0: CFA=reg7+32: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x0004b150: CFA=reg7+48: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg13=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
+  0x0004b260: CFA=reg7+112: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0004bb80: CFA=reg7+64: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0004bef0: CFA=reg7+80: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0004c120: CFA=reg7+96: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0004c410: CFA=reg7+112: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0004c8f0: CFA=reg7+64: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
+  0x0004c9a0: CFA=reg7+48: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
+  0x0004ca40: CFA=reg7+48: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x0004cae0: CFA=reg7+160: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0004cbb0: CFA=reg7+16: reg16=[CFA-8], reg3=[CFA-16]
+  0x0004cc40: CFA=reg7+96: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
+  0x0004cce0: CFA=reg7+160: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg13=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
+  0x0004cf50: CFA=reg7+48: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg3=[CFA-40]
+  0x0004cff0: CFA=reg7+96: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0004d160: CFA=reg7+176: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x0004d320: CFA=reg7+96: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
+  0x0004d480: CFA=reg7+80: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
+  0x0004d590: CFA=reg7+64: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x0004d650: CFA=reg7+80: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg13=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
+  0x0004d710: CFA=reg7+16: reg16=[CFA-8]
+  0x0004d760: CFA=reg7+96: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0004d970: CFA=reg7+32: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x0004da30: CFA=reg7+32: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x0004dab0: CFA=reg7+144: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0004ddf0: CFA=reg7+64: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
   0x0004e230: (check eh_frame FDE 0xb60)
   0x0004e240: (check eh_frame FDE 0xb80)
-  0x0004e250: frameless immediate
+  0x0004e250: CFA=reg7+16: reg16=[CFA-8], reg3=[CFA-16]
   0x0004e280: (check eh_frame FDE 0xba0)
   0x0004e2a0: (check eh_frame FDE 0xbc0)
   0x0004e2b0: (check eh_frame FDE 0xbe0)
   0x0004e2c0: (check eh_frame FDE 0xc00)
-  0x0004e2d0: frameless immediate
-  0x0004e310: frameless immediate
-  0x0004e550: frameless immediate
-  0x0004e5b0: frameless immediate
-  0x0004e750: frameless immediate
+  0x0004e2d0: CFA=reg7+32: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x0004e310: CFA=reg7+48: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg13=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
+  0x0004e550: CFA=reg7+16: reg16=[CFA-8], reg3=[CFA-16]
+  0x0004e5b0: CFA=reg7+32: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x0004e750: CFA=reg7+64: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg3=[CFA-40]
   0x0004e840: (check eh_frame FDE 0xc20)
-  0x0004e850: frameless immediate
-  0x0004e870: frameless immediate
-  0x0004e960: frameless immediate
-  0x0004ea50: frameless immediate
-  0x0004eb70: frameless immediate
-  0x0004ec60: frameless immediate
-  0x0004ef60: frameless immediate
+  0x0004e850: CFA=reg7+16: reg16=[CFA-8], reg3=[CFA-16]
+  0x0004e870: CFA=reg7+32: reg16=[CFA-8], reg6=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x0004e960: CFA=reg7+32: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x0004ea50: CFA=reg7+48: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
+  0x0004eb70: CFA=reg7+32: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x0004ec60: CFA=reg7+192: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0004ef60: CFA=reg7+64: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
   0x0004f250: (check eh_frame FDE 0xc40)
-  0x0004f2a0: frameless immediate
-  0x0004f480: frameless immediate
-  0x0004f4d0: frameless immediate
-  0x0004f520: frameless immediate
+  0x0004f2a0: CFA=reg7+112: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0004f480: CFA=reg7+16: reg16=[CFA-8], reg3=[CFA-16]
+  0x0004f4d0: CFA=reg7+32: reg16=[CFA-8], reg6=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x0004f520: CFA=reg7+16: reg16=[CFA-8]
   0x0004f530: (check eh_frame FDE 0xc60)
-  0x0004f5b0: frameless immediate
+  0x0004f5b0: CFA=reg7+144: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
   0x0004f810: (check eh_frame FDE 0xc80)
   0x0004f820: (check eh_frame FDE 0xca0)
-  0x0004f830: frameless immediate
+  0x0004f830: CFA=reg7+48: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg13=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
   0x0004f8a0: (check eh_frame FDE 0xcc0)
-  0x0004f8b0: frameless immediate
-  0x0004fd30: frameless immediate
+  0x0004f8b0: CFA=reg7+96: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0004fd30: CFA=reg7+32: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
   0x0004fdb0: (check eh_frame FDE 0xce0)
-  0x0004fdc0: frameless immediate
+  0x0004fdc0: CFA=reg7+16: reg16=[CFA-8], reg3=[CFA-16]
   0x0004fde0: (check eh_frame FDE 0xd00)
-  0x0004fdf0: frameless immediate
-  0x0004ff20: frameless immediate
-  0x0004ffc0: frameless immediate
-  0x000500f0: frameless immediate
-  0x00050180: frameless immediate
-  0x000502c0: frameless immediate
-  0x000503f0: frameless immediate
-  0x00050580: frameless immediate
+  0x0004fdf0: CFA=reg7+128: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg13=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
+  0x0004ff20: CFA=reg7+64: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
+  0x0004ffc0: CFA=reg7+112: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x000500f0: CFA=reg7+64: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
+  0x00050180: CFA=reg7+112: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x000502c0: CFA=reg7+112: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
+  0x000503f0: CFA=reg7+64: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg13=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
+  0x00050580: CFA=reg7+48: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
   0x000505f0: (check eh_frame FDE 0xd20)
-  0x00050610: frameless immediate
-  0x00050800: frameless immediate
+  0x00050610: CFA=reg7+128: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00050800: CFA=reg7+64: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
   0x000508a0: (check eh_frame FDE 0xd40)
-  0x000508b0: frameless immediate
+  0x000508b0: CFA=reg7+16: reg16=[CFA-8], reg3=[CFA-16]
   0x000508d0: (check eh_frame FDE 0xd60)
   0x000508e0: (check eh_frame FDE 0xd80)
-  0x000508f0: frameless immediate
-  0x00050a30: frameless immediate
-  0x00050aa0: frameless immediate
-  0x00050be0: frameless immediate
-  0x00050c50: frameless immediate
-  0x00050ef0: frameless immediate
-  0x00051000: frameless immediate
-  0x00051210: frameless immediate
-  0x00051240: frameless immediate
-  0x000512f0: frameless immediate
-  0x000513a0: frameless immediate
-  0x00051450: frameless immediate
-  0x000514e0: frameless immediate
-  0x00051790: frameless immediate
-  0x00051a10: frameless immediate
-  0x00051ac0: frameless immediate
+  0x000508f0: CFA=reg7+80: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x00050a30: CFA=reg7+32: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x00050aa0: CFA=reg7+80: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00050be0: CFA=reg7+32: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x00050c50: CFA=reg7+48: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg13=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
+  0x00050ef0: CFA=reg7+48: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x00051000: CFA=reg7+64: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00051210: CFA=reg7+16: reg16=[CFA-8], reg3=[CFA-16]
+  0x00051240: CFA=reg7+64: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
+  0x000512f0: CFA=reg7+48: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
+  0x000513a0: CFA=reg7+64: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
+  0x00051450: CFA=reg7+48: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
+  0x000514e0: CFA=reg7+96: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00051790: CFA=reg7+64: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00051a10: CFA=reg7+48: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
+  0x00051ac0: CFA=reg7+64: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
   0x00051c00: (check eh_frame FDE 0xda0)
   0x00051cb0: (check eh_frame FDE 0xdc0)
-  0x00051d10: frameless immediate
+  0x00051d10: CFA=reg7+32: reg16=[CFA-8], reg6=[CFA-16], reg3=[CFA-24]
   0x00051df0: (check eh_frame FDE 0xde0)
-  0x00051ec0: frameless immediate
-  0x00051f00: frameless immediate
-  0x00051fb0: frameless immediate
+  0x00051ec0: CFA=reg7+16: reg16=[CFA-8]
+  0x00051f00: CFA=reg7+48: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
+  0x00051fb0: CFA=reg7+64: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
   0x000520d0: (check eh_frame FDE 0xe00)
   0x00052190: (check eh_frame FDE 0xe20)
-  0x000521f0: frameless immediate
-  0x000523a0: frameless immediate
-  0x00052410: frameless immediate
-  0x00052480: frameless immediate
-  0x000524d0: frameless immediate
-  0x000525f0: frameless immediate
-  0x00052670: frameless immediate
-  0x00052700: frameless immediate
-  0x00052800: frameless immediate
-  0x00052870: frameless immediate
-  0x00052900: frameless immediate
-  0x00052a70: frameless immediate
-  0x00052af0: frameless immediate
-  0x00052bc0: frameless immediate
-  0x00052c50: frameless immediate
-  0x00052e60: frameless immediate
-  0x00052fd0: frameless immediate
-  0x00053050: frameless immediate
-  0x00053170: frameless immediate
-  0x00053270: frameless immediate
-  0x00053450: frameless immediate
-  0x000534c0: frameless immediate
-  0x000535d0: frameless immediate
+  0x000521f0: CFA=reg7+32: reg16=[CFA-8], reg6=[CFA-16], reg3=[CFA-24]
+  0x000523a0: CFA=reg7+32: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x00052410: CFA=reg7+32: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x00052480: CFA=reg7+48: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
+  0x000524d0: CFA=reg7+64: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
+  0x000525f0: CFA=reg7+64: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x00052670: CFA=reg7+48: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x00052700: CFA=reg7+96: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x00052800: CFA=reg7+48: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg3=[CFA-40]
+  0x00052870: CFA=reg7+16: reg16=[CFA-8]
+  0x00052900: CFA=reg7+80: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x00052a70: CFA=reg7+48: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x00052af0: CFA=reg7+64: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x00052bc0: CFA=reg7+64: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg3=[CFA-40]
+  0x00052c50: CFA=reg7+160: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg13=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
+  0x00052e60: CFA=reg7+96: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00052fd0: CFA=reg7+48: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x00053050: CFA=reg7+96: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg13=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
+  0x00053170: CFA=reg7+16: reg16=[CFA-8], reg3=[CFA-16]
+  0x00053270: CFA=reg7+80: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg13=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
+  0x00053450: CFA=reg7+16: reg16=[CFA-8]
+  0x000534c0: CFA=reg7+64: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x000535d0: CFA=reg7+32: reg16=[CFA-8], reg6=[CFA-16], reg3=[CFA-24]
   0x00053690: (check eh_frame FDE 0xe40)
   0x00053740: (check eh_frame FDE 0xe60)
-  0x000537d0: frameless immediate
+  0x000537d0: CFA=reg7+48: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
   0x000538e0: (check eh_frame FDE 0xe80)
-  0x00053940: frameless immediate
-  0x000539a0: frameless immediate
-  0x00053b40: frameless immediate
+  0x00053940: CFA=reg7+32: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x000539a0: CFA=reg7+160: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
+  0x00053b40: CFA=reg7+48: reg16=[CFA-8]
   0x00053bb0: (check eh_frame FDE 0xea0)
-  0x00053bc0: frameless immediate
-  0x00053c10: frameless immediate
-  0x00053cc0: frameless immediate
-  0x00053f50: frameless immediate
-  0x00053fa0: frameless immediate
-  0x00054020: frameless immediate
-  0x00054070: frameless immediate
-  0x00054150: frameless immediate
-  0x00054280: frameless immediate
-  0x00054310: frameless immediate
-  0x000543a0: frameless immediate
-  0x00054480: frameless immediate
-  0x00054540: frameless immediate
-  0x00054640: frameless immediate
-  0x00054740: frameless immediate
-  0x000547b0: frameless immediate
-  0x00054920: frameless immediate
-  0x000549d0: frameless immediate
-  0x00054c50: frameless immediate
-  0x00054ca0: frameless immediate
-  0x00054d10: frameless immediate
-  0x00054e80: frameless immediate
-  0x00055040: frameless immediate
+  0x00053bc0: CFA=reg7+16: reg16=[CFA-8], reg3=[CFA-16]
+  0x00053c10: CFA=reg7+96: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
+  0x00053cc0: CFA=reg7+176: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg13=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
+  0x00053f50: CFA=reg7+32: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x00053fa0: CFA=reg7+16: reg16=[CFA-8]
+  0x00054020: CFA=reg7+16: reg16=[CFA-8], reg3=[CFA-16]
+  0x00054070: CFA=reg7+96: reg16=[CFA-8], reg6=[CFA-16], reg3=[CFA-24]
+  0x00054150: CFA=reg7+16: reg16=[CFA-8]
+  0x00054280: CFA=reg7+64: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00054310: CFA=reg7+64: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
+  0x000543a0: CFA=reg7+48: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x00054480: CFA=reg7+80: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x00054540: CFA=reg7+96: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x00054640: CFA=reg7+48: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x00054740: CFA=reg7+32: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x000547b0: CFA=reg7+96: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00054920: CFA=reg7+96: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
+  0x000549d0: CFA=reg7+160: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg13=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
+  0x00054c50: CFA=reg7+32: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x00054ca0: CFA=reg7+48: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg13=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
+  0x00054d10: CFA=reg7+96: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00054e80: CFA=reg7+208: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00055040: CFA=reg7+64: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
   0x000550c0: (check eh_frame FDE 0xec0)
-  0x000550d0: frameless immediate
-  0x00055210: frameless immediate
-  0x00055290: frameless immediate
-  0x00055330: frameless immediate
-  0x00055450: frameless immediate
+  0x000550d0: CFA=reg7+96: reg16=[CFA-8], reg6=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x00055210: CFA=reg7+64: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x00055290: CFA=reg7+48: reg16=[CFA-8]
+  0x00055330: CFA=reg7+96: reg16=[CFA-8], reg3=[CFA-16]
+  0x00055450: CFA=reg7+64: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
   0x00055630: (check eh_frame FDE 0xee0)
-  0x00055680: frameless immediate
-  0x00055720: frameless immediate
-  0x000557d0: frameless immediate
-  0x00055a60: frameless immediate
-  0x00055ad0: frameless immediate
-  0x00055b70: frameless immediate
+  0x00055680: CFA=reg7+16: reg16=[CFA-8]
+  0x00055720: CFA=reg7+96: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
+  0x000557d0: CFA=reg7+176: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg13=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
+  0x00055a60: CFA=reg7+48: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
+  0x00055ad0: CFA=reg7+64: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00055b70: CFA=reg7+96: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
   0x00055ce0: (check eh_frame FDE 0xf00)
-  0x00055d00: frameless immediate
-  0x00055d20: frameless immediate
-  0x00055db0: frameless immediate
-  0x00055e80: frameless immediate
-  0x00056090: frameless immediate
-  0x000561f0: frameless immediate
+  0x00055d00: CFA=reg7+16: reg16=[CFA-8], reg3=[CFA-16]
+  0x00055d20: CFA=reg7+32: reg16=[CFA-8], reg6=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x00055db0: CFA=reg7+80: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00055e80: CFA=reg7+416: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00056090: CFA=reg7+176: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg13=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
+  0x000561f0: CFA=reg7+32: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
   0x00056230: (check eh_frame FDE 0xf70)
   0x00056250: (check eh_frame FDE 0xf90)
   0x00056270: (check eh_frame FDE 0xfb0)
@@ -668,33 +668,33 @@ Compact unwind info with 3 pages and 73 global opcodes
   0x000562a0: (check eh_frame FDE 0xff0)
   0x000562b0: (check eh_frame FDE 0x1010)
   0x000562c0: (check eh_frame FDE 0x1030)
-  0x000562d0: frameless immediate
+  0x000562d0: CFA=reg7+16: reg16=[CFA-8]
   0x00056360: (check eh_frame FDE 0x1068)
-  0x00056370: frameless immediate
-  0x000563b0: frameless immediate
-  0x000565b0: frameless immediate
+  0x00056370: CFA=reg7+16: reg16=[CFA-8], reg3=[CFA-16]
+  0x000563b0: CFA=reg7+128: reg16=[CFA-8]
+  0x000565b0: CFA=reg7+224: reg16=[CFA-8]
   0x00056660: (check eh_frame FDE 0x10c0)
   0x00056670: (check eh_frame FDE 0x10e0)
-  0x00056680: frameless immediate
-  0x000566e0: frameless immediate
-  0x00056730: frameless immediate
-  0x00056810: frameless immediate
-  0x000568d0: frameless immediate
-  0x00056910: frameless immediate
-  0x000569a0: frameless immediate
-  0x00056ab0: frameless immediate
-  0x00056b40: frameless immediate
-  0x00056ba0: frameless immediate
-  0x00056ca0: frameless immediate
-  0x00056d30: frameless immediate
+  0x00056680: CFA=reg7+48: reg16=[CFA-8]
+  0x000566e0: CFA=reg7+16: reg16=[CFA-8], reg3=[CFA-16]
+  0x00056730: CFA=reg7+80: reg16=[CFA-8], reg6=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x00056810: CFA=reg7+64: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x000568d0: CFA=reg7+32: reg16=[CFA-8]
+  0x00056910: CFA=reg7+16: reg16=[CFA-8]
+  0x000569a0: CFA=reg7+288: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg13=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
+  0x00056ab0: CFA=reg7+80: reg16=[CFA-8], reg6=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x00056b40: CFA=reg7+16: reg16=[CFA-8]
+  0x00056ba0: CFA=reg7+1904: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg3=[CFA-40]
+  0x00056ca0: CFA=reg7+80: reg16=[CFA-8], reg6=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x00056d30: CFA=reg7+1904: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg3=[CFA-40]
   0x00056df0: (check eh_frame FDE 0x1118)
   0x00056e00: (check eh_frame FDE 0x1170)
   0x00056e40: (check eh_frame FDE 0x11b0)
-  0x00056e50: frameless immediate
-  0x00056f20: frameless immediate
-  0x00056fc0: frameless immediate
-  0x00057110: frameless immediate
-  0x00057180: frameless immediate
+  0x00056e50: CFA=reg7+96: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x00056f20: CFA=reg7+128: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x00056fc0: CFA=reg7+336: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00057110: CFA=reg7+32: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x00057180: CFA=reg7+336: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
   0x000572d0: (check eh_frame FDE 0x1228)
   0x000572e0: (check eh_frame FDE 0x1248)
   0x000573a0: (check eh_frame FDE 0x1268)
@@ -704,107 +704,107 @@ Compact unwind info with 3 pages and 73 global opcodes
   0x00057540: (check eh_frame FDE 0x1308)
   0x00057550: (check eh_frame FDE 0x1328)
   0x00057560: (check eh_frame FDE 0x1348)
-  0x00057570: frameless immediate
-  0x000575d0: frameless immediate
-  0x000577a0: frameless immediate
-  0x00057800: frameless immediate
-  0x000579f0: frameless immediate
-  0x00057a50: frameless immediate
-  0x00057c80: frameless immediate
-  0x00057ce0: frameless immediate
+  0x00057570: CFA=reg7+64: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x000575d0: CFA=reg7+80: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg3=[CFA-40]
+  0x000577a0: CFA=reg7+64: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x00057800: CFA=reg7+80: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg3=[CFA-40]
+  0x000579f0: CFA=reg7+64: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x00057a50: CFA=reg7+80: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
+  0x00057c80: CFA=reg7+64: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x00057ce0: CFA=reg7+24: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
   0x00057f10: (check eh_frame FDE 0x1368)
   0x00057f50: (check eh_frame FDE 0x1388)
-  0x00057f70: frameless immediate
+  0x00057f70: CFA=reg7+40: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
   0x000581b0: (check eh_frame FDE 0x13a8)
   0x000581d0: (check eh_frame FDE 0x13c8)
-  0x000581f0: frameless immediate
-  0x00058270: frameless immediate
-  0x00058340: frameless immediate
+  0x000581f0: CFA=reg7+48: reg16=[CFA-8], reg3=[CFA-16]
+  0x00058270: CFA=reg7+64: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x00058340: CFA=reg7+48: reg16=[CFA-8], reg3=[CFA-16]
   0x000585b0: (check eh_frame FDE 0x13e8)
-  0x000585d0: frameless immediate
-  0x000588b0: frameless immediate
-  0x00058980: frameless immediate
-  0x00058df0: frameless immediate
+  0x000585d0: CFA=reg7+16: reg16=[CFA-8], reg3=[CFA-16]
+  0x000588b0: CFA=reg7+64: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x00058980: CFA=reg7+56: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00058df0: CFA=reg7+128: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
   0x00058eb0: (check eh_frame FDE 0x1408)
-  0x00058ff0: frameless immediate
-  0x00059090: frameless immediate
-  0x000594c0: frameless immediate
-  0x00059540: frameless immediate
-  0x000595d0: frameless immediate
-  0x00059670: frameless immediate
-  0x000596f0: frameless immediate
-  0x00059770: frameless immediate
-  0x00059800: frameless immediate
+  0x00058ff0: CFA=reg7+64: reg16=[CFA-8], reg3=[CFA-16]
+  0x00059090: CFA=reg7+160: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x000594c0: CFA=reg7+64: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x00059540: CFA=reg7+80: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
+  0x000595d0: CFA=reg7+80: reg16=[CFA-8], reg3=[CFA-16]
+  0x00059670: CFA=reg7+32: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x000596f0: CFA=reg7+32: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x00059770: CFA=reg7+32: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x00059800: CFA=reg7+16: reg16=[CFA-8], reg3=[CFA-16]
   0x000599a0: (check eh_frame FDE 0x1428)
   0x000599e0: (check eh_frame FDE 0x1448)
-  0x00059a40: frameless immediate
-  0x00059a70: frameless immediate
-  0x0005bca0: frameless immediate
+  0x00059a40: CFA=reg7+16: reg16=[CFA-8], reg3=[CFA-16]
+  0x00059a70: CFA=reg7+192: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0005bca0: CFA=reg7+16: reg16=[CFA-8], reg3=[CFA-16]
   0x0005bd50: (check eh_frame FDE 0x1480)
-  0x0005bd90: frameless immediate
-  0x0005f260: frameless immediate
-  0x0005f2b0: frameless immediate
-  0x0005f990: frameless immediate
-  0x00060120: frameless immediate
+  0x0005bd90: CFA=reg7+272: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0005f260: CFA=reg7+32: reg16=[CFA-8], reg6=[CFA-16], reg14=[CFA-24], reg3=[CFA-32]
+  0x0005f2b0: CFA=reg7+112: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0005f990: CFA=reg7+128: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00060120: CFA=reg7+112: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
   0x00060810: (check eh_frame FDE 0x14f8)
   0x00060840: (check eh_frame FDE 0x1518)
   0x00060850: (check eh_frame FDE 0x1538)
-  0x00060860: frameless immediate
-  0x000608f0: frameless immediate
+  0x00060860: CFA=reg7+80: reg16=[CFA-8]
+  0x000608f0: CFA=reg7+208: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
   0x00060b80: frameless indirect
-  0x00060cf0: frameless immediate
-  0x00060d30: frameless immediate
+  0x00060cf0: CFA=reg7+32: reg16=[CFA-8], reg6=[CFA-16], reg3=[CFA-24]
+  0x00060d30: CFA=reg7+16: reg16=[CFA-8], reg3=[CFA-16]
   0x00060d60: (check eh_frame FDE 0x1598)
-  0x00060d90: frameless immediate
-  0x00060dd0: frameless immediate
+  0x00060d90: CFA=reg7+32: reg16=[CFA-8], reg6=[CFA-16], reg3=[CFA-24]
+  0x00060dd0: CFA=reg7+32: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
   0x00060e10: (check eh_frame FDE 0x15d8)
   0x00060e20: (check eh_frame FDE 0x15f8)
-  0x00060e80: frameless immediate
-  0x00060f90: frameless immediate
+  0x00060e80: CFA=reg7+80: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg13=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
+  0x00060f90: CFA=reg7+64: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
   0x00061020: (check eh_frame FDE 0x1618)
-  0x00061040: frameless immediate
+  0x00061040: CFA=reg7+64: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
   0x000610c0: (check eh_frame FDE 0x1658)
-  0x000610d0: frameless immediate
-  0x000611f0: frameless immediate
+  0x000610d0: CFA=reg7+80: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x000611f0: CFA=reg7+16: reg16=[CFA-8], reg3=[CFA-16]
   0x00061230: (check eh_frame FDE 0x1690)
-  0x00061250: frameless immediate
-  0x00061280: frameless immediate
-  0x000613e0: frameless immediate
-  0x00069500: frameless immediate
-  0x00069650: frameless immediate
-  0x000697a4: frameless immediate
+  0x00061250: CFA=reg7+16: reg16=[CFA-8]
+  0x00061280: CFA=reg7+48: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg3=[CFA-40]
+  0x000613e0: CFA=reg7+544: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00069500: CFA=reg7+24: reg16=[CFA-8], reg6=[CFA-16], reg3=[CFA-24]
+  0x00069650: CFA=reg7+288: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
+  0x000697a4: CFA=reg7+16: reg16=[CFA-8]
   0x000697d0: frameless indirect
-  0x00069830: frameless immediate
-  0x00069860: frameless immediate
+  0x00069830: CFA=reg7+16: reg16=[CFA-8], reg3=[CFA-16]
+  0x00069860: CFA=reg7+80: reg16=[CFA-8], reg3=[CFA-16]
   0x00069910: (check eh_frame FDE 0x1740)
   0x00069920: (check eh_frame FDE 0x1760)
   0x00069930: (check eh_frame FDE 0x1780)
-  0x00069940: frameless immediate
+  0x00069940: CFA=reg7+16: reg16=[CFA-8]
   0x00069970: (check eh_frame FDE 0x17a0)
   0x00069980: (check eh_frame FDE 0x17c0)
   0x00069990: (check eh_frame FDE 0x17e0)
   0x000699a0: (check eh_frame FDE 0x1840)
-  0x000699d0: frameless immediate
+  0x000699d0: CFA=reg7+24: reg16=[CFA-8], reg6=[CFA-16], reg3=[CFA-24]
   0x00069b30: (check eh_frame FDE 0x1880)
-  0x00069b60: frameless immediate
-  0x00069d40: frameless immediate
-  0x00069de0: frameless immediate
-  0x00069e50: frameless immediate
-  0x00069fa0: frameless immediate
+  0x00069b60: CFA=reg7+64: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x00069d40: CFA=reg7+48: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
+  0x00069de0: CFA=reg7+544: reg16=[CFA-8]
+  0x00069e50: CFA=reg7+48: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg13=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
+  0x00069fa0: CFA=reg7+80: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
   0x0006a250: (check eh_frame FDE 0x18c0)
-  0x0006a290: frameless immediate
-  0x0006a450: frameless immediate
+  0x0006a290: CFA=reg7+64: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
+  0x0006a450: CFA=reg7+240: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
   0x0006a6d0: (check eh_frame FDE 0x18f8)
-  0x0006a6e0: frameless immediate
-  0x0006b180: frameless immediate
-  0x0006b2f0: frameless immediate
-  0x0006b870: frameless immediate
-  0x0006b930: frameless immediate
-  0x0006ba30: frameless immediate
-  0x0006bad0: frameless immediate
+  0x0006a6e0: CFA=reg7+928: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0006b180: CFA=reg7+64: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg12=[CFA-40], reg3=[CFA-48]
+  0x0006b2f0: CFA=reg7+96: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0006b870: CFA=reg7+1088: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg3=[CFA-40]
+  0x0006b930: CFA=reg7+832: reg16=[CFA-8], reg15=[CFA-16], reg14=[CFA-24], reg12=[CFA-32], reg3=[CFA-40]
+  0x0006ba30: CFA=reg7+24: reg16=[CFA-8], reg14=[CFA-16], reg3=[CFA-24]
+  0x0006bad0: CFA=reg7+48: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg3=[CFA-40]
   0x0006bba0: (check eh_frame FDE 0x1938)
-  0x0006bc60: frameless immediate
-  0x0006bec0: frameless immediate
-  0x0006c6c0: frameless immediate
-  0x0006ca70: frameless immediate
+  0x0006bc60: CFA=reg7+96: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0006bec0: CFA=reg7+144: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0006c6c0: CFA=reg7+128: reg16=[CFA-8], reg6=[CFA-16], reg15=[CFA-24], reg14=[CFA-32], reg13=[CFA-40], reg12=[CFA-48], reg3=[CFA-56]
+  0x0006ca70: CFA=reg7+24: reg16=[CFA-8], reg6=[CFA-16], reg3=[CFA-24]
 
