@@ -148,7 +148,7 @@ impl Display for OpcodeX86 {
             } => {
                 // ebp was set to esp before the saved registers were pushed.
                 // The first pushed register is at ebp - 4 (== CFA - 12), the last at ebp - stack_offset_in_bytes.
-                write!(f, "CFA=reg6+8: reg6=[CFA-8] reg16=[CFA-4]")?;
+                write!(f, "CFA=reg6+8: reg6=[CFA-8], reg16=[CFA-4]")?;
                 let max_count = (*stack_offset_in_bytes / 4) as usize;
                 let mut offset = *stack_offset_in_bytes + 8; // + 2 for rbp, return address
                 for reg in saved_regs.iter().rev().take(max_count) {
@@ -344,7 +344,7 @@ impl Display for OpcodeX86_64 {
             } => {
                 // rbp was set to rsp before the saved registers were pushed.
                 // The first pushed register is at rbp - 8 (== CFA - 24), the last at rbp - stack_offset_in_bytes.
-                write!(f, "CFA=reg6+16: reg6=[CFA-16] reg16=[CFA-8]")?;
+                write!(f, "CFA=reg6+16: reg6=[CFA-16], reg16=[CFA-8]")?;
                 let max_count = (*stack_offset_in_bytes / 8) as usize;
                 let mut offset = *stack_offset_in_bytes + 16; // + 2 for rbp, return address
                 for reg in saved_regs.iter().rev().take(max_count) {
