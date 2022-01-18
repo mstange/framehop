@@ -169,13 +169,9 @@ impl Display for OpcodeX86 {
                 }
                 write!(f, " reg16=[CFA-8]")?;
                 let mut offset = 2 * 4;
-                for reg in saved_regs.iter().rev() {
-                    if let Some(reg) = reg {
-                        write!(f, ", {}=[CFA-{}]", reg.dwarf_name(), offset)?;
-                        offset += 4;
-                    } else {
-                        break;
-                    }
+                for reg in saved_regs.iter().rev().flatten() {
+                    write!(f, ", {}=[CFA-{}]", reg.dwarf_name(), offset)?;
+                    offset += 4;
                 }
             }
             OpcodeX86::FramelessIndirect { .. } => {
@@ -317,7 +313,6 @@ fn decode_permutation(count: u32, mut encoding: u32) -> Result<[u8; 6], ()> {
     }
 
     let mut registers = [0; 6];
-    let leave_empty = 6 - count;
     let mut used = [false; 6];
     for i in 0..count {
         let compressed_regindex = compressed_regindexes[i as usize];
@@ -327,7 +322,7 @@ fn decode_permutation(count: u32, mut encoding: u32) -> Result<[u8; 6], ()> {
             .nth(compressed_regindex as usize)
             .unwrap();
         used[uncompressed_regindex] = true;
-        registers[(leave_empty + i) as usize] = (uncompressed_regindex + 1) as u8;
+        registers[i as usize] = (uncompressed_regindex + 1) as u8;
     }
     Ok(registers)
 }
@@ -365,13 +360,9 @@ impl Display for OpcodeX86_64 {
                 }
                 write!(f, " reg16=[CFA-8]")?;
                 let mut offset = 2 * 8;
-                for reg in saved_regs.iter().rev() {
-                    if let Some(reg) = reg {
-                        write!(f, ", {}=[CFA-{}]", reg.dwarf_name(), offset)?;
-                        offset += 8;
-                    } else {
-                        break;
-                    }
+                for reg in saved_regs.iter().rev().flatten() {
+                    write!(f, ", {}=[CFA-{}]", reg.dwarf_name(), offset)?;
+                    offset += 8;
                 }
             }
             OpcodeX86_64::FramelessIndirect { .. } => {
