@@ -11,8 +11,11 @@ readme = "Readme.md"
 exclude = ["/.github", "/tests", "/res"]
 
 [dependencies]
-object = "0.28.2"
 thiserror = "1.0.30"
+zerocopy = "0.6.1"
+
+[dev-dependencies]
+object = "0.28.2"
 
 [profile.release]
 debug = true

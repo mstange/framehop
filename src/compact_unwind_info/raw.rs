@@ -1,11 +1,10 @@
 use std::fmt::Debug;
 use std::result;
 
+use zerocopy::{FromBytes, LayoutVerified};
+
 use crate::display_utils::HexNum;
 use crate::unaligned::{U16, U32};
-
-use object::read::ReadRef;
-use object::Pod;
 
 // Written with help from https://gankra.github.io/blah/compact-unwinding/
 
@@ -13,18 +12,6 @@ use object::Pod;
 pub enum Error {
     #[error("{0}")]
     Generic(&'static str),
-
-    #[error("object read error: {0}")]
-    ObjectRead(#[source] object::read::Error),
-
-    #[error("object read error: {0} ({1})")]
-    ObjectReadWithContext(&'static str, #[source] object::read::Error),
-}
-
-impl From<object::read::Error> for Error {
-    fn from(e: object::read::Error) -> Self {
-        Error::ObjectRead(e)
-    }
 }
 
 /// The result type used within the read module.
@@ -40,13 +27,13 @@ impl<T> ReadError<T> for result::Result<T, ()> {
     }
 }
 
-impl<T> ReadError<T> for result::Result<T, object::read::Error> {
-    fn read_error(self, context: &'static str) -> Result<T> {
-        self.map_err(|error| Error::ObjectReadWithContext(context, error))
+impl<T> ReadError<T> for Option<T> {
+    fn read_error(self, error: &'static str) -> Result<T> {
+        self.ok_or(Error::Generic(error))
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(FromBytes, Debug, Clone, Copy)]
 #[repr(C)]
 pub struct CompactUnwindInfoHeader {
     /// The version. Only version 1 is currently defined
@@ -79,11 +66,30 @@ pub struct CompactUnwindInfoHeader {
     // lsdas: [LsdaEntry; unknown_len],
 }
 
-unsafe impl Pod for CompactUnwindInfoHeader {}
+trait ReadIntoRef {
+    fn read_at<T: FromBytes>(&self, offset: u64) -> Option<&T>;
+    fn read_slice_at<T: FromBytes>(&self, offset: u64, len: usize) -> Option<&[T]>;
+}
+
+impl<'a> ReadIntoRef for [u8] {
+    fn read_at<T: FromBytes>(&self, offset: u64) -> Option<&T> {
+        let offset: usize = offset.try_into().ok()?;
+        let end: usize = offset.checked_add(core::mem::size_of::<T>())?;
+        let lv = LayoutVerified::<&[u8], T>::new(self.get(offset..end)?)?;
+        Some(lv.into_ref())
+    }
+
+    fn read_slice_at<T: FromBytes>(&self, offset: u64, len: usize) -> Option<&[T]> {
+        let offset: usize = offset.try_into().ok()?;
+        let end: usize = offset.checked_add(core::mem::size_of::<T>().checked_mul(len)?)?;
+        let lv = LayoutVerified::<&[u8], [T]>::new_slice(self.get(offset..end)?)?;
+        Some(lv.into_slice())
+    }
+}
 
 impl CompactUnwindInfoHeader {
     /// Read the dyld cache header.
-    pub fn parse<'data, R: ReadRef<'data>>(data: R) -> Result<&'data Self> {
+    pub fn parse(data: &[u8]) -> Result<&Self> {
         data.read_at::<CompactUnwindInfoHeader>(0)
             .read_error("Could not read CompactUnwindInfoHeader")
     }
@@ -105,7 +111,7 @@ impl CompactUnwindInfoHeader {
     }
 
     /// Return the list of global opcodes.
-    pub fn global_opcodes<'data, R: ReadRef<'data>>(&self, data: R) -> Result<&'data [U32]> {
+    pub fn global_opcodes<'data>(&self, data: &'data [u8]) -> Result<&'data [U32]> {
         data.read_slice_at::<U32>(
             self.global_opcodes_offset().into(),
             self.global_opcodes_len() as usize,
@@ -114,14 +120,14 @@ impl CompactUnwindInfoHeader {
     }
 
     /// Return the list of pages.
-    pub fn pages<'data, R: ReadRef<'data>>(&self, data: R) -> Result<&'data [PageEntry]> {
+    pub fn pages<'data>(&self, data: &'data [u8]) -> Result<&'data [PageEntry]> {
         data.read_slice_at::<PageEntry>(self.pages_offset().into(), self.pages_len() as usize)
             .read_error("Invalid pages size or alignment")
     }
 }
 
+#[derive(FromBytes, Clone, Copy)]
 #[repr(C)]
-#[derive(Clone, Copy)]
 pub struct PageEntry {
     /// The first address mapped by this page.
     ///
@@ -142,8 +148,6 @@ pub struct PageEntry {
     pub lsda_index_offset: U32,
 }
 
-unsafe impl Pod for PageEntry {}
-
 impl PageEntry {
     pub fn page_offset(&self) -> u32 {
         self.page_offset.into()
@@ -157,7 +161,7 @@ impl PageEntry {
         self.lsda_index_offset.into()
     }
 
-    pub fn page_kind<'data, R: ReadRef<'data>>(&self, data: R) -> Result<u32> {
+    pub fn page_kind(&self, data: &[u8]) -> Result<u32> {
         let kind = *data
             .read_at::<U32>(self.page_offset().into())
             .read_error("Could not read page kind")?;
@@ -179,8 +183,8 @@ pub const PAGE_KIND_SENTINEL: u32 = 1; // used in the last page, whose first_add
 pub const PAGE_KIND_REGULAR: u32 = 2;
 pub const PAGE_KIND_COMPRESSED: u32 = 3;
 
+#[derive(FromBytes, Debug, Clone, Copy)]
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
 pub struct RegularPage {
     /// Always 2 (use to distinguish from CompressedPage).
     pub kind: U32,
@@ -190,10 +194,8 @@ pub struct RegularPage {
     pub entries_len: U16,
 }
 
-unsafe impl Pod for RegularPage {}
-
 impl RegularPage {
-    pub fn parse<'data, R: ReadRef<'data>>(data: R, page_offset: u64) -> Result<&'data Self> {
+    pub fn parse(data: &[u8], page_offset: u64) -> Result<&Self> {
         data.read_at::<Self>(page_offset)
             .read_error("Could not read RegularPage")
     }
@@ -206,9 +208,9 @@ impl RegularPage {
         self.entries_len.into()
     }
 
-    pub fn entries<'data, R: ReadRef<'data>>(
+    pub fn entries<'data>(
         &self,
-        data: R,
+        data: &'data [u8],
         page_offset: u32,
     ) -> Result<&'data [RegularEntry]> {
         let relative_entries_offset = self.entries_offset();
@@ -219,8 +221,8 @@ impl RegularPage {
     }
 }
 
+#[derive(FromBytes, Debug, Clone, Copy)]
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
 pub struct CompressedPage {
     /// Always 3 (use to distinguish from RegularPage).
     pub kind: U32,
@@ -241,10 +243,8 @@ pub struct CompressedPage {
     pub local_opcodes_len: U16,
 }
 
-unsafe impl Pod for CompressedPage {}
-
 impl CompressedPage {
-    pub fn parse<'data, R: ReadRef<'data>>(data: R, page_offset: u64) -> Result<&'data Self> {
+    pub fn parse(data: &[u8], page_offset: u64) -> Result<&Self> {
         data.read_at::<Self>(page_offset)
             .read_error("Could not read CompressedPage")
     }
@@ -265,11 +265,7 @@ impl CompressedPage {
         self.local_opcodes_len.into()
     }
 
-    pub fn entries<'data, R: ReadRef<'data>>(
-        &self,
-        data: R,
-        page_offset: u32,
-    ) -> Result<&'data [U32]> {
+    pub fn entries<'data>(&self, data: &'data [u8], page_offset: u32) -> Result<&'data [U32]> {
         let relative_entries_offset = self.entries_offset();
         let entries_len: usize = self.entries_len().into();
         let entries_offset = page_offset as u64 + relative_entries_offset as u64;
@@ -278,9 +274,9 @@ impl CompressedPage {
     }
 
     /// Return the list of local opcodes.
-    pub fn local_opcodes<'data, R: ReadRef<'data>>(
+    pub fn local_opcodes<'data>(
         &self,
-        data: R,
+        data: &'data [u8],
         page_offset: u32,
     ) -> Result<&'data [U32]> {
         let relative_local_opcodes_offset = self.local_opcodes_offset();
@@ -291,8 +287,8 @@ impl CompressedPage {
     }
 }
 
+#[derive(FromBytes, Debug, Clone, Copy)]
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
 pub struct RegularEntry {
     /// The address in the binary for this entry (absolute).
     pub instruction_address: U32,
@@ -300,8 +296,6 @@ pub struct RegularEntry {
     /// The opcode for this address.
     pub opcode: U32,
 }
-
-unsafe impl Pod for RegularEntry {}
 
 impl RegularEntry {
     pub fn instruction_address(&self) -> u32 {

@@ -1,13 +1,11 @@
 use std::fmt::Debug;
 
-use object::Pod;
+use zerocopy::{Unaligned, FromBytes};
 
 /// An unaligned little-endian `u32` value.
-#[derive(Default, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Unaligned, FromBytes, Default, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(transparent)]
 pub struct U32([u8; 4]);
-
-unsafe impl Pod for U32 {}
 
 impl From<u32> for U32 {
     fn from(n: u32) -> Self {
@@ -28,11 +26,9 @@ impl Debug for U32 {
 }
 
 /// An unaligned little-endian `u16` value.
-#[derive(Default, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Unaligned, FromBytes, Default, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(transparent)]
 pub struct U16([u8; 2]);
-
-unsafe impl Pod for U16 {}
 
 impl From<u16> for U16 {
     fn from(n: u16) -> Self {
