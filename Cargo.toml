@@ -1,5 +1,5 @@
 [package]
-name = "rul"
+name = "framehop"
 version = "0.1.0"
 edition = "2021"
 authors = ["Markus Stange <mstange.moz@gmail.com>"]

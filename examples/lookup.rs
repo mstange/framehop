@@ -1,6 +1,6 @@
 use std::{fs::File, io::Read};
 
-use rul::compact_unwind_info::{
+use framehop::compact_unwind_info::{
     CompactUnwindInfoHeader, CompressedEntryBitfield, CompressedPage, OpcodeBitfield, PageEntry,
     RegularEntry, RegularPage, PAGE_KIND_COMPRESSED, PAGE_KIND_REGULAR,
 };

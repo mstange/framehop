@@ -1,7 +1,7 @@
 use std::{fmt::Display, fs::File, io::Read};
 
 use object::{Architecture, ObjectSection};
-use rul::compact_unwind_info::{
+use framehop::compact_unwind_info::{
     CompactUnwindInfoHeader, CompressedEntryBitfield, CompressedPage, OpcodeArm64, OpcodeBitfield,
     OpcodeX86, OpcodeX86_64, RegularPage, PAGE_KIND_COMPRESSED, PAGE_KIND_REGULAR,
 };

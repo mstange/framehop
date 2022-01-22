@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-pub struct UnwindContext {
+pub struct UnwindRegs {
   pc: u64,
   sp: u64,
   bp: u64,
@@ -14,13 +14,13 @@ pub trait OwnedData {
   fn data(&self) -> &[u8];
 }
 
-pub struct Rul<D: OwnedData> {
+pub struct Context<D: OwnedData> {
   /// sorted by address_range.start
   modules: Vec<ModuleAtAddress<D>>,
 }
 
-impl<D: OwnedData> Rul<D> {
-  pub fn unwind_frame(&self, context: UnwindContext, pc: u64) -> Result<UnwindContext, Error> {
+impl<D: OwnedData> Context<D> {
+  pub fn unwind_frame(&self, context: UnwindRegs, pc: u64) -> Result<UnwindRegs, Error> {
       let module_index = match self
           .modules
           .binary_search_by_key(&pc, |m| m.address_range.start)
@@ -68,9 +68,9 @@ impl<D: OwnedData> Module<D> {
 
   pub fn unwind_frame(
       &self,
-      context: UnwindContext,
+      context: UnwindRegs,
       module_relative_pc: u64,
-  ) -> Result<UnwindContext, Error> {
+  ) -> Result<UnwindRegs, Error> {
       Ok(context)
   }
 }
