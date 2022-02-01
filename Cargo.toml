@@ -11,8 +11,10 @@ readme = "Readme.md"
 exclude = ["/.github", "/tests", "/res"]
 
 [dependencies]
+gimli = "0.26.1"
 thiserror = "1.0.30"
 zerocopy = "0.6.1"
+macho-unwind-info = "0.2.0"
 
 [dev-dependencies]
 object = "0.28.2"

@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-use zerocopy::{Unaligned, FromBytes};
+use zerocopy::{FromBytes, Unaligned};
 
 /// An unaligned little-endian `u32` value.
 #[derive(Unaligned, FromBytes, Default, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
