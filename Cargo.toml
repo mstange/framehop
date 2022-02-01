@@ -4,11 +4,11 @@ version = "0.1.0"
 edition = "2021"
 authors = ["Markus Stange <mstange.moz@gmail.com>"]
 categories = ["development-tools::debugging"]
-description = "Rust unwinding library"
+description = "Stack frame unwinding support for various formats"
 keywords = ["unwind", "stackwalk", "profiling", "debug"]
 license = "MIT/Apache-2.0"
 readme = "Readme.md"
-exclude = ["/.github", "/tests", "/res"]
+exclude = ["/.github", "/tests", "/fixtures"]
 
 [dependencies]
 gimli = "0.26.1"
