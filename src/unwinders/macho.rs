@@ -17,11 +17,17 @@ pub enum CompactUnwindInfoUnwinderError {
     #[error("Bad __unwind_info format: {0}")]
     BadFormat(#[from] macho_unwind_info::Error),
 
-    #[error("Address outside of the range covered by __unwind_info")]
-    AddressOutsideRange,
+    #[error("Address 0x{0:x} outside of the range covered by __unwind_info")]
+    AddressOutsideRange(u32),
 
     #[error("No LR register value when trying to unwind frameless function")]
     MissingLrValue,
+
+    #[error("Bad LR value in frameless function (same as PC, would cause unwinding to loop)")]
+    FramelessWouldLoop,
+
+    #[error("Encountered a non-leaf function which was marked as frameless.")]
+    CallerCannotBeFrameless,
 
     #[error("No unwind info (null opcode) for this function in __unwind_info")]
     FunctionHasNoInfo,
@@ -50,6 +56,18 @@ impl<'a: 'c, 'u, 'c, R: Reader> CompactUnwindInfoUnwinder<'a, 'u, 'c, R> {
         }
     }
 
+    fn function_for_address(
+        &self,
+        address: u32,
+    ) -> Result<macho_unwind_info::Function, CompactUnwindInfoUnwinderError> {
+        let unwind_info = UnwindInfo::parse(self.unwind_info_data)
+            .map_err(CompactUnwindInfoUnwinderError::BadFormat)?;
+        let function = unwind_info
+            .lookup(address)
+            .map_err(CompactUnwindInfoUnwinderError::BadFormat)?;
+        function.ok_or(CompactUnwindInfoUnwinderError::AddressOutsideRange(address))
+    }
+
     pub fn unwind_one_frame_from_pc<F>(
         &mut self,
         regs: &mut UnwindRegsArm64,
@@ -60,48 +78,119 @@ impl<'a: 'c, 'u, 'c, R: Reader> CompactUnwindInfoUnwinder<'a, 'u, 'c, R> {
     where
         F: FnMut(u64) -> Result<u64, ()>,
     {
-        let unwind_info = UnwindInfo::parse(self.unwind_info_data)
-            .map_err(CompactUnwindInfoUnwinderError::BadFormat)?;
-        let function = unwind_info
-            .lookup(rel_pc)
-            .map_err(CompactUnwindInfoUnwinderError::BadFormat)?;
-        let function = function.ok_or(CompactUnwindInfoUnwinderError::AddressOutsideRange)?;
+        // We're just beginning the stack walk here, regs came straight from the thread state.
+        // So we should have all registers, especially the lr register.
+        let lr = regs
+            .unmasked_lr()
+            .ok_or(CompactUnwindInfoUnwinderError::MissingLrValue)?;
+
+        let function = match self.function_for_address(rel_pc) {
+            Ok(f) => f,
+            Err(CompactUnwindInfoUnwinderError::AddressOutsideRange(_)) => {
+                // pc is falling into this module's address range, but it's not covered by __unwind_info.
+                // This could mean that we're inside a stub function, in the __stubs section.
+                // All stub functions are frameless.
+                // TODO: Obtain the actual __stubs address range and do better checking here.
+                return Ok(lr);
+            }
+            Err(err) => return Err(err),
+        };
+        if rel_pc == function.start_address {
+            return Ok(lr);
+        }
+
         let opcode = OpcodeArm64::parse(function.opcode);
         let return_address = match opcode {
-            OpcodeArm64::Null => {
-                match regs.unmasked_lr() {
-                    Some(lr) if lr != pc => lr,
-                    _ => return Err(CompactUnwindInfoUnwinderError::FunctionHasNoInfo),
-                }
-            }
+            OpcodeArm64::Null => match regs.unmasked_lr() {
+                Some(lr) if lr != pc => lr,
+                _ => return Err(CompactUnwindInfoUnwinderError::FunctionHasNoInfo),
+            },
             OpcodeArm64::Frameless {
                 stack_size_in_bytes,
             } => {
                 regs.sp = regs.sp.map(|sp| sp + stack_size_in_bytes as u64);
-                regs.unmasked_lr().ok_or(CompactUnwindInfoUnwinderError::MissingLrValue)?
+                regs.unmasked_lr()
+                    .ok_or(CompactUnwindInfoUnwinderError::MissingLrValue)?
             }
             OpcodeArm64::Dwarf { eh_frame_fde } => {
-                let dwarf_unwinder = self.dwarf_unwinder.as_mut().ok_or(CompactUnwindInfoUnwinderError::NoDwarfUnwinder)?;
-                        dwarf_unwinder
-                            .unwind_one_frame_from_pc_with_fde(regs, pc, eh_frame_fde, read_stack)?
+                let dwarf_unwinder = self
+                    .dwarf_unwinder
+                    .as_mut()
+                    .ok_or(CompactUnwindInfoUnwinderError::NoDwarfUnwinder)?;
+                dwarf_unwinder.unwind_one_frame_from_pc_with_fde(
+                    regs,
+                    pc,
+                    eh_frame_fde,
+                    read_stack,
+                )?
             }
             OpcodeArm64::FrameBased {
-                //saved_reg_pair_count,
+                saved_reg_pair_count,
                 ..
             } => {
                 // Each pair takes one 4-byte instruction to save or restore. fp gets updated after saving or before restoring.
                 // Use this to do something smart for prologues / epilogues.
-                // let prologue_end = function.start_address +
-                //     saved_reg_pair_count as u32 * 4 + // 4 bytes per pair
-                //     4 + // save fp and lr
-                //     4; // set fp to the new value
-                // let epilogue_start = function.end_address -
-                //    4 - // restore fp and lr
-                //    saved_reg_pair_count as u32 * 4 - // 4 bytes per pair
-                //    4; // ret
+                let prologue_end = function.start_address +
+                        saved_reg_pair_count as u32 * 4 + // 4 bytes per pair
+                        4 + // save fp and lr
+                        4; // set fp to the new value
+                if rel_pc < prologue_end {
+                    let lr = regs
+                        .unmasked_lr()
+                        .ok_or(CompactUnwindInfoUnwinderError::MissingLrValue)?;
+                    regs.sp = None;
+                    lr
+                } else {
+                    // TODO: Detect if we're in an epilogue, by seeing if the current instruction restores
+                    // registers from the stack (and then keep reading) or is a return instruction.
+                    FramepointerUnwinderArm64.unwind_one_frame(regs, read_stack)?
+                }
+            }
+            OpcodeArm64::UnrecognizedKind(kind) => {
+                return Err(CompactUnwindInfoUnwinderError::BadOpcodeKind(kind))
+            }
+        };
+
+        Ok(return_address)
+    }
+
+    pub fn unwind_one_frame_from_return_address<F>(
+        &mut self,
+        regs: &mut UnwindRegsArm64,
+        return_address: u64,
+        rel_ra: u32,
+        read_stack: &mut F,
+    ) -> Result<u64, CompactUnwindInfoUnwinderError>
+    where
+        F: FnMut(u64) -> Result<u64, ()>,
+    {
+        let function = self.function_for_address(rel_ra - 1)?;
+        let opcode = OpcodeArm64::parse(function.opcode);
+        let return_address = match opcode {
+            OpcodeArm64::Null => {
+                return Err(CompactUnwindInfoUnwinderError::FunctionHasNoInfo);
+            }
+            OpcodeArm64::Frameless { .. } => {
+                return Err(CompactUnwindInfoUnwinderError::CallerCannotBeFrameless);
+            }
+            OpcodeArm64::Dwarf { eh_frame_fde } => {
+                let dwarf_unwinder = self
+                    .dwarf_unwinder
+                    .as_mut()
+                    .ok_or(CompactUnwindInfoUnwinderError::NoDwarfUnwinder)?;
+                dwarf_unwinder.unwind_one_frame_from_return_address_with_fde(
+                    regs,
+                    return_address,
+                    eh_frame_fde,
+                    read_stack,
+                )?
+            }
+            OpcodeArm64::FrameBased { .. } => {
                 FramepointerUnwinderArm64.unwind_one_frame(regs, read_stack)?
-            },
-            OpcodeArm64::UnrecognizedKind(kind) => return Err(CompactUnwindInfoUnwinderError::BadOpcodeKind(kind))
+            }
+            OpcodeArm64::UnrecognizedKind(kind) => {
+                return Err(CompactUnwindInfoUnwinderError::BadOpcodeKind(kind))
+            }
         };
 
         Ok(return_address)

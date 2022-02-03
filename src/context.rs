@@ -99,18 +99,18 @@ impl<D: Deref<Target = [u8]>> Debug for ArcData<D> {
 unsafe impl<D: Deref<Target = [u8]>> StableDeref for ArcData<D> {}
 unsafe impl<D: Deref<Target = [u8]>> CloneStableDeref for ArcData<D> {}
 
-pub struct Context<D: Deref<Target = [u8]>> {
+pub struct Unwinder<D: Deref<Target = [u8]>> {
     /// sorted by address_range.start
     modules: Vec<Module<D>>,
 }
 
-impl<D: Deref<Target = [u8]>> Default for Context<D> {
+impl<D: Deref<Target = [u8]>> Default for Unwinder<D> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<D: Deref<Target = [u8]>> Context<D> {
+impl<D: Deref<Target = [u8]>> Unwinder<D> {
     pub fn new() -> Self {
         Self {
             modules: Vec::new(),
@@ -163,6 +163,41 @@ impl<D: Deref<Target = [u8]>> Context<D> {
         let module = &self.modules[module_index];
         let rel_pc = (pc - module.base_address) as u32;
         match module.unwind_one_frame_from_pc(regs, pc, rel_pc, read_stack, cache) {
+            Ok(ra) => Ok(ra),
+            Err(UnwinderError::FramePointer(e)) => Err(e.into()),
+            Err(err) => {
+                println!(
+                    "error for pc 0x{:x} ({} + 0x{:x}): {}",
+                    pc, module.name, rel_pc, err
+                );
+                Ok(FramepointerUnwinderArm64.unwind_one_frame(regs, read_stack)?)
+            }
+        }
+    }
+
+    pub fn unwind_one_frame_from_return_address<F>(
+        &self,
+        return_address: u64,
+        regs: &mut UnwindRegsArm64,
+        cache: &mut Cache<D>,
+        read_stack: &mut F,
+    ) -> Result<u64, Error>
+    where
+        F: FnMut(u64) -> Result<u64, ()>,
+    {
+        let module_index = match self.find_module_for_address(return_address - 1) {
+            Some(i) => i,
+            None => return Ok(FramepointerUnwinderArm64.unwind_one_frame(regs, read_stack)?),
+        };
+        let module = &self.modules[module_index];
+        let rel_ra = (return_address - module.base_address) as u32;
+        match module.unwind_one_frame_from_return_address(
+            regs,
+            return_address,
+            rel_ra,
+            read_stack,
+            cache,
+        ) {
             Ok(ra) => Ok(ra),
             Err(UnwinderError::FramePointer(e)) => Err(e.into()),
             Err(_) => Ok(FramepointerUnwinderArm64.unwind_one_frame(regs, read_stack)?),
@@ -219,6 +254,15 @@ pub struct SectionAddresses {
     pub got: u64,
 }
 
+impl<D: Deref<Target = [u8]>> Debug for Module<D> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Module")
+            .field("name", &self.name)
+            .field("address_range", &self.address_range)
+            .finish()
+    }
+}
+
 impl<D: Deref<Target = [u8]>> Module<D> {
     pub fn new(
         name: String,
@@ -249,7 +293,10 @@ impl<D: Deref<Target = [u8]>> Module<D> {
     where
         F: FnMut(u64) -> Result<u64, ()>,
     {
-        // println!("Unwinding at pc {} + 0x{:x} (= 0x{:x})", self.name, rel_pc, self.base_address + rel_pc as u64);
+        // println!(
+        //     "Unwinding at pc {} + 0x{:x} (= 0x{:x}) with regs {:?}",
+        //     self.name, rel_pc, pc, regs
+        // );
         let return_address = match &self.unwind_data {
             UnwindData::CompactUnwindInfo(data) => {
                 // eprintln!("unwinding with cui in module {}", self.name);
@@ -268,6 +315,59 @@ impl<D: Deref<Target = [u8]>> Module<D> {
                     CompactUnwindInfoUnwinder::new(&unwind_data[..], Some(&mut dwarf_unwinder));
                 let return_address =
                     unwinder.unwind_one_frame_from_pc(regs, pc, rel_pc, read_stack)?;
+                drop(unwinder);
+                drop(dwarf_unwinder);
+                return_address
+            }
+            UnwindData::EhFrameHdrAndEhFrame(_, _) => todo!(),
+            UnwindData::EhFrame(_) => todo!(),
+            UnwindData::None => FramepointerUnwinderArm64.unwind_one_frame(regs, read_stack)?,
+        };
+        Ok(return_address)
+    }
+
+    fn unwind_one_frame_from_return_address<F>(
+        &self,
+        regs: &mut UnwindRegsArm64,
+        return_address: u64,
+        rel_ra: u32,
+        read_stack: &mut F,
+        cache: &mut Cache<D>,
+    ) -> Result<u64, UnwinderError>
+    where
+        F: FnMut(u64) -> Result<u64, ()>,
+    {
+        // println!(
+        //     "Unwinding at ra {} + 0x{:x} (= 0x{:x}) with regs {:?}",
+        //     self.name, rel_ra, return_address, regs
+        // );
+        let return_address = match &self.unwind_data {
+            UnwindData::CompactUnwindInfo(data) => {
+                // eprintln!("unwinding with cui in module {}", self.name);
+                let mut unwinder =
+                    CompactUnwindInfoUnwinder::<ArcDataReader<D>>::new(&data[..], None);
+                unwinder.unwind_one_frame_from_return_address(
+                    regs,
+                    return_address,
+                    rel_ra,
+                    read_stack,
+                )?
+            }
+            UnwindData::CompactUnwindInfoAndEhFrame(unwind_data, eh_frame_data) => {
+                // eprintln!("unwinding with cui and eh_frame in module {}", self.name);
+                let mut dwarf_unwinder = DwarfUnwinder::new(
+                    EndianReader::new(ArcData(eh_frame_data.clone()), LittleEndian),
+                    &mut cache.eh_frame_unwind_context,
+                    &self.sections,
+                );
+                let mut unwinder =
+                    CompactUnwindInfoUnwinder::new(&unwind_data[..], Some(&mut dwarf_unwinder));
+                let return_address = unwinder.unwind_one_frame_from_return_address(
+                    regs,
+                    return_address,
+                    rel_ra,
+                    read_stack,
+                )?;
                 drop(unwinder);
                 drop(dwarf_unwinder);
                 return_address
