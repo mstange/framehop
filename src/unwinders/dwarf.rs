@@ -147,6 +147,10 @@ impl<'a, R: Reader> DwarfUnwinder<'a, R> {
         let cfa_rule = unwind_info.cfa();
         // println!("cfa rule: {:?}, regs: {:?}", cfa_rule, regs);
         let cfa = eval_cfa_rule(cfa_rule, regs).ok_or(DwarfUnwinderError::CouldNotRecoverCfa)?;
+        if cfa <= regs.sp() {
+            return Err(DwarfUnwinderError::StackPointerMovedBackwards);
+        }
+
         // println!("cfa: {:x}", cfa);
         let fp_rule = unwind_info.register(AArch64::X29);
         let lr_rule = unwind_info.register(AArch64::X30);
