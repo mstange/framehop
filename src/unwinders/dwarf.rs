@@ -19,11 +19,11 @@ pub enum DwarfUnwinderError {
     #[error("Could not find DWARF unwind info for the requested address: {0}")]
     UnwindInfoForAddressFailed(#[source] gimli::Error),
 
-    #[error("Should always have the LR register value when starting from pc")]
-    MissingLrValue,
+    #[error("Stack pointer moved backwards")]
+    StackPointerMovedBackwards,
 
-    #[error("Should always have the FP register value when starting from pc")]
-    MissingFpValue,
+    #[error("Did not advance")]
+    DidNotAdvance,
 
     #[error("Could not recover the CFA")]
     CouldNotRecoverCfa,
@@ -62,11 +62,6 @@ impl<'a, R: Reader> DwarfUnwinder<'a, R> {
     where
         F: FnMut(u64) -> Result<u64, ()>,
     {
-        // We're just beginning the stack walk here, regs came straight from the thread state.
-        // So we should have all registers, especially the lr register.
-        let lr = regs.lr();
-        let fp = regs.fp();
-
         let mut eh_frame = gimli::EhFrame::from(self.eh_frame_data.clone());
         eh_frame.set_address_size(8);
         let fde = eh_frame.fde_from_offset(
@@ -89,12 +84,25 @@ impl<'a, R: Reader> DwarfUnwinder<'a, R> {
         let cfa_rule = unwind_info.cfa();
         // println!("cfa rule: {:?}, regs: {:?}", cfa_rule, regs);
         let cfa = eval_cfa_rule(cfa_rule, regs).ok_or(DwarfUnwinderError::CouldNotRecoverCfa)?;
+
+        let lr = regs.lr();
+        let fp = regs.fp();
+        let sp = regs.sp();
+
+        if cfa < sp {
+            return Err(DwarfUnwinderError::StackPointerMovedBackwards);
+        }
         // println!("cfa: {:x}", cfa);
         let fp_rule = unwind_info.register(AArch64::X29);
         let lr_rule = unwind_info.register(AArch64::X30);
         // println!("rules: fp {:?}, lr {:?}", fp_rule, lr_rule);
         let fp = eval_rule(fp_rule, cfa, fp, regs, read_stack).unwrap_or(fp);
         let lr = eval_rule(lr_rule, cfa, lr, regs, read_stack).unwrap_or(lr);
+
+        if cfa == sp && lr == pc {
+            return Err(DwarfUnwinderError::DidNotAdvance);
+        }
+
         regs.set_fp(fp);
         regs.set_sp(cfa);
         regs.set_lr(lr);
