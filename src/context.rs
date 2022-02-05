@@ -307,10 +307,7 @@ impl<D: Deref<Target = [u8]>> Module<D> {
                 );
                 let mut unwinder =
                     CompactUnwindInfoUnwinder::new(&unwind_data[..], Some(&mut dwarf_unwinder));
-                let return_address = unwinder.unwind_first(regs, pc, rel_pc, read_stack)?;
-                drop(unwinder);
-                drop(dwarf_unwinder);
-                return_address
+                unwinder.unwind_first(regs, pc, rel_pc, read_stack)?
             }
             UnwindData::EhFrameHdrAndEhFrame(_, _) => todo!(),
             UnwindData::EhFrame(_) => todo!(),
@@ -350,11 +347,7 @@ impl<D: Deref<Target = [u8]>> Module<D> {
                 );
                 let mut unwinder =
                     CompactUnwindInfoUnwinder::new(&unwind_data[..], Some(&mut dwarf_unwinder));
-                let return_address =
-                    unwinder.unwind_next(regs, return_address, rel_ra, read_stack)?;
-                drop(unwinder);
-                drop(dwarf_unwinder);
-                return_address
+                unwinder.unwind_next(regs, return_address, rel_ra, read_stack)?
             }
             UnwindData::EhFrameHdrAndEhFrame(_, _) => todo!(),
             UnwindData::EhFrame(_) => todo!(),
