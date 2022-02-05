@@ -132,9 +132,6 @@ impl<'a: 'c, 'u, 'c, R: Reader> CompactUnwindInfoUnwinder<'a, 'u, 'c, R> {
                         4 + // save fp and lr
                         4; // set fp to the new value
                 if rel_pc < prologue_end {
-                    let lr = regs
-                        .unmasked_lr()
-                        .ok_or(CompactUnwindInfoUnwinderError::MissingLrValue)?;
                     regs.sp = None;
                     lr
                 } else {
