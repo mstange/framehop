@@ -19,7 +19,7 @@ pub enum FramepointerUnwinderError {
 pub struct FramepointerUnwinderArm64;
 
 impl FramepointerUnwinderArm64 {
-    pub fn unwind_one_frame<F>(
+    pub fn unwind_next<F>(
         &self,
         regs: &mut UnwindRegsArm64,
         read_stack: &mut F,

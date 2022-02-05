@@ -68,7 +68,7 @@ impl<'a: 'c, 'u, 'c, R: Reader> CompactUnwindInfoUnwinder<'a, 'u, 'c, R> {
         function.ok_or(CompactUnwindInfoUnwinderError::AddressOutsideRange(address))
     }
 
-    pub fn unwind_one_frame_from_pc<F>(
+    pub fn unwind_first<F>(
         &mut self,
         regs: &mut UnwindRegsArm64,
         pc: u64,
@@ -114,12 +114,7 @@ impl<'a: 'c, 'u, 'c, R: Reader> CompactUnwindInfoUnwinder<'a, 'u, 'c, R> {
                     .dwarf_unwinder
                     .as_mut()
                     .ok_or(CompactUnwindInfoUnwinderError::NoDwarfUnwinder)?;
-                dwarf_unwinder.unwind_one_frame_from_pc_with_fde(
-                    regs,
-                    pc,
-                    eh_frame_fde,
-                    read_stack,
-                )?
+                dwarf_unwinder.unwind_first_with_fde(regs, pc, eh_frame_fde, read_stack)?
             }
             OpcodeArm64::FrameBased {
                 saved_reg_pair_count,
@@ -137,7 +132,7 @@ impl<'a: 'c, 'u, 'c, R: Reader> CompactUnwindInfoUnwinder<'a, 'u, 'c, R> {
                 } else {
                     // TODO: Detect if we're in an epilogue, by seeing if the current instruction restores
                     // registers from the stack (and then keep reading) or is a return instruction.
-                    FramepointerUnwinderArm64.unwind_one_frame(regs, read_stack)?
+                    FramepointerUnwinderArm64.unwind_next(regs, read_stack)?
                 }
             }
             OpcodeArm64::UnrecognizedKind(kind) => {
@@ -148,7 +143,7 @@ impl<'a: 'c, 'u, 'c, R: Reader> CompactUnwindInfoUnwinder<'a, 'u, 'c, R> {
         Ok(return_address)
     }
 
-    pub fn unwind_one_frame_from_return_address<F>(
+    pub fn unwind_next<F>(
         &mut self,
         regs: &mut UnwindRegsArm64,
         return_address: u64,
@@ -172,7 +167,7 @@ impl<'a: 'c, 'u, 'c, R: Reader> CompactUnwindInfoUnwinder<'a, 'u, 'c, R> {
                     .dwarf_unwinder
                     .as_mut()
                     .ok_or(CompactUnwindInfoUnwinderError::NoDwarfUnwinder)?;
-                dwarf_unwinder.unwind_one_frame_from_return_address_with_fde(
+                dwarf_unwinder.unwind_next_with_fde(
                     regs,
                     return_address,
                     eh_frame_fde,
@@ -180,7 +175,7 @@ impl<'a: 'c, 'u, 'c, R: Reader> CompactUnwindInfoUnwinder<'a, 'u, 'c, R> {
                 )?
             }
             OpcodeArm64::FrameBased { .. } => {
-                FramepointerUnwinderArm64.unwind_one_frame(regs, read_stack)?
+                FramepointerUnwinderArm64.unwind_next(regs, read_stack)?
             }
             OpcodeArm64::UnrecognizedKind(kind) => {
                 return Err(CompactUnwindInfoUnwinderError::BadOpcodeKind(kind))

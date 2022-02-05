@@ -49,7 +49,7 @@ impl<'a, R: Reader> DwarfUnwinder<'a, R> {
         }
     }
 
-    pub fn unwind_one_frame_from_pc_with_fde<F>(
+    pub fn unwind_first_with_fde<F>(
         &mut self,
         regs: &mut UnwindRegsArm64,
         pc: u64,
@@ -103,7 +103,7 @@ impl<'a, R: Reader> DwarfUnwinder<'a, R> {
         Ok(lr)
     }
 
-    pub fn unwind_one_frame_from_return_address_with_fde<F>(
+    pub fn unwind_next_with_fde<F>(
         &mut self,
         regs: &mut UnwindRegsArm64,
         return_address: u64,
