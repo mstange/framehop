@@ -101,10 +101,7 @@ impl<'a: 'c, 'u, 'c, R: Reader> CompactUnwindInfoUnwinder<'a, 'u, 'c, R> {
 
         let opcode = OpcodeArm64::parse(function.opcode);
         let return_address = match opcode {
-            OpcodeArm64::Null => match regs.unmasked_lr() {
-                Some(lr) if lr != pc => lr,
-                _ => return Err(CompactUnwindInfoUnwinderError::FunctionHasNoInfo),
-            },
+            OpcodeArm64::Null => lr,
             OpcodeArm64::Frameless {
                 stack_size_in_bytes,
             } => {
