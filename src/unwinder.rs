@@ -1,103 +1,16 @@
-use gimli::{CloneStableDeref, EndianReader, LittleEndian, StableDeref, UnwindContext};
+use gimli::{EndianReader, LittleEndian};
 
-use super::unwinders::{
-    CompactUnwindInfoUnwinder, CompactUnwindInfoUnwinderError, DwarfUnwinder, DwarfUnwinderError,
-    FramepointerUnwinderArm64, FramepointerUnwinderError,
-};
-use crate::unwindregs::UnwindRegsArm64;
+use super::arcdata::{ArcData, ArcDataReader};
+use super::cache::Cache;
+use super::error::{Error, UnwinderError};
+use super::unwinders::{CompactUnwindInfoUnwinder, DwarfUnwinder, FramepointerUnwinderArm64};
+use super::unwindregs::UnwindRegsArm64;
+use std::ops::DerefMut;
 use std::{
     fmt::Debug,
     ops::{Deref, Range},
     sync::Arc,
 };
-
-#[derive(thiserror::Error, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Error {
-    #[error("Unwinding failed")]
-    UnwindingFailed,
-
-    #[error("The end of the stack has been reached.")]
-    StackEndReached,
-}
-
-impl From<FramepointerUnwinderError> for Error {
-    fn from(err: FramepointerUnwinderError) -> Self {
-        match err {
-            FramepointerUnwinderError::FoundStackEnd => Error::StackEndReached,
-            _ => Error::UnwindingFailed,
-        }
-    }
-}
-
-#[derive(thiserror::Error, Debug, Clone, Copy, PartialEq, Eq)]
-enum UnwinderError {
-    #[error("Framepointer unwinding failed: {0}")]
-    FramePointer(#[from] FramepointerUnwinderError),
-
-    #[error("Compact Unwind Info unwinding failed: {0}")]
-    CompactUnwindInfo(#[source] CompactUnwindInfoUnwinderError),
-
-    #[error("DWARF unwinding failed: {0}")]
-    Dwarf(#[from] DwarfUnwinderError),
-}
-
-impl From<CompactUnwindInfoUnwinderError> for UnwinderError {
-    fn from(e: CompactUnwindInfoUnwinderError) -> Self {
-        match e {
-            CompactUnwindInfoUnwinderError::BadDwarfUnwinding(e) => UnwinderError::Dwarf(e),
-            CompactUnwindInfoUnwinderError::BadFramepointerUnwinding(e) => {
-                UnwinderError::FramePointer(e)
-            }
-            e => UnwinderError::CompactUnwindInfo(e),
-        }
-    }
-}
-
-type ArcDataReader<D> = EndianReader<LittleEndian, ArcData<D>>;
-
-pub struct Cache<D: Deref<Target = [u8]>> {
-    eh_frame_unwind_context: UnwindContext<ArcDataReader<D>>,
-}
-
-impl<D: Deref<Target = [u8]>> Cache<D> {
-    pub fn new() -> Self {
-        Self {
-            eh_frame_unwind_context: UnwindContext::new(),
-        }
-    }
-}
-
-impl<D: Deref<Target = [u8]>> Default for Cache<D> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-struct ArcData<D: Deref<Target = [u8]>>(Arc<D>);
-
-impl<D: Deref<Target = [u8]>> Deref for ArcData<D> {
-    type Target = [u8];
-
-    fn deref(&self) -> &Self::Target {
-        &*self.0
-    }
-}
-
-impl<D: Deref<Target = [u8]>> Clone for ArcData<D> {
-    fn clone(&self) -> Self {
-        Self(self.0.clone())
-    }
-}
-
-impl<D: Deref<Target = [u8]>> Debug for ArcData<D> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_tuple("ArcData").field(&self.0.as_ptr()).finish()
-    }
-}
-
-// Safety: See the implementation for Arc. ArcData just wraps Arc, cloning ArcData just clones Arc.
-unsafe impl<D: Deref<Target = [u8]>> StableDeref for ArcData<D> {}
-unsafe impl<D: Deref<Target = [u8]>> CloneStableDeref for ArcData<D> {}
 
 pub struct Unwinder<D: Deref<Target = [u8]>> {
     /// sorted by address_range.start
@@ -302,7 +215,7 @@ impl<D: Deref<Target = [u8]>> Module<D> {
                 // eprintln!("unwinding with cui and eh_frame in module {}", self.name);
                 let mut dwarf_unwinder = DwarfUnwinder::new(
                     EndianReader::new(ArcData(eh_frame_data.clone()), LittleEndian),
-                    &mut cache.eh_frame_unwind_context,
+                    cache.eh_frame_unwind_context.deref_mut(),
                     &self.sections,
                 );
                 let mut unwinder =
