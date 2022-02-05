@@ -66,9 +66,7 @@ impl FramepointerUnwinderArm64 {
         //
         // So: *fp is the caller's frame pointer, and *(fp + 8) is the return address.
 
-        let frame_ptr = regs
-            .unmasked_fp()
-            .ok_or(FramepointerUnwinderError::NoFramepointerValueProvided)?;
+        let frame_ptr = regs.fp();
         if frame_ptr == 0 {
             return Err(FramepointerUnwinderError::FoundStackEnd);
         }
@@ -89,9 +87,9 @@ impl FramepointerUnwinderArm64 {
             return Err(FramepointerUnwinderError::FramepointerMovedBackwards);
         }
 
-        regs.sp = Some(frame_ptr + 16);
-        regs.fp = Some(caller_fp);
-        regs.lr = Some(return_address);
+        regs.set_sp(frame_ptr + 16);
+        regs.set_fp(caller_fp);
+        regs.set_lr(return_address);
         Ok(return_address)
     }
 }

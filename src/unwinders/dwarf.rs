@@ -30,6 +30,9 @@ pub enum DwarfUnwinderError {
 
     #[error("Could not recover the return address")]
     CouldNotRecoverReturnAddress,
+
+    #[error("Could not recover the frame pointer")]
+    CouldNotRecoverFramePointer,
 }
 
 impl<'a, R: Reader> DwarfUnwinder<'a, R> {
@@ -61,12 +64,8 @@ impl<'a, R: Reader> DwarfUnwinder<'a, R> {
     {
         // We're just beginning the stack walk here, regs came straight from the thread state.
         // So we should have all registers, especially the lr register.
-        let lr = regs
-            .unmasked_lr()
-            .ok_or(DwarfUnwinderError::MissingLrValue)?;
-        let fp = regs
-            .unmasked_fp()
-            .ok_or(DwarfUnwinderError::MissingFpValue)?;
+        let lr = regs.lr();
+        let fp = regs.fp();
 
         let mut eh_frame = gimli::EhFrame::from(self.eh_frame_data.clone());
         eh_frame.set_address_size(8);
@@ -94,11 +93,11 @@ impl<'a, R: Reader> DwarfUnwinder<'a, R> {
         let fp_rule = unwind_info.register(AArch64::X29);
         let lr_rule = unwind_info.register(AArch64::X30);
         // println!("rules: fp {:?}, lr {:?}", fp_rule, lr_rule);
-        let fp = eval_rule(fp_rule, cfa, Some(fp), regs, read_stack).unwrap_or(fp);
-        let lr = eval_rule(lr_rule, cfa, Some(lr), regs, read_stack).unwrap_or(lr);
-        regs.fp = Some(fp);
-        regs.sp = Some(cfa);
-        regs.lr = Some(lr);
+        let fp = eval_rule(fp_rule, cfa, fp, regs, read_stack).unwrap_or(fp);
+        let lr = eval_rule(lr_rule, cfa, lr, regs, read_stack).unwrap_or(lr);
+        regs.set_fp(fp);
+        regs.set_sp(cfa);
+        regs.set_lr(lr);
 
         Ok(lr)
     }
@@ -144,12 +143,13 @@ impl<'a, R: Reader> DwarfUnwinder<'a, R> {
         let fp_rule = unwind_info.register(AArch64::X29);
         let lr_rule = unwind_info.register(AArch64::X30);
         // println!("rules: fp {:?}, lr {:?}", fp_rule, lr_rule);
-        let fp = eval_rule(fp_rule, cfa, regs.fp, regs, read_stack);
-        let lr = eval_rule(lr_rule, cfa, regs.lr, regs, read_stack)
+        let fp = eval_rule(fp_rule, cfa, regs.fp(), regs, read_stack)
+            .ok_or(DwarfUnwinderError::CouldNotRecoverFramePointer)?;
+        let lr = eval_rule(lr_rule, cfa, regs.lr(), regs, read_stack)
             .ok_or(DwarfUnwinderError::CouldNotRecoverReturnAddress)?;
-        regs.fp = fp;
-        regs.sp = Some(cfa);
-        regs.lr = Some(lr);
+        regs.set_fp(fp);
+        regs.set_sp(cfa);
+        regs.set_lr(lr);
 
         Ok(lr)
     }
@@ -159,9 +159,9 @@ fn eval_cfa_rule<R: gimli::Reader>(rule: &CfaRule<R>, regs: &UnwindRegsArm64) ->
     match rule {
         CfaRule::RegisterAndOffset { register, offset } => {
             let val = match *register {
-                AArch64::SP => regs.unmasked_sp()?,
-                AArch64::X29 => regs.unmasked_fp()?,
-                AArch64::X30 => regs.unmasked_lr()?,
+                AArch64::SP => regs.sp(),
+                AArch64::X29 => regs.fp(),
+                AArch64::X30 => regs.lr(),
                 _ => return None,
             };
             u64::try_from(i64::try_from(val).ok()?.checked_add(*offset)?).ok()
@@ -173,7 +173,7 @@ fn eval_cfa_rule<R: gimli::Reader>(rule: &CfaRule<R>, regs: &UnwindRegsArm64) ->
 fn eval_rule<R, F>(
     rule: RegisterRule<R>,
     cfa: u64,
-    val: Option<u64>,
+    val: u64,
     regs: &UnwindRegsArm64,
     read_stack: &mut F,
 ) -> Option<u64>
@@ -183,7 +183,7 @@ where
 {
     match rule {
         RegisterRule::Undefined => None,
-        RegisterRule::SameValue => val,
+        RegisterRule::SameValue => Some(val),
         RegisterRule::Offset(offset) => {
             let cfa_plus_offset =
                 u64::try_from(i64::try_from(cfa).ok()?.checked_add(offset)?).ok()?;
@@ -193,9 +193,9 @@ where
             u64::try_from(i64::try_from(cfa).ok()?.checked_add(offset)?).ok()
         }
         RegisterRule::Register(register) => match register {
-            AArch64::SP => regs.unmasked_sp(),
-            AArch64::X29 => regs.unmasked_fp(),
-            AArch64::X30 => regs.unmasked_lr(),
+            AArch64::SP => Some(regs.sp()),
+            AArch64::X29 => Some(regs.fp()),
+            AArch64::X30 => Some(regs.lr()),
             _ => None,
         },
         RegisterRule::Expression(_) => {

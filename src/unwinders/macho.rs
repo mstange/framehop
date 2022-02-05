@@ -20,12 +20,6 @@ pub enum CompactUnwindInfoUnwinderError {
     #[error("Address 0x{0:x} outside of the range covered by __unwind_info")]
     AddressOutsideRange(u32),
 
-    #[error("No LR register value when trying to unwind frameless function")]
-    MissingLrValue,
-
-    #[error("Bad LR value in frameless function (same as PC, would cause unwinding to loop)")]
-    FramelessWouldLoop,
-
     #[error("Encountered a non-leaf function which was marked as frameless.")]
     CallerCannotBeFrameless,
 
@@ -78,11 +72,7 @@ impl<'a: 'c, 'u, 'c, R: Reader> CompactUnwindInfoUnwinder<'a, 'u, 'c, R> {
     where
         F: FnMut(u64) -> Result<u64, ()>,
     {
-        // We're just beginning the stack walk here, regs came straight from the thread state.
-        // So we should have all registers, especially the lr register.
-        let lr = regs
-            .unmasked_lr()
-            .ok_or(CompactUnwindInfoUnwinderError::MissingLrValue)?;
+        let lr = regs.lr();
 
         let function = match self.function_for_address(rel_pc) {
             Ok(f) => f,
@@ -105,9 +95,8 @@ impl<'a: 'c, 'u, 'c, R: Reader> CompactUnwindInfoUnwinder<'a, 'u, 'c, R> {
             OpcodeArm64::Frameless {
                 stack_size_in_bytes,
             } => {
-                regs.sp = regs.sp.map(|sp| sp + stack_size_in_bytes as u64);
-                regs.unmasked_lr()
-                    .ok_or(CompactUnwindInfoUnwinderError::MissingLrValue)?
+                regs.set_sp(regs.sp() + stack_size_in_bytes as u64);
+                lr
             }
             OpcodeArm64::Dwarf { eh_frame_fde } => {
                 let dwarf_unwinder = self
@@ -116,24 +105,20 @@ impl<'a: 'c, 'u, 'c, R: Reader> CompactUnwindInfoUnwinder<'a, 'u, 'c, R> {
                     .ok_or(CompactUnwindInfoUnwinderError::NoDwarfUnwinder)?;
                 dwarf_unwinder.unwind_first_with_fde(regs, pc, eh_frame_fde, read_stack)?
             }
-            OpcodeArm64::FrameBased {
-                saved_reg_pair_count,
-                ..
-            } => {
+            OpcodeArm64::FrameBased { .. } => {
                 // Each pair takes one 4-byte instruction to save or restore. fp gets updated after saving or before restoring.
                 // Use this to do something smart for prologues / epilogues.
-                let prologue_end = function.start_address +
-                        saved_reg_pair_count as u32 * 4 + // 4 bytes per pair
-                        4 + // save fp and lr
-                        4; // set fp to the new value
-                if rel_pc < prologue_end {
-                    regs.sp = None;
-                    lr
-                } else {
-                    // TODO: Detect if we're in an epilogue, by seeing if the current instruction restores
-                    // registers from the stack (and then keep reading) or is a return instruction.
-                    FramepointerUnwinderArm64.unwind_next(regs, read_stack)?
-                }
+                // let prologue_end = function.start_address +
+                //         saved_reg_pair_count as u32 * 4 + // 4 bytes per pair
+                //         4 + // save fp and lr
+                //         4; // set fp to the new value
+                // if rel_pc < prologue_end {
+                //     // TODO: Disassemble instructions from the beginning to see how deep we are into the stack.
+                //     FramepointerUnwinderArm64.unwind_next(regs, read_stack)?
+
+                // TODO: Detect if we're in an epilogue, by seeing if the current instruction restores
+                // registers from the stack (and then keep reading) or is a return instruction.
+                FramepointerUnwinderArm64.unwind_next(regs, read_stack)?
             }
             OpcodeArm64::UnrecognizedKind(kind) => {
                 return Err(CompactUnwindInfoUnwinderError::BadOpcodeKind(kind))

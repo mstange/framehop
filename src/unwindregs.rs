@@ -4,9 +4,9 @@ use crate::display_utils::HexNum;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct UnwindRegsArm64 {
-    pub lr: Option<u64>,
-    pub sp: Option<u64>,
-    pub fp: Option<u64>,
+    lr: u64,
+    sp: u64,
+    fp: u64,
 }
 
 /// On macOS arm64, system libraries are arm64e binaries, and arm64e can do pointer authentication:
@@ -23,23 +23,42 @@ pub fn strip_ptr_auth(ptr: u64) -> u64 {
 }
 
 impl UnwindRegsArm64 {
-    pub fn unmasked_sp(&self) -> Option<u64> {
-        self.sp.map(strip_ptr_auth)
+    pub fn new(lr: u64, sp: u64, fp: u64) -> Self {
+        Self {
+            lr: strip_ptr_auth(lr),
+            sp: strip_ptr_auth(sp),
+            fp: strip_ptr_auth(fp),
+        }
     }
-    pub fn unmasked_fp(&self) -> Option<u64> {
-        self.fp.map(strip_ptr_auth)
+
+    pub fn sp(&self) -> u64 {
+        self.sp
     }
-    pub fn unmasked_lr(&self) -> Option<u64> {
-        self.lr.map(strip_ptr_auth)
+    pub fn set_sp(&mut self, sp: u64) {
+        self.sp = strip_ptr_auth(sp)
+    }
+
+    pub fn fp(&self) -> u64 {
+        self.fp
+    }
+    pub fn set_fp(&mut self, fp: u64) {
+        self.fp = strip_ptr_auth(fp)
+    }
+
+    pub fn lr(&self) -> u64 {
+        self.lr
+    }
+    pub fn set_lr(&mut self, lr: u64) {
+        self.lr = strip_ptr_auth(lr)
     }
 }
 
 impl Debug for UnwindRegsArm64 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("UnwindRegsArm64")
-            .field("lr", &self.unmasked_lr().map(HexNum))
-            .field("sp", &self.unmasked_sp().map(HexNum))
-            .field("fp", &self.unmasked_fp().map(HexNum))
+            .field("lr", &HexNum(self.lr))
+            .field("sp", &HexNum(self.sp))
+            .field("fp", &HexNum(self.fp))
             .finish()
     }
 }
