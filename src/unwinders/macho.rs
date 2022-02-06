@@ -67,7 +67,7 @@ impl<'a: 'c, 'u, 'c, R: Reader> CompactUnwindInfoUnwinder<'a, 'u, 'c, R> {
         regs: &mut UnwindRegsArm64,
         pc: u64,
         rel_pc: u32,
-        read_stack: &mut F,
+        read_mem: &mut F,
     ) -> Result<u64, CompactUnwindInfoUnwinderError>
     where
         F: FnMut(u64) -> Result<u64, ()>,
@@ -103,7 +103,7 @@ impl<'a: 'c, 'u, 'c, R: Reader> CompactUnwindInfoUnwinder<'a, 'u, 'c, R> {
                     .dwarf_unwinder
                     .as_mut()
                     .ok_or(CompactUnwindInfoUnwinderError::NoDwarfUnwinder)?;
-                dwarf_unwinder.unwind_first_with_fde(regs, pc, eh_frame_fde, read_stack)?
+                dwarf_unwinder.unwind_first_with_fde(regs, pc, eh_frame_fde, read_mem)?
             }
             OpcodeArm64::FrameBased { .. } => {
                 // Each pair takes one 4-byte instruction to save or restore. fp gets updated after saving or before restoring.
@@ -114,11 +114,11 @@ impl<'a: 'c, 'u, 'c, R: Reader> CompactUnwindInfoUnwinder<'a, 'u, 'c, R> {
                 //         4; // set fp to the new value
                 // if rel_pc < prologue_end {
                 //     // TODO: Disassemble instructions from the beginning to see how deep we are into the stack.
-                //     FramepointerUnwinderArm64.unwind_next(regs, read_stack)?
+                //     FramepointerUnwinderArm64.unwind_next(regs, read_mem)?
 
                 // TODO: Detect if we're in an epilogue, by seeing if the current instruction restores
                 // registers from the stack (and then keep reading) or is a return instruction.
-                FramepointerUnwinderArm64.unwind_next(regs, read_stack)?
+                FramepointerUnwinderArm64.unwind_next(regs, read_mem)?
             }
             OpcodeArm64::UnrecognizedKind(kind) => {
                 return Err(CompactUnwindInfoUnwinderError::BadOpcodeKind(kind))
@@ -133,7 +133,7 @@ impl<'a: 'c, 'u, 'c, R: Reader> CompactUnwindInfoUnwinder<'a, 'u, 'c, R> {
         regs: &mut UnwindRegsArm64,
         return_address: u64,
         rel_ra: u32,
-        read_stack: &mut F,
+        read_mem: &mut F,
     ) -> Result<u64, CompactUnwindInfoUnwinderError>
     where
         F: FnMut(u64) -> Result<u64, ()>,
@@ -156,11 +156,11 @@ impl<'a: 'c, 'u, 'c, R: Reader> CompactUnwindInfoUnwinder<'a, 'u, 'c, R> {
                     regs,
                     return_address,
                     eh_frame_fde,
-                    read_stack,
+                    read_mem,
                 )?
             }
             OpcodeArm64::FrameBased { .. } => {
-                FramepointerUnwinderArm64.unwind_next(regs, read_stack)?
+                FramepointerUnwinderArm64.unwind_next(regs, read_mem)?
             }
             OpcodeArm64::UnrecognizedKind(kind) => {
                 return Err(CompactUnwindInfoUnwinderError::BadOpcodeKind(kind))

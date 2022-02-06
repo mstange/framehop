@@ -57,7 +57,7 @@ impl<'a, R: Reader> DwarfUnwinder<'a, R> {
         regs: &mut UnwindRegsArm64,
         pc: u64,
         fde_offset: u32,
-        read_stack: &mut F,
+        read_mem: &mut F,
     ) -> Result<u64, DwarfUnwinderError>
     where
         F: FnMut(u64) -> Result<u64, ()>,
@@ -96,8 +96,8 @@ impl<'a, R: Reader> DwarfUnwinder<'a, R> {
         let fp_rule = unwind_info.register(AArch64::X29);
         let lr_rule = unwind_info.register(AArch64::X30);
         // println!("rules: fp {:?}, lr {:?}", fp_rule, lr_rule);
-        let fp = eval_rule(fp_rule, cfa, fp, regs, read_stack).unwrap_or(fp);
-        let lr = eval_rule(lr_rule, cfa, lr, regs, read_stack).unwrap_or(lr);
+        let fp = eval_rule(fp_rule, cfa, fp, regs, read_mem).unwrap_or(fp);
+        let lr = eval_rule(lr_rule, cfa, lr, regs, read_mem).unwrap_or(lr);
 
         if cfa == sp && lr == pc {
             return Err(DwarfUnwinderError::DidNotAdvance);
@@ -115,7 +115,7 @@ impl<'a, R: Reader> DwarfUnwinder<'a, R> {
         regs: &mut UnwindRegsArm64,
         return_address: u64,
         fde_offset: u32,
-        read_stack: &mut F,
+        read_mem: &mut F,
     ) -> Result<u64, DwarfUnwinderError>
     where
         F: FnMut(u64) -> Result<u64, ()>,
@@ -155,9 +155,9 @@ impl<'a, R: Reader> DwarfUnwinder<'a, R> {
         let fp_rule = unwind_info.register(AArch64::X29);
         let lr_rule = unwind_info.register(AArch64::X30);
         // println!("rules: fp {:?}, lr {:?}", fp_rule, lr_rule);
-        let fp = eval_rule(fp_rule, cfa, regs.fp(), regs, read_stack)
+        let fp = eval_rule(fp_rule, cfa, regs.fp(), regs, read_mem)
             .ok_or(DwarfUnwinderError::CouldNotRecoverFramePointer)?;
-        let lr = eval_rule(lr_rule, cfa, regs.lr(), regs, read_stack)
+        let lr = eval_rule(lr_rule, cfa, regs.lr(), regs, read_mem)
             .ok_or(DwarfUnwinderError::CouldNotRecoverReturnAddress)?;
         regs.set_fp(fp);
         regs.set_sp(cfa);
@@ -187,7 +187,7 @@ fn eval_rule<R, F>(
     cfa: u64,
     val: u64,
     regs: &UnwindRegsArm64,
-    read_stack: &mut F,
+    read_mem: &mut F,
 ) -> Option<u64>
 where
     R: gimli::Reader,
@@ -199,7 +199,7 @@ where
         RegisterRule::Offset(offset) => {
             let cfa_plus_offset =
                 u64::try_from(i64::try_from(cfa).ok()?.checked_add(offset)?).ok()?;
-            read_stack(cfa_plus_offset).ok()
+            read_mem(cfa_plus_offset).ok()
         }
         RegisterRule::ValOffset(offset) => {
             u64::try_from(i64::try_from(cfa).ok()?.checked_add(offset)?).ok()

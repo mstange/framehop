@@ -22,7 +22,7 @@ impl FramepointerUnwinderArm64 {
     pub fn unwind_next<F>(
         &self,
         regs: &mut UnwindRegsArm64,
-        read_stack: &mut F,
+        read_mem: &mut F,
     ) -> Result<u64, FramepointerUnwinderError>
     where
         F: FnMut(u64) -> Result<u64, ()>,
@@ -72,9 +72,9 @@ impl FramepointerUnwinderArm64 {
         }
 
         let caller_fp =
-            read_stack(frame_ptr).map_err(|_| FramepointerUnwinderError::CouldNotReadStack)?;
+            read_mem(frame_ptr).map_err(|_| FramepointerUnwinderError::CouldNotReadStack)?;
         let return_address =
-            read_stack(frame_ptr + 8).map_err(|_| FramepointerUnwinderError::CouldNotReadStack)?;
+            read_mem(frame_ptr + 8).map_err(|_| FramepointerUnwinderError::CouldNotReadStack)?;
 
         if caller_fp == 0 {
             return Err(FramepointerUnwinderError::FoundStackEnd);
