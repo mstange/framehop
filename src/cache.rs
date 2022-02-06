@@ -158,6 +158,9 @@ impl OpcodeArm64 {
                 let new_sp = fp + 16;
                 let new_lr = read_mem(fp + 8).map_err(|_| Error::UnwindingFailed)?;
                 let new_fp = read_mem(fp).map_err(|_| Error::UnwindingFailed)?;
+                if new_fp == 0 {
+                    return Err(Error::StackEndReached);
+                }
                 if new_fp <= fp || new_sp <= sp {
                     return Err(Error::UnwindingFailed);
                 }
@@ -179,6 +182,9 @@ impl OpcodeArm64 {
                 let fp_location =
                     wrapping_add_signed(fp, fp_storage_offset_from_fp_by_8 as i64 * 8);
                 let new_fp = read_mem(fp_location).map_err(|_| Error::UnwindingFailed)?;
+                if new_fp == 0 {
+                    return Err(Error::StackEndReached);
+                }
                 if new_fp <= fp || new_sp <= sp {
                     return Err(Error::UnwindingFailed);
                 }
