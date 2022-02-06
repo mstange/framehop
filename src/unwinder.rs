@@ -1,5 +1,7 @@
 use gimli::{EndianReader, LittleEndian};
 
+use crate::cache::{OpcodeArm64, CacheResult};
+
 use super::arcdata::{ArcData, ArcDataReader};
 use super::cache::Cache;
 use super::error::{Error, UnwinderError};
@@ -15,6 +17,8 @@ use std::{
 pub struct Unwinder<D: Deref<Target = [u8]>> {
     /// sorted by address_range.start
     modules: Vec<Module<D>>,
+    /// Incremented every time modules is changed.
+    modules_generation: u16,
 }
 
 impl<D: Deref<Target = [u8]>> Default for Unwinder<D> {
@@ -27,6 +31,7 @@ impl<D: Deref<Target = [u8]>> Unwinder<D> {
     pub fn new() -> Self {
         Self {
             modules: Vec::new(),
+            modules_generation: 0,
         }
     }
 
@@ -46,6 +51,7 @@ impl<D: Deref<Target = [u8]>> Unwinder<D> {
             Err(i) => i,
         };
         self.modules.insert(insertion_index, module);
+        self.modules_generation += 1;
     }
 
     pub fn remove_module(&mut self, module_address_range_start: u64) {
@@ -56,6 +62,7 @@ impl<D: Deref<Target = [u8]>> Unwinder<D> {
             })
         {
             self.modules.remove(index);
+            self.modules_generation += 1;
         };
     }
 
@@ -69,6 +76,11 @@ impl<D: Deref<Target = [u8]>> Unwinder<D> {
     where
         F: FnMut(u64) -> Result<u64, ()>,
     {
+        let cache_handle = match cache.try_unwind(pc, self.modules_generation, regs, read_mem) {
+            CacheResult::Hit(result) => return result,
+            CacheResult::Miss(handle) => handle,
+        };
+
         let module_index = match self.find_module_for_address(pc) {
             Some(i) => i,
             None => return Ok(FramepointerUnwinderArm64.unwind_next(regs, read_mem)?),
@@ -98,6 +110,11 @@ impl<D: Deref<Target = [u8]>> Unwinder<D> {
     where
         F: FnMut(u64) -> Result<u64, ()>,
     {
+        let cache_handle = match cache.try_unwind(return_address - 1, self.modules_generation, regs, read_mem) {
+            CacheResult::Hit(result) => return result,
+            CacheResult::Miss(handle) => handle,
+        };
+
         let module_index = match self.find_module_for_address(return_address - 1) {
             Some(i) => i,
             None => return Ok(FramepointerUnwinderArm64.unwind_next(regs, read_mem)?),
