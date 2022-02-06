@@ -113,11 +113,11 @@ fn wrapping_add_signed(lhs: u64, rhs: i64) -> u64 {
 }
 
 impl OpcodeArm64 {
-    fn unwind<F>(&self, regs: &mut UnwindRegsArm64, read_mem: &mut F) -> Result<u64, Error>
+    fn unwind<F>(self, regs: &mut UnwindRegsArm64, read_mem: &mut F) -> Result<u64, Error>
     where
         F: FnMut(u64) -> Result<u64, ()>,
     {
-        match *self {
+        match self {
             OpcodeArm64::UnwindFailed => return Err(Error::UnwindingFailed),
             OpcodeArm64::NoOp => {}
             OpcodeArm64::OffsetSp { sp_offset_by_16 } => {
