@@ -22,7 +22,7 @@ pub enum FramepointerUnwinderError {
 // Function epilogue:
 // ldp  fp, lr, [sp, #0x20]     ; restores fp and lr from the stack
 // ldp  x20, x19, [sp, #0x10]   ; restores x20 and x19
-// ldp  x22, x21, [sp], #0x30   ; restores x22 and x21
+// ldp  x22, x21, [sp], #0x30   ; restores x22 and x21, and then adds 0x30 to sp
 // ret                          ; follows lr to jump back to the caller
 //
 // Functions are called with bl ("branch with link"); bl puts the return address into the lr register.
@@ -52,7 +52,7 @@ pub struct FramepointerUnwinderArm64;
 
 impl FramepointerUnwinderArm64 {
     pub fn unwind_first(&self) -> Result<UnwindResult<UnwindRuleArm64>, FramepointerUnwinderError> {
-        // TODO: Disassembly starting from pc and detect prologue / epiloge
+        // TODO: Disassemble starting from pc and detect prologue / epiloge
 
         // For now, just return prologue / epilogue and pretend we're in the middle of a function.
         Ok(UnwindResult::ExecRule(UnwindRuleArm64::UseFramePointer))
@@ -104,7 +104,7 @@ impl FramepointerUnwinderX86_64 {
     pub fn unwind_first(
         &self,
     ) -> Result<UnwindResult<UnwindRuleX86_64>, FramepointerUnwinderError> {
-        // TODO: Disassembly starting from pc and detect prologue / epiloge
+        // TODO: Disassemble starting from pc and detect prologue / epiloge
 
         // For now, just return prologue / epilogue and pretend we're in the middle of a function.
         Ok(UnwindResult::ExecRule(UnwindRuleX86_64::UseFramePointer))
