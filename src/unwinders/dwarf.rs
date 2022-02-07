@@ -291,7 +291,7 @@ fn eval_cfa_rule<R: gimli::Reader>(rule: &CfaRule<R>, regs: &UnwindRegsArm64) ->
             };
             u64::try_from(i64::try_from(val).ok()?.checked_add(*offset)?).ok()
         }
-        CfaRule::Expression(_) => todo!("cfarule expression"),
+        CfaRule::Expression(_) => None,
     }
 }
 
