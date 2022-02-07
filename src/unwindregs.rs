@@ -18,6 +18,7 @@ pub struct UnwindRegsArm64 {
 /// 24 bits hash + 40 bits pointer
 const PTR_MASK: u64 = (1 << 40) - 1;
 
+#[inline(always)]
 pub fn strip_ptr_auth(ptr: u64) -> u64 {
     ptr & PTR_MASK
 }
@@ -31,23 +32,29 @@ impl UnwindRegsArm64 {
         }
     }
 
+    #[inline(always)]
     pub fn sp(&self) -> u64 {
         self.sp
     }
+    #[inline(always)]
     pub fn set_sp(&mut self, sp: u64) {
         self.sp = strip_ptr_auth(sp)
     }
 
+    #[inline(always)]
     pub fn fp(&self) -> u64 {
         self.fp
     }
+    #[inline(always)]
     pub fn set_fp(&mut self, fp: u64) {
         self.fp = strip_ptr_auth(fp)
     }
 
+    #[inline(always)]
     pub fn lr(&self) -> u64 {
         self.lr
     }
+    #[inline(always)]
     pub fn set_lr(&mut self, lr: u64) {
         self.lr = strip_ptr_auth(lr)
     }

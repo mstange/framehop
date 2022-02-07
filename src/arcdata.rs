@@ -1,4 +1,4 @@
-use std::{ops::Deref, sync::Arc, fmt::Debug};
+use std::{fmt::Debug, ops::Deref, sync::Arc};
 
 pub type ArcDataReader<D> = gimli::EndianReader<gimli::LittleEndian, ArcData<D>>;
 

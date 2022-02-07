@@ -3,6 +3,8 @@ use gimli::Reader;
 use super::{
     DwarfUnwinder, DwarfUnwinderError, FramepointerUnwinderArm64, FramepointerUnwinderError,
 };
+use crate::rule_cache::UnwindRuleArm64;
+use crate::unwind_result::UnwindResult;
 use crate::unwindregs::UnwindRegsArm64;
 use macho_unwind_info::opcodes::OpcodeArm64;
 use macho_unwind_info::UnwindInfo;
@@ -68,12 +70,10 @@ impl<'a: 'c, 'u, 'c, R: Reader> CompactUnwindInfoUnwinder<'a, 'u, 'c, R> {
         pc: u64,
         rel_pc: u32,
         read_mem: &mut F,
-    ) -> Result<u64, CompactUnwindInfoUnwinderError>
+    ) -> Result<UnwindResult, CompactUnwindInfoUnwinderError>
     where
         F: FnMut(u64) -> Result<u64, ()>,
     {
-        let lr = regs.lr();
-
         let function = match self.function_for_address(rel_pc) {
             Ok(f) => f,
             Err(CompactUnwindInfoUnwinderError::AddressOutsideRange(_)) => {
@@ -81,22 +81,34 @@ impl<'a: 'c, 'u, 'c, R: Reader> CompactUnwindInfoUnwinder<'a, 'u, 'c, R> {
                 // This could mean that we're inside a stub function, in the __stubs section.
                 // All stub functions are frameless.
                 // TODO: Obtain the actual __stubs address range and do better checking here.
-                return Ok(lr);
+                return Ok(UnwindResult::ExecRule(UnwindRuleArm64::NoOp));
             }
             Err(err) => return Err(err),
         };
         if rel_pc == function.start_address {
-            return Ok(lr);
+            return Ok(UnwindResult::ExecRule(UnwindRuleArm64::NoOp));
         }
 
         let opcode = OpcodeArm64::parse(function.opcode);
-        let return_address = match opcode {
-            OpcodeArm64::Null => lr,
+        let unwind_result = match opcode {
+            OpcodeArm64::Null => UnwindResult::ExecRule(UnwindRuleArm64::NoOp),
             OpcodeArm64::Frameless {
                 stack_size_in_bytes,
             } => {
-                regs.set_sp(regs.sp() + stack_size_in_bytes as u64);
-                lr
+                if stack_size_in_bytes == 0 {
+                    UnwindResult::ExecRule(UnwindRuleArm64::NoOp)
+                } else {
+                    match u8::try_from(stack_size_in_bytes / 16) {
+                        Ok(sp_offset_by_16) => {
+                            UnwindResult::ExecRule(UnwindRuleArm64::OffsetSp { sp_offset_by_16 })
+                        }
+                        Err(_) => {
+                            eprintln!("Uncacheable rule in compact unwind info unwinder because Frameless stack size doesn't fit");
+                            regs.set_sp(regs.sp() + stack_size_in_bytes as u64);
+                            UnwindResult::Uncacheable(regs.lr())
+                        }
+                    }
+                }
             }
             OpcodeArm64::Dwarf { eh_frame_fde } => {
                 let dwarf_unwinder = self
@@ -118,14 +130,14 @@ impl<'a: 'c, 'u, 'c, R: Reader> CompactUnwindInfoUnwinder<'a, 'u, 'c, R> {
 
                 // TODO: Detect if we're in an epilogue, by seeing if the current instruction restores
                 // registers from the stack (and then keep reading) or is a return instruction.
-                FramepointerUnwinderArm64.unwind_next(regs, read_mem)?
+                FramepointerUnwinderArm64.unwind_first()?
             }
             OpcodeArm64::UnrecognizedKind(kind) => {
                 return Err(CompactUnwindInfoUnwinderError::BadOpcodeKind(kind))
             }
         };
 
-        Ok(return_address)
+        Ok(unwind_result)
     }
 
     pub fn unwind_next<F>(
@@ -134,13 +146,13 @@ impl<'a: 'c, 'u, 'c, R: Reader> CompactUnwindInfoUnwinder<'a, 'u, 'c, R> {
         return_address: u64,
         rel_ra: u32,
         read_mem: &mut F,
-    ) -> Result<u64, CompactUnwindInfoUnwinderError>
+    ) -> Result<UnwindResult, CompactUnwindInfoUnwinderError>
     where
         F: FnMut(u64) -> Result<u64, ()>,
     {
         let function = self.function_for_address(rel_ra - 1)?;
         let opcode = OpcodeArm64::parse(function.opcode);
-        let return_address = match opcode {
+        let unwind_result = match opcode {
             OpcodeArm64::Null => {
                 return Err(CompactUnwindInfoUnwinderError::FunctionHasNoInfo);
             }
@@ -152,21 +164,16 @@ impl<'a: 'c, 'u, 'c, R: Reader> CompactUnwindInfoUnwinder<'a, 'u, 'c, R> {
                     .dwarf_unwinder
                     .as_mut()
                     .ok_or(CompactUnwindInfoUnwinderError::NoDwarfUnwinder)?;
-                dwarf_unwinder.unwind_next_with_fde(
-                    regs,
-                    return_address,
-                    eh_frame_fde,
-                    read_mem,
-                )?
+                dwarf_unwinder.unwind_next_with_fde(regs, return_address, eh_frame_fde, read_mem)?
             }
             OpcodeArm64::FrameBased { .. } => {
-                FramepointerUnwinderArm64.unwind_next(regs, read_mem)?
+                UnwindResult::ExecRule(UnwindRuleArm64::UseFramePointer)
             }
             OpcodeArm64::UnrecognizedKind(kind) => {
                 return Err(CompactUnwindInfoUnwinderError::BadOpcodeKind(kind))
             }
         };
 
-        Ok(return_address)
+        Ok(unwind_result)
     }
 }

@@ -30,6 +30,15 @@ pub enum UnwinderError {
 
     #[error("DWARF unwinding failed: {0}")]
     Dwarf(#[from] DwarfUnwinderError),
+
+    #[error("No module covers the address")]
+    NoModule,
+
+    #[error("Unhandled unwind data type")]
+    UnhandledUnwindDataType,
+
+    #[error("No unwind data for the module containing the address")]
+    NoUnwindData,
 }
 
 impl From<CompactUnwindInfoUnwinderError> for UnwinderError {

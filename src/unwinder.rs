@@ -1,12 +1,13 @@
 use gimli::{EndianReader, LittleEndian};
 
-use crate::cache::{OpcodeArm64, CacheResult};
-
 use super::arcdata::{ArcData, ArcDataReader};
 use super::cache::Cache;
 use super::error::{Error, UnwinderError};
-use super::unwinders::{CompactUnwindInfoUnwinder, DwarfUnwinder, FramepointerUnwinderArm64};
+use super::rule_cache::{CacheResult, UnwindRuleArm64};
+use super::unwind_result::UnwindResult;
+use super::unwinders::{CompactUnwindInfoUnwinder, DwarfUnwinder};
 use super::unwindregs::UnwindRegsArm64;
+
 use std::ops::DerefMut;
 use std::{
     fmt::Debug,
@@ -76,28 +77,42 @@ impl<D: Deref<Target = [u8]>> Unwinder<D> {
     where
         F: FnMut(u64) -> Result<u64, ()>,
     {
-        let cache_handle = match cache.try_unwind(pc, self.modules_generation, regs, read_mem) {
-            CacheResult::Hit(result) => return result,
-            CacheResult::Miss(handle) => handle,
-        };
+        // eprintln!("unwind_first for {:x}", pc);
 
-        let module_index = match self.find_module_for_address(pc) {
-            Some(i) => i,
-            None => return Ok(FramepointerUnwinderArm64.unwind_next(regs, read_mem)?),
+        let cache_handle =
+            match cache
+                .rule_cache
+                .try_unwind(pc, self.modules_generation, regs, read_mem)
+            {
+                CacheResult::Hit(result) => return result,
+                CacheResult::Miss(handle) => handle,
+            };
+
+        let unwind_rule = match self.unwind_first_impl(pc, regs, cache, read_mem) {
+            Ok(UnwindResult::ExecRule(rule)) => rule,
+            Ok(UnwindResult::Uncacheable(return_address)) => return Ok(return_address),
+            Err(_) => UnwindRuleArm64::UseFramePointer,
         };
+        cache.rule_cache.insert(cache_handle, unwind_rule);
+        unwind_rule.exec(regs, read_mem)
+    }
+
+    fn unwind_first_impl<F>(
+        &self,
+        pc: u64,
+        regs: &mut UnwindRegsArm64,
+        cache: &mut Cache<D>,
+        read_mem: &mut F,
+    ) -> Result<UnwindResult, UnwinderError>
+    where
+        F: FnMut(u64) -> Result<u64, ()>,
+    {
+        let module_index = self
+            .find_module_for_address(pc)
+            .ok_or(UnwinderError::NoModule)?;
         let module = &self.modules[module_index];
         let rel_pc = (pc - module.base_address) as u32;
-        match module.unwind_first(regs, pc, rel_pc, read_mem, cache) {
-            Ok(ra) => Ok(ra),
-            Err(UnwinderError::FramePointer(e)) => Err(e.into()),
-            Err(err) => {
-                println!(
-                    "error for pc 0x{:x} ({} + 0x{:x}): {}",
-                    pc, module.name, rel_pc, err
-                );
-                Ok(FramepointerUnwinderArm64.unwind_next(regs, read_mem)?)
-            }
-        }
+        module.unwind_first(regs, pc, rel_pc, read_mem, cache)
     }
 
     pub fn unwind_next<F>(
@@ -110,22 +125,42 @@ impl<D: Deref<Target = [u8]>> Unwinder<D> {
     where
         F: FnMut(u64) -> Result<u64, ()>,
     {
-        let cache_handle = match cache.try_unwind(return_address - 1, self.modules_generation, regs, read_mem) {
+        // eprintln!("unwind_next for {:x}", return_address);
+        let cache_handle = match cache.rule_cache.try_unwind(
+            return_address - 1,
+            self.modules_generation,
+            regs,
+            read_mem,
+        ) {
             CacheResult::Hit(result) => return result,
             CacheResult::Miss(handle) => handle,
         };
 
-        let module_index = match self.find_module_for_address(return_address - 1) {
-            Some(i) => i,
-            None => return Ok(FramepointerUnwinderArm64.unwind_next(regs, read_mem)?),
+        let unwind_rule = match self.unwind_next_impl(return_address, regs, cache, read_mem) {
+            Ok(UnwindResult::ExecRule(rule)) => rule,
+            Ok(UnwindResult::Uncacheable(return_address)) => return Ok(return_address),
+            Err(_) => UnwindRuleArm64::UseFramePointer,
         };
+        cache.rule_cache.insert(cache_handle, unwind_rule);
+        unwind_rule.exec(regs, read_mem)
+    }
+
+    fn unwind_next_impl<F>(
+        &self,
+        return_address: u64,
+        regs: &mut UnwindRegsArm64,
+        cache: &mut Cache<D>,
+        read_mem: &mut F,
+    ) -> Result<UnwindResult, UnwinderError>
+    where
+        F: FnMut(u64) -> Result<u64, ()>,
+    {
+        let module_index = self
+            .find_module_for_address(return_address - 1)
+            .ok_or(UnwinderError::NoModule)?;
         let module = &self.modules[module_index];
         let rel_ra = (return_address - module.base_address) as u32;
-        match module.unwind_next(regs, return_address, rel_ra, read_mem, cache) {
-            Ok(ra) => Ok(ra),
-            Err(UnwinderError::FramePointer(e)) => Err(e.into()),
-            Err(_) => Ok(FramepointerUnwinderArm64.unwind_next(regs, read_mem)?),
-        }
+        module.unwind_next(regs, return_address, rel_ra, read_mem, cache)
     }
 
     fn find_module_for_address(&self, pc: u64) -> Option<usize> {
@@ -213,15 +248,15 @@ impl<D: Deref<Target = [u8]>> Module<D> {
         rel_pc: u32,
         read_mem: &mut F,
         cache: &mut Cache<D>,
-    ) -> Result<u64, UnwinderError>
+    ) -> Result<UnwindResult, UnwinderError>
     where
         F: FnMut(u64) -> Result<u64, ()>,
     {
-        // println!(
+        // eprintln!(
         //     "Unwinding at pc {} + 0x{:x} (= 0x{:x}) with regs {:?}",
         //     self.name, rel_pc, pc, regs
         // );
-        let return_address = match &self.unwind_data {
+        let unwind_result = match &self.unwind_data {
             UnwindData::CompactUnwindInfo(data) => {
                 // eprintln!("unwinding with cui in module {}", self.name);
                 let mut unwinder =
@@ -239,11 +274,13 @@ impl<D: Deref<Target = [u8]>> Module<D> {
                     CompactUnwindInfoUnwinder::new(&unwind_data[..], Some(&mut dwarf_unwinder));
                 unwinder.unwind_first(regs, pc, rel_pc, read_mem)?
             }
-            UnwindData::EhFrameHdrAndEhFrame(_, _) => todo!(),
-            UnwindData::EhFrame(_) => todo!(),
-            UnwindData::None => FramepointerUnwinderArm64.unwind_next(regs, read_mem)?,
+            UnwindData::EhFrameHdrAndEhFrame(_, _) => {
+                return Err(UnwinderError::UnhandledUnwindDataType)
+            }
+            UnwindData::EhFrame(_) => return Err(UnwinderError::UnhandledUnwindDataType),
+            UnwindData::None => return Err(UnwinderError::NoUnwindData),
         };
-        Ok(return_address)
+        Ok(unwind_result)
     }
 
     fn unwind_next<F>(
@@ -253,15 +290,15 @@ impl<D: Deref<Target = [u8]>> Module<D> {
         rel_ra: u32,
         read_mem: &mut F,
         cache: &mut Cache<D>,
-    ) -> Result<u64, UnwinderError>
+    ) -> Result<UnwindResult, UnwinderError>
     where
         F: FnMut(u64) -> Result<u64, ()>,
     {
-        // println!(
+        // eprintln!(
         //     "Unwinding at ra {} + 0x{:x} (= 0x{:x}) with regs {:?}",
         //     self.name, rel_ra, return_address, regs
         // );
-        let return_address = match &self.unwind_data {
+        let unwind_result = match &self.unwind_data {
             UnwindData::CompactUnwindInfo(data) => {
                 // eprintln!("unwinding with cui in module {}", self.name);
                 let mut unwinder =
@@ -279,10 +316,80 @@ impl<D: Deref<Target = [u8]>> Module<D> {
                     CompactUnwindInfoUnwinder::new(&unwind_data[..], Some(&mut dwarf_unwinder));
                 unwinder.unwind_next(regs, return_address, rel_ra, read_mem)?
             }
-            UnwindData::EhFrameHdrAndEhFrame(_, _) => todo!(),
-            UnwindData::EhFrame(_) => todo!(),
-            UnwindData::None => FramepointerUnwinderArm64.unwind_next(regs, read_mem)?,
+            UnwindData::EhFrameHdrAndEhFrame(_, _) => {
+                return Err(UnwinderError::UnhandledUnwindDataType)
+            }
+            UnwindData::EhFrame(_) => return Err(UnwinderError::UnhandledUnwindDataType),
+            UnwindData::None => return Err(UnwinderError::NoUnwindData),
         };
-        Ok(return_address)
+        Ok(unwind_result)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::io::Read;
+
+    use super::*;
+
+    #[test]
+    fn test_basic() {
+        let mut cache = Cache::new();
+        let mut unwinder = Unwinder::new();
+        let mut unwind_info = Vec::new();
+        let mut file = std::fs::File::open("fixtures/macos/arm64/fp/query-api.__unwind_info")
+            .expect("file opening failed");
+        file.read_to_end(&mut unwind_info)
+            .expect("file reading failed");
+        unwinder.add_module(Module::new(
+            "query-api".to_string(),
+            0x1003fc000..0x100634000,
+            0x1003fc000,
+            0x100000000,
+            SectionAddresses {
+                text: 0,
+                eh_frame: 0,
+                eh_frame_hdr: 0,
+                got: 0,
+            },
+            UnwindData::CompactUnwindInfo(unwind_info),
+        ));
+        let stack = [
+            1,
+            2,
+            3,
+            4,
+            0x40,
+            0x1003fc000 + 0x100dc4,
+            5,
+            6,
+            0x70,
+            0x1003fc000 + 0x12ca28,
+            7,
+            8,
+            9,
+            10,
+            0x0,
+            0x0,
+        ];
+        let mut read_mem = |addr| Ok(stack[(addr / 8) as usize]);
+        let mut regs = UnwindRegsArm64::new(0x1003fc000 + 0xe4830, 0x10, 0x20);
+        // There's a frameless function at e0d2c.
+        let res =
+            unwinder.unwind_first(0x1003fc000 + 0x1292c0, &mut regs, &mut cache, &mut read_mem);
+        assert_eq!(res, Ok(0x1003fc000 + 0xe4830));
+        assert_eq!(regs.sp(), 0x10);
+        let res = unwinder.unwind_next(0x1003fc000 + 0xe4830, &mut regs, &mut cache, &mut read_mem);
+        assert_eq!(res, Ok(0x1003fc000 + 0x100dc4));
+        assert_eq!(regs.sp(), 0x30);
+        assert_eq!(regs.fp(), 0x40);
+        let res =
+            unwinder.unwind_next(0x1003fc000 + 0x100dc4, &mut regs, &mut cache, &mut read_mem);
+        assert_eq!(res, Ok(0x1003fc000 + 0x12ca28));
+        assert_eq!(regs.sp(), 0x50);
+        assert_eq!(regs.fp(), 0x70);
+        let res =
+            unwinder.unwind_next(0x1003fc000 + 0x100dc4, &mut regs, &mut cache, &mut read_mem);
+        assert_eq!(res, Err(Error::StackEndReached));
     }
 }
