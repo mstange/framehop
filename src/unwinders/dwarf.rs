@@ -77,7 +77,7 @@ impl<'a, R: Reader> DwarfUnwinder<'a, R> {
             match fde.unwind_info_for_address(&eh_frame, &self.bases, self.unwind_context, pc) {
                 Ok(unwind_info) => unwind_info,
                 Err(e) => {
-                    println!(
+                    eprintln!(
                     "unwind_info_for_address error at pc 0x{:x} using FDE at offset 0x{:x}: {:?}",
                     pc, fde_offset, e
                 );
@@ -139,22 +139,23 @@ impl<'a, R: Reader> DwarfUnwinder<'a, R> {
             gimli::EhFrame::cie_from_offset,
         );
         let fde = fde.map_err(DwarfUnwinderError::FdeFromOffsetFailed)?;
-        let unwind_info: &UnwindTableRow<_, _> =
-            match fde.unwind_info_for_address(
-                &eh_frame,
-                &self.bases,
-                self.unwind_context,
-                return_address - 1,
-            ) {
-                Ok(unwind_info) => unwind_info,
-                Err(e) => {
-                    println!(
+        let unwind_info: &UnwindTableRow<_, _> = match fde.unwind_info_for_address(
+            &eh_frame,
+            &self.bases,
+            self.unwind_context,
+            return_address - 1,
+        ) {
+            Ok(unwind_info) => unwind_info,
+            Err(e) => {
+                eprintln!(
                     "unwind_info_for_address error at pc 0x{:x} using FDE at offset 0x{:x}: {:?}",
-                    return_address - 1, fde_offset, e
+                    return_address - 1,
+                    fde_offset,
+                    e
                 );
-                    return Err(DwarfUnwinderError::UnwindInfoForAddressFailed(e));
-                }
-            };
+                return Err(DwarfUnwinderError::UnwindInfoForAddressFailed(e));
+            }
+        };
         let cfa_rule = unwind_info.cfa();
         let fp_rule = unwind_info.register(AArch64::X29);
         let lr_rule = unwind_info.register(AArch64::X30);
