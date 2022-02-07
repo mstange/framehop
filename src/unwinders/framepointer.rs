@@ -1,4 +1,4 @@
-use crate::{rule_cache::UnwindRuleArm64, unwind_result::UnwindResult};
+use crate::{rules::UnwindRuleArm64, unwind_result::UnwindResult};
 use std::result::Result;
 
 #[derive(thiserror::Error, Debug, Clone, Copy, PartialEq, Eq)]

@@ -4,7 +4,7 @@ use gimli::{
 };
 
 use crate::{
-    rule_cache::UnwindRuleArm64, unwind_result::UnwindResult, unwindregs::UnwindRegsArm64,
+    rules::UnwindRuleArm64, unwind_result::UnwindResult, unwindregs::UnwindRegsArm64,
     SectionAddresses,
 };
 

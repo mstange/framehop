@@ -3,7 +3,7 @@ use gimli::Reader;
 use super::{
     DwarfUnwinder, DwarfUnwinderError, FramepointerUnwinderArm64, FramepointerUnwinderError,
 };
-use crate::rule_cache::UnwindRuleArm64;
+use crate::rules::UnwindRuleArm64;
 use crate::unwind_result::UnwindResult;
 use crate::unwindregs::UnwindRegsArm64;
 use macho_unwind_info::opcodes::OpcodeArm64;
