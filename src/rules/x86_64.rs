@@ -12,11 +12,6 @@ pub enum UnwindRuleX86_64 {
     },
     /// (sp, bp) = (bp + 16, *bp)
     UseFramePointer,
-    /// (sp, bp) = (bp + 8x, *(bp + 8y))
-    UseFramepointerWithOffsets {
-        sp_offset_from_bp_by_8: u8,
-        bp_storage_offset_from_bp_by_8: i8,
-    },
 }
 
 fn wrapping_add_signed(lhs: u64, rhs: i64) -> u64 {
@@ -49,25 +44,6 @@ impl UnwindRuleX86_64 {
                 let bp = regs.bp();
                 let new_sp = bp + 16;
                 let new_bp = read_mem(bp).map_err(|_| Error::UnwindingFailed)?;
-                if new_bp == 0 {
-                    return Err(Error::StackEndReached);
-                }
-                if new_bp <= bp || new_sp <= sp {
-                    return Err(Error::UnwindingFailed);
-                }
-                regs.set_sp(new_sp);
-                regs.set_bp(new_bp);
-            }
-            UnwindRuleX86_64::UseFramepointerWithOffsets {
-                sp_offset_from_bp_by_8,
-                bp_storage_offset_from_bp_by_8,
-            } => {
-                let sp = regs.sp();
-                let bp = regs.bp();
-                let new_sp = bp + sp_offset_from_bp_by_8 as u64 * 8;
-                let bp_location =
-                    wrapping_add_signed(bp, bp_storage_offset_from_bp_by_8 as i64 * 8);
-                let new_bp = read_mem(bp_location).map_err(|_| Error::UnwindingFailed)?;
                 if new_bp == 0 {
                     return Err(Error::StackEndReached);
                 }
