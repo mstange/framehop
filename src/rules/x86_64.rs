@@ -7,7 +7,7 @@ pub enum UnwindRuleX86_64 {
     OffsetSp { sp_offset_by_8: u8 },
     /// (sp, bp) = (sp + 8x, *(sp + 8y))
     OffsetSpAndRestoreBp {
-        sp_offset_by_8: u8,
+        sp_offset_by_8: u16,
         bp_storage_offset_from_sp_by_8: i8,
     },
     /// (sp, bp) = (bp + 16, *bp)
