@@ -8,37 +8,15 @@ use crate::{
     SectionAddresses,
 };
 
-pub struct DwarfUnwinder<'a, R: Reader> {
+use super::DwarfUnwinderError;
+
+pub struct DwarfUnwinderAarch64<'a, R: Reader> {
     eh_frame_data: R,
     unwind_context: &'a mut UnwindContext<R>,
     bases: BaseAddresses,
 }
 
-#[derive(thiserror::Error, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DwarfUnwinderError {
-    #[error("Could not get the FDE for the supplied offset: {0}")]
-    FdeFromOffsetFailed(#[source] gimli::Error),
-
-    #[error("Could not find DWARF unwind info for the requested address: {0}")]
-    UnwindInfoForAddressFailed(#[source] gimli::Error),
-
-    #[error("Stack pointer moved backwards")]
-    StackPointerMovedBackwards,
-
-    #[error("Did not advance")]
-    DidNotAdvance,
-
-    #[error("Could not recover the CFA")]
-    CouldNotRecoverCfa,
-
-    #[error("Could not recover the return address")]
-    CouldNotRecoverReturnAddress,
-
-    #[error("Could not recover the frame pointer")]
-    CouldNotRecoverFramePointer,
-}
-
-impl<'a, R: Reader> DwarfUnwinder<'a, R> {
+impl<'a, R: Reader> DwarfUnwinderAarch64<'a, R> {
     pub fn new(
         eh_frame_data: R,
         unwind_context: &'a mut UnwindContext<R>,
@@ -61,7 +39,7 @@ impl<'a, R: Reader> DwarfUnwinder<'a, R> {
         pc: u64,
         fde_offset: u32,
         read_mem: &mut F,
-    ) -> Result<UnwindResult, DwarfUnwinderError>
+    ) -> Result<UnwindResult<UnwindRuleArm64>, DwarfUnwinderError>
     where
         F: FnMut(u64) -> Result<u64, ()>,
     {
@@ -78,9 +56,9 @@ impl<'a, R: Reader> DwarfUnwinder<'a, R> {
                 Ok(unwind_info) => unwind_info,
                 Err(e) => {
                     eprintln!(
-                    "unwind_info_for_address error at pc 0x{:x} using FDE at offset 0x{:x}: {:?}",
-                    pc, fde_offset, e
-                );
+                  "unwind_info_for_address error at pc 0x{:x} using FDE at offset 0x{:x}: {:?}",
+                  pc, fde_offset, e
+              );
                     return Err(DwarfUnwinderError::UnwindInfoForAddressFailed(e));
                 }
             };
@@ -127,7 +105,7 @@ impl<'a, R: Reader> DwarfUnwinder<'a, R> {
         return_address: u64,
         fde_offset: u32,
         read_mem: &mut F,
-    ) -> Result<UnwindResult, DwarfUnwinderError>
+    ) -> Result<UnwindResult<UnwindRuleArm64>, DwarfUnwinderError>
     where
         F: FnMut(u64) -> Result<u64, ()>,
     {

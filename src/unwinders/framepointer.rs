@@ -1,22 +1,14 @@
-use crate::{rules::UnwindRuleArm64, unwind_result::UnwindResult};
+use crate::{
+    rules::{UnwindRuleArm64, UnwindRuleX86_64},
+    unwind_result::UnwindResult,
+};
 use std::result::Result;
 
 #[derive(thiserror::Error, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FramepointerUnwinderError {
-    #[error("The input register set did not have a value for the framepointer register.")]
-    NoFramepointerValueProvided,
-
-    #[error("There was a problem reading values from the stack.")]
-    CouldNotReadStack,
-
-    #[error("The caller's framepointer wasn't \"higher up\" than this function's framepointer.")]
-    FramepointerMovedBackwards,
-
-    #[error("This was the last frame on the stack, indicated by the caller fp being zero.")]
-    FoundStackEnd,
+    #[error("There was a problem reading values from the __text section.")]
+    CouldNotDisassemble,
 }
-
-pub struct FramepointerUnwinderArm64;
 
 // Do a frame pointer stack walk. Frame-based arm64 functions store the caller's fp and lr
 // on the stack and then set fp to the address where the caller's fp is stored.
@@ -56,8 +48,10 @@ pub struct FramepointerUnwinderArm64;
 //  ^ sp                    ^ fp
 //
 // So: *fp is the caller's frame pointer, and *(fp + 8) is the return address.
+pub struct FramepointerUnwinderArm64;
+
 impl FramepointerUnwinderArm64 {
-    pub fn unwind_first(&self) -> Result<UnwindResult, FramepointerUnwinderError> {
+    pub fn unwind_first(&self) -> Result<UnwindResult<UnwindRuleArm64>, FramepointerUnwinderError> {
         // TODO: Disassembly starting from pc and detect prologue / epiloge
 
         // For now, just return prologue / epilogue and pretend we're in the middle of a function.
@@ -65,8 +59,6 @@ impl FramepointerUnwinderArm64 {
     }
 }
 
-// Comment saved here for posterity, it describes x86_64 framepointer stackwalk.
-//
 // Do a frame pointer stack walk. Code that is compiled with frame pointers
 // has the following function prologues and epilogues:
 //
@@ -106,3 +98,15 @@ impl FramepointerUnwinderArm64 {
 //     return_address: *const c_void,
 // }
 // and rbp is a *const CallFrameInfo.
+pub struct FramepointerUnwinderX86_64;
+
+impl FramepointerUnwinderX86_64 {
+    pub fn unwind_first(
+        &self,
+    ) -> Result<UnwindResult<UnwindRuleX86_64>, FramepointerUnwinderError> {
+        // TODO: Disassembly starting from pc and detect prologue / epiloge
+
+        // For now, just return prologue / epilogue and pretend we're in the middle of a function.
+        Ok(UnwindResult::ExecRule(UnwindRuleX86_64::UseFramePointer))
+    }
+}

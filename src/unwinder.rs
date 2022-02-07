@@ -6,7 +6,7 @@ use super::error::{Error, UnwinderError};
 use super::rule_cache::CacheResult;
 use super::rules::UnwindRuleArm64;
 use super::unwind_result::UnwindResult;
-use super::unwinders::{CompactUnwindInfoUnwinder, DwarfUnwinder};
+use super::unwinders::{CompactUnwindInfoUnwinder, DwarfUnwinderAarch64};
 use super::unwindregs::UnwindRegsArm64;
 
 use std::ops::DerefMut;
@@ -104,7 +104,7 @@ impl<D: Deref<Target = [u8]>> Unwinder<D> {
         regs: &mut UnwindRegsArm64,
         cache: &mut Cache<D>,
         read_mem: &mut F,
-    ) -> Result<UnwindResult, UnwinderError>
+    ) -> Result<UnwindResult<UnwindRuleArm64>, UnwinderError>
     where
         F: FnMut(u64) -> Result<u64, ()>,
     {
@@ -152,7 +152,7 @@ impl<D: Deref<Target = [u8]>> Unwinder<D> {
         regs: &mut UnwindRegsArm64,
         cache: &mut Cache<D>,
         read_mem: &mut F,
-    ) -> Result<UnwindResult, UnwinderError>
+    ) -> Result<UnwindResult<UnwindRuleArm64>, UnwinderError>
     where
         F: FnMut(u64) -> Result<u64, ()>,
     {
@@ -249,7 +249,7 @@ impl<D: Deref<Target = [u8]>> Module<D> {
         rel_pc: u32,
         read_mem: &mut F,
         cache: &mut Cache<D>,
-    ) -> Result<UnwindResult, UnwinderError>
+    ) -> Result<UnwindResult<UnwindRuleArm64>, UnwinderError>
     where
         F: FnMut(u64) -> Result<u64, ()>,
     {
@@ -266,7 +266,7 @@ impl<D: Deref<Target = [u8]>> Module<D> {
             }
             UnwindData::CompactUnwindInfoAndEhFrame(unwind_data, eh_frame_data) => {
                 // eprintln!("unwinding with cui and eh_frame in module {}", self.name);
-                let mut dwarf_unwinder = DwarfUnwinder::new(
+                let mut dwarf_unwinder = DwarfUnwinderAarch64::new(
                     EndianReader::new(ArcData(eh_frame_data.clone()), LittleEndian),
                     cache.eh_frame_unwind_context.deref_mut(),
                     &self.sections,
@@ -291,7 +291,7 @@ impl<D: Deref<Target = [u8]>> Module<D> {
         rel_ra: u32,
         read_mem: &mut F,
         cache: &mut Cache<D>,
-    ) -> Result<UnwindResult, UnwinderError>
+    ) -> Result<UnwindResult<UnwindRuleArm64>, UnwinderError>
     where
         F: FnMut(u64) -> Result<u64, ()>,
     {
@@ -308,7 +308,7 @@ impl<D: Deref<Target = [u8]>> Module<D> {
             }
             UnwindData::CompactUnwindInfoAndEhFrame(unwind_data, eh_frame_data) => {
                 // eprintln!("unwinding with cui and eh_frame in module {}", self.name);
-                let mut dwarf_unwinder = DwarfUnwinder::new(
+                let mut dwarf_unwinder = DwarfUnwinderAarch64::new(
                     EndianReader::new(ArcData(eh_frame_data.clone()), LittleEndian),
                     &mut cache.eh_frame_unwind_context,
                     &self.sections,

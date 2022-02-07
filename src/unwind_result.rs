@@ -1,6 +1,4 @@
-use crate::rules::UnwindRuleArm64;
-
-pub enum UnwindResult {
-    ExecRule(UnwindRuleArm64),
+pub enum UnwindResult<R> {
+    ExecRule(R),
     Uncacheable(u64),
 }

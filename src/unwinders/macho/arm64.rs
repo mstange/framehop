@@ -1,8 +1,7 @@
 use gimli::Reader;
 
-use super::{
-    DwarfUnwinder, DwarfUnwinderError, FramepointerUnwinderArm64, FramepointerUnwinderError,
-};
+use super::super::{DwarfUnwinderAarch64, FramepointerUnwinderArm64};
+use super::CompactUnwindInfoUnwinderError;
 use crate::rules::UnwindRuleArm64;
 use crate::unwind_result::UnwindResult;
 use crate::unwindregs::UnwindRegsArm64;
@@ -11,40 +10,13 @@ use macho_unwind_info::UnwindInfo;
 
 pub struct CompactUnwindInfoUnwinder<'a: 'c, 'u, 'c, R: Reader> {
     unwind_info_data: &'a [u8],
-    dwarf_unwinder: Option<&'u mut DwarfUnwinder<'c, R>>,
-}
-
-#[derive(thiserror::Error, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CompactUnwindInfoUnwinderError {
-    #[error("Bad __unwind_info format: {0}")]
-    BadFormat(#[from] macho_unwind_info::Error),
-
-    #[error("Address 0x{0:x} outside of the range covered by __unwind_info")]
-    AddressOutsideRange(u32),
-
-    #[error("Encountered a non-leaf function which was marked as frameless.")]
-    CallerCannotBeFrameless,
-
-    #[error("No unwind info (null opcode) for this function in __unwind_info")]
-    FunctionHasNoInfo,
-
-    #[error("Unrecognized __unwind_info opcode kind {0}")]
-    BadOpcodeKind(u8),
-
-    #[error("Needed DWARF unwinder but didn't have one")]
-    NoDwarfUnwinder,
-
-    #[error("DWARF unwinding failed: {0}")]
-    BadDwarfUnwinding(#[from] DwarfUnwinderError),
-
-    #[error("Framepointer unwinding failed: {0}")]
-    BadFramepointerUnwinding(#[from] FramepointerUnwinderError),
+    dwarf_unwinder: Option<&'u mut DwarfUnwinderAarch64<'c, R>>,
 }
 
 impl<'a: 'c, 'u, 'c, R: Reader> CompactUnwindInfoUnwinder<'a, 'u, 'c, R> {
     pub fn new(
         unwind_info_data: &'a [u8],
-        dwarf_unwinder: Option<&'u mut DwarfUnwinder<'c, R>>,
+        dwarf_unwinder: Option<&'u mut DwarfUnwinderAarch64<'c, R>>,
     ) -> Self {
         Self {
             unwind_info_data,
@@ -70,7 +42,7 @@ impl<'a: 'c, 'u, 'c, R: Reader> CompactUnwindInfoUnwinder<'a, 'u, 'c, R> {
         pc: u64,
         rel_pc: u32,
         read_mem: &mut F,
-    ) -> Result<UnwindResult, CompactUnwindInfoUnwinderError>
+    ) -> Result<UnwindResult<UnwindRuleArm64>, CompactUnwindInfoUnwinderError>
     where
         F: FnMut(u64) -> Result<u64, ()>,
     {
@@ -146,7 +118,7 @@ impl<'a: 'c, 'u, 'c, R: Reader> CompactUnwindInfoUnwinder<'a, 'u, 'c, R> {
         return_address: u64,
         rel_ra: u32,
         read_mem: &mut F,
-    ) -> Result<UnwindResult, CompactUnwindInfoUnwinderError>
+    ) -> Result<UnwindResult<UnwindRuleArm64>, CompactUnwindInfoUnwinderError>
     where
         F: FnMut(u64) -> Result<u64, ()>,
     {

@@ -12,11 +12,8 @@ pub enum Error {
 }
 
 impl From<FramepointerUnwinderError> for Error {
-    fn from(err: FramepointerUnwinderError) -> Self {
-        match err {
-            FramepointerUnwinderError::FoundStackEnd => Error::StackEndReached,
-            _ => Error::UnwindingFailed,
-        }
+    fn from(_: FramepointerUnwinderError) -> Self {
+        Error::UnwindingFailed
     }
 }
 
