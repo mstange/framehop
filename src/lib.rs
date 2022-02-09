@@ -22,7 +22,6 @@ use cache::Cache;
 use error::Error;
 use rules::{UnwindRuleAarch64, UnwindRuleX86_64};
 use unwinder::UnwinderInternal;
-use unwindregs::{UnwindRegsAarch64, UnwindRegsX86_64};
 
 #[cfg(target_arch = "aarch64")]
 pub type CacheNative<D> = CacheAarch64<D>;

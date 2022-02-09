@@ -161,14 +161,16 @@ impl<D: Deref<Target = [u8]>, A: Arch + DwarfUnwinding + CompactUnwindInfoUnwind
             CacheResult::Miss(handle) => handle,
         };
 
-        let module_index = self
-            .find_module_for_address(lookup_address)
-            .ok_or(Error::UnwindingFailed)?;
-        let module = &self.modules[module_index];
-        let unwind_rule = match callback(module, address.address(), regs, cache, read_mem) {
-            Ok(UnwindResult::ExecRule(rule)) => rule,
-            Ok(UnwindResult::Uncacheable(return_address)) => return Ok(return_address),
-            Err(_) => A::UnwindRule::fallback_rule(),
+        let unwind_rule = match self.find_module_for_address(lookup_address) {
+            None => A::UnwindRule::fallback_rule(),
+            Some(module_index) => {
+                let module = &self.modules[module_index];
+                match callback(module, address.address(), regs, cache, read_mem) {
+                    Ok(UnwindResult::ExecRule(rule)) => rule,
+                    Ok(UnwindResult::Uncacheable(return_address)) => return Ok(return_address),
+                    Err(_) => A::UnwindRule::fallback_rule(),
+                }
+            }
         };
         cache.rule_cache.insert(cache_handle, unwind_rule);
         unwind_rule.exec(regs, read_mem)
