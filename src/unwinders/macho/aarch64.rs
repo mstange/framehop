@@ -9,7 +9,7 @@ use macho_unwind_info::opcodes::OpcodeArm64;
 impl CompactUnwindInfoUnwinding for ArchAarch64 {
     fn unwind_first<F>(
         opcode: u32,
-        regs: &mut UnwindRegsAarch64,
+        _regs: &mut UnwindRegsAarch64,
         _pc: u64,
         _rel_pc: u32,
         _read_mem: &mut F,
@@ -26,18 +26,9 @@ impl CompactUnwindInfoUnwinding for ArchAarch64 {
                 if stack_size_in_bytes == 0 {
                     CuiUnwindResult::ExecRule(UnwindRuleAarch64::NoOp)
                 } else {
-                    match u8::try_from(stack_size_in_bytes / 16) {
-                        Ok(sp_offset_by_16) => {
-                            CuiUnwindResult::ExecRule(UnwindRuleAarch64::OffsetSp {
-                                sp_offset_by_16,
-                            })
-                        }
-                        Err(_) => {
-                            eprintln!("Uncacheable rule in compact unwind info unwinder because Frameless stack size doesn't fit");
-                            regs.set_sp(regs.sp() + stack_size_in_bytes as u64);
-                            CuiUnwindResult::Uncacheable(regs.lr())
-                        }
-                    }
+                    CuiUnwindResult::ExecRule(UnwindRuleAarch64::OffsetSp {
+                        sp_offset_by_16: stack_size_in_bytes / 16,
+                    })
                 }
             }
             OpcodeArm64::Dwarf { eh_frame_fde } => CuiUnwindResult::NeedDwarf(eh_frame_fde),

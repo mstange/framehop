@@ -120,7 +120,7 @@ fn translate_into_unwind_rule<R: gimli::Reader>(
         CfaRule::RegisterAndOffset { register, offset } => match *register {
             AArch64::SP => {
                 let sp_offset_by_16 =
-                    u8::try_from(offset / 16).map_err(|_| ConversionError::SpOffsetDoesNotFit)?;
+                    u16::try_from(offset / 16).map_err(|_| ConversionError::SpOffsetDoesNotFit)?;
                 let lr_cfa_offset = register_rule_to_cfa_offset(lr_rule)?;
                 let fp_cfa_offset = register_rule_to_cfa_offset(fp_rule)?;
                 match (lr_cfa_offset, fp_cfa_offset) {
@@ -128,7 +128,7 @@ fn translate_into_unwind_rule<R: gimli::Reader>(
                     (None, None) => Ok(UnwindRuleAarch64::OffsetSp { sp_offset_by_16 }),
                     (Some(lr_cfa_offset), None) => {
                         let lr_storage_offset_from_sp_by_8 =
-                            i8::try_from((offset + lr_cfa_offset) / 8)
+                            i16::try_from((offset + lr_cfa_offset) / 8)
                                 .map_err(|_| ConversionError::LrStorageOffsetDoesNotFit)?;
                         Ok(UnwindRuleAarch64::OffsetSpAndRestoreLr {
                             sp_offset_by_16,
@@ -137,10 +137,10 @@ fn translate_into_unwind_rule<R: gimli::Reader>(
                     }
                     (Some(lr_cfa_offset), Some(fp_cfa_offset)) => {
                         let lr_storage_offset_from_sp_by_8 =
-                            i8::try_from((offset + lr_cfa_offset) / 8)
+                            i16::try_from((offset + lr_cfa_offset) / 8)
                                 .map_err(|_| ConversionError::LrStorageOffsetDoesNotFit)?;
                         let fp_storage_offset_from_sp_by_8 =
-                            i8::try_from((offset + fp_cfa_offset) / 8)
+                            i16::try_from((offset + fp_cfa_offset) / 8)
                                 .map_err(|_| ConversionError::FpStorageOffsetDoesNotFit)?;
                         Ok(UnwindRuleAarch64::OffsetSpAndRestoreFpAndLr {
                             sp_offset_by_16,
@@ -158,12 +158,14 @@ fn translate_into_unwind_rule<R: gimli::Reader>(
                 if *offset == 16 && fp_cfa_offset == -16 && lr_cfa_offset == -8 {
                     Ok(UnwindRuleAarch64::UseFramePointer)
                 } else {
-                    let sp_offset_from_fp_by_8 = u8::try_from(offset / 8)
+                    let sp_offset_from_fp_by_8 = u16::try_from(offset / 8)
                         .map_err(|_| ConversionError::SpOffsetFromFpDoesNotFit)?;
-                    let lr_storage_offset_from_fp_by_8 = i8::try_from((offset + lr_cfa_offset) / 8)
-                        .map_err(|_| ConversionError::LrStorageOffsetDoesNotFit)?;
-                    let fp_storage_offset_from_fp_by_8 = i8::try_from((offset + fp_cfa_offset) / 8)
-                        .map_err(|_| ConversionError::FpStorageOffsetDoesNotFit)?;
+                    let lr_storage_offset_from_fp_by_8 =
+                        i16::try_from((offset + lr_cfa_offset) / 8)
+                            .map_err(|_| ConversionError::LrStorageOffsetDoesNotFit)?;
+                    let fp_storage_offset_from_fp_by_8 =
+                        i16::try_from((offset + fp_cfa_offset) / 8)
+                            .map_err(|_| ConversionError::FpStorageOffsetDoesNotFit)?;
                     Ok(UnwindRuleAarch64::UseFramepointerWithOffsets {
                         sp_offset_from_fp_by_8,
                         fp_storage_offset_from_fp_by_8,

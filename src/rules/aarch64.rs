@@ -7,25 +7,25 @@ pub enum UnwindRuleAarch64 {
     /// (sp, fp, lr) = (sp, fp, lr)
     NoOp,
     /// (sp, fp, lr) = (sp + 16x, fp, lr)
-    OffsetSp { sp_offset_by_16: u8 },
+    OffsetSp { sp_offset_by_16: u16 },
     /// (sp, fp, lr) = (sp + 16x, fp, *(sp + 8y))
     OffsetSpAndRestoreLr {
-        sp_offset_by_16: u8,
-        lr_storage_offset_from_sp_by_8: i8,
+        sp_offset_by_16: u16,
+        lr_storage_offset_from_sp_by_8: i16,
     },
     /// (sp, fp, lr) = (sp + 16x, *(sp + 8y), *(sp + 8z))
     OffsetSpAndRestoreFpAndLr {
-        sp_offset_by_16: u8,
-        fp_storage_offset_from_sp_by_8: i8,
-        lr_storage_offset_from_sp_by_8: i8,
+        sp_offset_by_16: u16,
+        fp_storage_offset_from_sp_by_8: i16,
+        lr_storage_offset_from_sp_by_8: i16,
     },
     /// (sp, fp, lr) = (fp + 16, *fp, *(fp + 8))
     UseFramePointer,
     /// (sp, fp, lr) = (fp + 8x, *(fp + 8y), *(fp + 8z))
     UseFramepointerWithOffsets {
-        sp_offset_from_fp_by_8: u8,
-        fp_storage_offset_from_fp_by_8: i8,
-        lr_storage_offset_from_fp_by_8: i8,
+        sp_offset_from_fp_by_8: u16,
+        fp_storage_offset_from_fp_by_8: i16,
+        lr_storage_offset_from_fp_by_8: i16,
     },
 }
 
