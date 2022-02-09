@@ -11,6 +11,7 @@ use crate::unwinders::{
     CompactUnwindInfoUnwinder, CompactUnwindInfoUnwinding, CuiUnwindResult, DwarfUnwinder,
     DwarfUnwinding,
 };
+use crate::CodeAddress;
 
 use std::marker::PhantomData;
 use std::{
@@ -18,7 +19,6 @@ use std::{
     ops::{Deref, Range},
     sync::Arc,
 };
-
 pub trait Unwinder {
     type UnwindRegs;
     type Cache;
@@ -134,8 +134,7 @@ impl<D: Deref<Target = [u8]>, A: Arch + DwarfUnwinding + CompactUnwindInfoUnwind
 
     fn with_cache<F, G>(
         &self,
-        address: u64,
-        is_return_address: bool,
+        address: CodeAddress,
         regs: &mut A::UnwindRegs,
         cache: &mut Cache<D, A::UnwindRule>,
         read_mem: &mut F,
@@ -151,11 +150,7 @@ impl<D: Deref<Target = [u8]>, A: Arch + DwarfUnwinding + CompactUnwindInfoUnwind
             &mut F,
         ) -> Result<UnwindResult<A::UnwindRule>, UnwinderError>,
     {
-        let lookup_address = if is_return_address {
-            address - 1
-        } else {
-            address
-        };
+        let lookup_address = address.address_for_lookup();
         let cache_handle = match cache.rule_cache.try_unwind(
             lookup_address,
             self.modules_generation,
@@ -170,7 +165,7 @@ impl<D: Deref<Target = [u8]>, A: Arch + DwarfUnwinding + CompactUnwindInfoUnwind
             .find_module_for_address(lookup_address)
             .ok_or(Error::UnwindingFailed)?;
         let module = &self.modules[module_index];
-        let unwind_rule = match callback(module, address, regs, cache, read_mem) {
+        let unwind_rule = match callback(module, address.address(), regs, cache, read_mem) {
             Ok(UnwindResult::ExecRule(rule)) => rule,
             Ok(UnwindResult::Uncacheable(return_address)) => return Ok(return_address),
             Err(_) => A::UnwindRule::fallback_rule(),
@@ -190,7 +185,13 @@ impl<D: Deref<Target = [u8]>, A: Arch + DwarfUnwinding + CompactUnwindInfoUnwind
         F: FnMut(u64) -> Result<u64, ()>,
     {
         // eprintln!("unwind_first for {:x}", pc);
-        self.with_cache(pc, false, regs, cache, read_mem, Self::unwind_first_impl)
+        self.with_cache(
+            CodeAddress::InstructionPointer(pc),
+            regs,
+            cache,
+            read_mem,
+            Self::unwind_first_impl,
+        )
     }
 
     pub fn unwind_next<F>(
@@ -205,8 +206,7 @@ impl<D: Deref<Target = [u8]>, A: Arch + DwarfUnwinding + CompactUnwindInfoUnwind
     {
         // eprintln!("unwind_next for {:x}", return_address);
         self.with_cache(
-            return_address,
-            true,
+            CodeAddress::ReturnAddress(return_address),
             regs,
             cache,
             read_mem,

@@ -1,6 +1,7 @@
 mod arcdata;
 mod arch;
 mod cache;
+mod code_address;
 mod display_utils;
 mod error;
 mod rule_cache;
@@ -12,6 +13,7 @@ mod unwindregs;
 
 use std::ops::Deref;
 
+pub use code_address::CodeAddress;
 pub use unwinder::{Module, SectionAddresses, UnwindData, Unwinder};
 pub use unwindregs::*;
 
