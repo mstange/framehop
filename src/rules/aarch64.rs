@@ -1,5 +1,7 @@
 use crate::{error::Error, UnwindRegsArm64};
 
+use super::UnwindRule;
+
 #[derive(Clone, Copy, Debug)]
 pub enum UnwindRuleArm64 {
     /// (sp, fp, lr) = (sp, fp, lr)
@@ -31,8 +33,9 @@ fn wrapping_add_signed(lhs: u64, rhs: i64) -> u64 {
     lhs.wrapping_add(rhs as u64)
 }
 
-impl UnwindRuleArm64 {
-    pub fn exec<F>(self, regs: &mut UnwindRegsArm64, read_mem: &mut F) -> Result<u64, Error>
+impl UnwindRule for UnwindRuleArm64 {
+    type UnwindRegs = UnwindRegsArm64;
+    fn exec<F>(self, regs: &mut UnwindRegsArm64, read_mem: &mut F) -> Result<u64, Error>
     where
         F: FnMut(u64) -> Result<u64, ()>,
     {

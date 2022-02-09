@@ -25,4 +25,16 @@ pub enum CompactUnwindInfoUnwinderError {
 
     #[error("Framepointer unwinding failed: {0}")]
     BadFramepointerUnwinding(#[from] FramepointerUnwinderError),
+
+    #[error("Encountered frameless function with indirect stack offset, TODO")]
+    CantHandleFramelessIndirect,
+
+    #[error("Encountered invalid unwind entry")]
+    InvalidFramelessImmediate,
+
+    #[error("Could not read return address from stack")]
+    CouldNotReadReturnAddress,
+
+    #[error("Could not restore bp register from stack")]
+    CouldNotReadBp,
 }

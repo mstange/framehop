@@ -1,22 +1,22 @@
 use gimli::{
-    AArch64, BaseAddresses, CfaRule, Reader, ReaderOffset, RegisterRule, UnwindContext,
-    UnwindSection, UnwindTableRow,
+    BaseAddresses, CfaRule, Reader, ReaderOffset, RegisterRule, UnwindContext, UnwindSection,
+    UnwindTableRow, X86_64,
 };
 
 use crate::{
-    rules::UnwindRuleArm64, unwind_result::UnwindResult, unwindregs::UnwindRegsArm64,
+    rules::UnwindRuleX86_64, unwind_result::UnwindResult, unwindregs::UnwindRegsX86_64,
     SectionAddresses,
 };
 
 use super::{ConversionError, DwarfUnwinderError};
 
-pub struct DwarfUnwinderAarch64<'a, R: Reader> {
+pub struct DwarfUnwinderX86_64<'a, R: Reader> {
     eh_frame_data: R,
     unwind_context: &'a mut UnwindContext<R>,
     bases: BaseAddresses,
 }
 
-impl<'a, R: Reader> DwarfUnwinderAarch64<'a, R> {
+impl<'a, R: Reader> DwarfUnwinderX86_64<'a, R> {
     pub fn new(
         eh_frame_data: R,
         unwind_context: &'a mut UnwindContext<R>,
@@ -35,11 +35,11 @@ impl<'a, R: Reader> DwarfUnwinderAarch64<'a, R> {
 
     pub fn unwind_first_with_fde<F>(
         &mut self,
-        regs: &mut UnwindRegsArm64,
+        regs: &mut UnwindRegsX86_64,
         pc: u64,
         fde_offset: u32,
         read_mem: &mut F,
-    ) -> Result<UnwindResult<UnwindRuleArm64>, DwarfUnwinderError>
+    ) -> Result<UnwindResult<UnwindRuleX86_64>, DwarfUnwinderError>
     where
         F: FnMut(u64) -> Result<u64, ()>,
     {
@@ -63,10 +63,9 @@ impl<'a, R: Reader> DwarfUnwinderAarch64<'a, R> {
                 }
             };
         let cfa_rule = unwind_info.cfa();
-        let fp_rule = unwind_info.register(AArch64::X29);
-        let lr_rule = unwind_info.register(AArch64::X30);
+        let bp_rule = unwind_info.register(X86_64::RBP);
 
-        match translate_into_unwind_rule(cfa_rule, &fp_rule, &lr_rule) {
+        match translate_into_unwind_rule(cfa_rule, &bp_rule) {
             Ok(unwind_rule) => return Ok(UnwindResult::ExecRule(unwind_rule)),
             Err(err) => {
                 eprintln!("Unwind rule translation failed: {:?}", err);
@@ -76,36 +75,36 @@ impl<'a, R: Reader> DwarfUnwinderAarch64<'a, R> {
         // println!("cfa rule: {:?}, regs: {:?}", cfa_rule, regs);
         let cfa = eval_cfa_rule(cfa_rule, regs).ok_or(DwarfUnwinderError::CouldNotRecoverCfa)?;
 
-        let lr = regs.lr();
-        let fp = regs.fp();
+        let bp = regs.bp();
         let sp = regs.sp();
 
         if cfa < sp {
             return Err(DwarfUnwinderError::StackPointerMovedBackwards);
         }
         // println!("cfa: {:x}", cfa);
-        // println!("rules: fp {:?}, lr {:?}", fp_rule, lr_rule);
-        let fp = eval_rule(fp_rule, cfa, fp, regs, read_mem).unwrap_or(fp);
-        let lr = eval_rule(lr_rule, cfa, lr, regs, read_mem).unwrap_or(lr);
+        // println!("rules: bp {:?}, lr {:?}", bp_rule, lr_rule);
+        let bp = eval_rule(bp_rule, cfa, bp, regs, read_mem).unwrap_or(bp);
 
-        if cfa == sp && lr == pc {
+        if cfa == sp {
             return Err(DwarfUnwinderError::DidNotAdvance);
         }
 
-        regs.set_fp(fp);
-        regs.set_sp(cfa);
-        regs.set_lr(lr);
+        let return_address =
+            read_mem(cfa - 8).map_err(|_| DwarfUnwinderError::CouldNotRecoverReturnAddress)?;
 
-        Ok(UnwindResult::Uncacheable(lr))
+        regs.set_bp(bp);
+        regs.set_sp(cfa);
+
+        Ok(UnwindResult::Uncacheable(return_address))
     }
 
     pub fn unwind_next_with_fde<F>(
         &mut self,
-        regs: &mut UnwindRegsArm64,
+        regs: &mut UnwindRegsX86_64,
         return_address: u64,
         fde_offset: u32,
         read_mem: &mut F,
-    ) -> Result<UnwindResult<UnwindRuleArm64>, DwarfUnwinderError>
+    ) -> Result<UnwindResult<UnwindRuleX86_64>, DwarfUnwinderError>
     where
         F: FnMut(u64) -> Result<u64, ()>,
     {
@@ -135,10 +134,9 @@ impl<'a, R: Reader> DwarfUnwinderAarch64<'a, R> {
             }
         };
         let cfa_rule = unwind_info.cfa();
-        let fp_rule = unwind_info.register(AArch64::X29);
-        let lr_rule = unwind_info.register(AArch64::X30);
+        let bp_rule = unwind_info.register(X86_64::RBP);
 
-        match translate_into_unwind_rule(cfa_rule, &fp_rule, &lr_rule) {
+        match translate_into_unwind_rule(cfa_rule, &bp_rule) {
             Ok(unwind_rule) => return Ok(UnwindResult::ExecRule(unwind_rule)),
             Err(err) => {
                 eprintln!("Unwind rule translation failed: {:?}", err);
@@ -152,16 +150,17 @@ impl<'a, R: Reader> DwarfUnwinderAarch64<'a, R> {
         }
 
         // println!("cfa: {:x}", cfa);
-        // println!("rules: fp {:?}, lr {:?}", fp_rule, lr_rule);
-        let fp = eval_rule(fp_rule, cfa, regs.fp(), regs, read_mem)
+        // println!("rules: fp {:?}, lr {:?}", bp_rule, lr_rule);
+        let bp = eval_rule(bp_rule, cfa, regs.bp(), regs, read_mem)
             .ok_or(DwarfUnwinderError::CouldNotRecoverFramePointer)?;
-        let lr = eval_rule(lr_rule, cfa, regs.lr(), regs, read_mem)
-            .ok_or(DwarfUnwinderError::CouldNotRecoverReturnAddress)?;
-        regs.set_fp(fp);
-        regs.set_sp(cfa);
-        regs.set_lr(lr);
 
-        Ok(UnwindResult::Uncacheable(lr))
+        let return_address =
+            read_mem(cfa - 8).map_err(|_| DwarfUnwinderError::CouldNotRecoverReturnAddress)?;
+
+        regs.set_bp(bp);
+        regs.set_sp(cfa);
+
+        Ok(UnwindResult::Uncacheable(return_address))
     }
 }
 
@@ -181,62 +180,42 @@ fn register_rule_to_cfa_offset<R: gimli::Reader>(
 
 fn translate_into_unwind_rule<R: gimli::Reader>(
     cfa_rule: &CfaRule<R>,
-    fp_rule: &RegisterRule<R>,
-    lr_rule: &RegisterRule<R>,
-) -> Result<UnwindRuleArm64, ConversionError> {
+    bp_rule: &RegisterRule<R>,
+) -> Result<UnwindRuleX86_64, ConversionError> {
     match cfa_rule {
         CfaRule::RegisterAndOffset { register, offset } => match *register {
-            AArch64::SP => {
-                let sp_offset_by_16 =
-                    u8::try_from(offset / 16).map_err(|_| ConversionError::SpOffsetDoesNotFit)?;
-                let lr_cfa_offset = register_rule_to_cfa_offset(lr_rule)?;
-                let fp_cfa_offset = register_rule_to_cfa_offset(fp_rule)?;
-                match (lr_cfa_offset, fp_cfa_offset) {
-                    (None, Some(_)) => Err(ConversionError::RestoringFpButNotLr),
-                    (None, None) => Ok(UnwindRuleArm64::OffsetSp { sp_offset_by_16 }),
-                    (Some(lr_cfa_offset), None) => {
-                        let lr_storage_offset_from_sp_by_8 =
-                            i8::try_from((offset + lr_cfa_offset) / 8)
-                                .map_err(|_| ConversionError::LrStorageOffsetDoesNotFit)?;
-                        Ok(UnwindRuleArm64::OffsetSpAndRestoreLr {
-                            sp_offset_by_16,
-                            lr_storage_offset_from_sp_by_8,
-                        })
-                    }
-                    (Some(lr_cfa_offset), Some(fp_cfa_offset)) => {
-                        let lr_storage_offset_from_sp_by_8 =
-                            i8::try_from((offset + lr_cfa_offset) / 8)
-                                .map_err(|_| ConversionError::LrStorageOffsetDoesNotFit)?;
-                        let fp_storage_offset_from_sp_by_8 =
-                            i8::try_from((offset + fp_cfa_offset) / 8)
+            X86_64::RSP => {
+                let sp_offset_by_8 =
+                    u16::try_from(offset / 8).map_err(|_| ConversionError::SpOffsetDoesNotFit)?;
+                let fp_cfa_offset = register_rule_to_cfa_offset(bp_rule)?;
+                match fp_cfa_offset {
+                    None => Ok(UnwindRuleX86_64::OffsetSp { sp_offset_by_8 }),
+                    Some(bp_cfa_offset) => {
+                        let bp_storage_offset_from_sp_by_8 =
+                            i8::try_from((offset + bp_cfa_offset) / 8)
                                 .map_err(|_| ConversionError::FpStorageOffsetDoesNotFit)?;
-                        Ok(UnwindRuleArm64::OffsetSpAndRestoreFpAndLr {
-                            sp_offset_by_16,
-                            fp_storage_offset_from_sp_by_8,
-                            lr_storage_offset_from_sp_by_8,
+                        Ok(UnwindRuleX86_64::OffsetSpAndRestoreBp {
+                            sp_offset_by_8,
+                            bp_storage_offset_from_sp_by_8,
                         })
                     }
                 }
             }
-            AArch64::X29 => {
-                let lr_cfa_offset = register_rule_to_cfa_offset(lr_rule)?
-                    .ok_or(ConversionError::FramePointerRuleDoesNotRestoreLr)?;
-                let fp_cfa_offset = register_rule_to_cfa_offset(fp_rule)?
-                    .ok_or(ConversionError::FramePointerRuleDoesNotRestoreFp)?;
-                if *offset == 16 && fp_cfa_offset == -16 && lr_cfa_offset == -8 {
-                    Ok(UnwindRuleArm64::UseFramePointer)
+            X86_64::RBP => {
+                let bp_cfa_offset = register_rule_to_cfa_offset(bp_rule)?
+                    .ok_or(ConversionError::FramePointerRuleDoesNotRestoreBp)?;
+                if *offset == 16 && bp_cfa_offset == -16 {
+                    Ok(UnwindRuleX86_64::UseFramePointer)
                 } else {
-                    let sp_offset_from_fp_by_8 = u8::try_from(offset / 8)
-                        .map_err(|_| ConversionError::SpOffsetFromFpDoesNotFit)?;
-                    let lr_storage_offset_from_fp_by_8 = i8::try_from((offset + lr_cfa_offset) / 8)
-                        .map_err(|_| ConversionError::LrStorageOffsetDoesNotFit)?;
-                    let fp_storage_offset_from_fp_by_8 = i8::try_from((offset + fp_cfa_offset) / 8)
-                        .map_err(|_| ConversionError::FpStorageOffsetDoesNotFit)?;
-                    Ok(UnwindRuleArm64::UseFramepointerWithOffsets {
-                        sp_offset_from_fp_by_8,
-                        fp_storage_offset_from_fp_by_8,
-                        lr_storage_offset_from_fp_by_8,
-                    })
+                    Err(ConversionError::FramePointerRuleHasStrangeBpOffset)
+                    // let sp_offset_from_bp_by_8 = u8::try_from(offset / 8)
+                    //     .map_err(|_| ConversionError::SpOffsetFromBpDoesNotFit)?;
+                    // let bp_storage_offset_from_bp_by_8 = i8::try_from((offset + bp_cfa_offset) / 8)
+                    //     .map_err(|_| ConversionError::BpStorageOffsetDoesNotFit)?;
+                    // Ok(UnwindRuleX86_64::UseFramepointerWithOffsets {
+                    //     sp_offset_from_bp_by_8,
+                    //     bp_storage_offset_from_bp_by_8,
+                    // })
                 }
             }
             _ => Err(ConversionError::CfaIsOffsetFromUnknownRegister),
@@ -245,13 +224,12 @@ fn translate_into_unwind_rule<R: gimli::Reader>(
     }
 }
 
-fn eval_cfa_rule<R: gimli::Reader>(rule: &CfaRule<R>, regs: &UnwindRegsArm64) -> Option<u64> {
+fn eval_cfa_rule<R: gimli::Reader>(rule: &CfaRule<R>, regs: &UnwindRegsX86_64) -> Option<u64> {
     match rule {
         CfaRule::RegisterAndOffset { register, offset } => {
             let val = match *register {
-                AArch64::SP => regs.sp(),
-                AArch64::X29 => regs.fp(),
-                AArch64::X30 => regs.lr(),
+                X86_64::RSP => regs.sp(),
+                X86_64::RBP => regs.bp(),
                 _ => return None,
             };
             u64::try_from(i64::try_from(val).ok()?.checked_add(*offset)?).ok()
@@ -264,7 +242,7 @@ fn eval_rule<R, F>(
     rule: RegisterRule<R>,
     cfa: u64,
     val: u64,
-    regs: &UnwindRegsArm64,
+    regs: &UnwindRegsX86_64,
     read_mem: &mut F,
 ) -> Option<u64>
 where
@@ -283,9 +261,8 @@ where
             u64::try_from(i64::try_from(cfa).ok()?.checked_add(offset)?).ok()
         }
         RegisterRule::Register(register) => match register {
-            AArch64::SP => Some(regs.sp()),
-            AArch64::X29 => Some(regs.fp()),
-            AArch64::X30 => Some(regs.lr()),
+            X86_64::RSP => Some(regs.sp()),
+            X86_64::RBP => Some(regs.bp()),
             _ => None,
         },
         RegisterRule::Expression(_) => {

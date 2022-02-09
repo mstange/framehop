@@ -4,7 +4,7 @@ use super::arcdata::{ArcData, ArcDataReader};
 use super::cache::Cache;
 use super::error::{Error, UnwinderError};
 use super::rule_cache::CacheResult;
-use super::rules::UnwindRuleArm64;
+use super::rules::{UnwindRule, UnwindRuleArm64};
 use super::unwind_result::UnwindResult;
 use super::unwinders::{CompactUnwindInfoUnwinder, DwarfUnwinderAarch64};
 use super::unwindregs::UnwindRegsArm64;
@@ -72,7 +72,7 @@ impl<D: Deref<Target = [u8]>> Unwinder<D> {
         &self,
         pc: u64,
         regs: &mut UnwindRegsArm64,
-        cache: &mut Cache<D>,
+        cache: &mut Cache<D, UnwindRuleArm64>,
         read_mem: &mut F,
     ) -> Result<u64, Error>
     where
@@ -102,7 +102,7 @@ impl<D: Deref<Target = [u8]>> Unwinder<D> {
         &self,
         pc: u64,
         regs: &mut UnwindRegsArm64,
-        cache: &mut Cache<D>,
+        cache: &mut Cache<D, UnwindRuleArm64>,
         read_mem: &mut F,
     ) -> Result<UnwindResult<UnwindRuleArm64>, UnwinderError>
     where
@@ -120,7 +120,7 @@ impl<D: Deref<Target = [u8]>> Unwinder<D> {
         &self,
         return_address: u64,
         regs: &mut UnwindRegsArm64,
-        cache: &mut Cache<D>,
+        cache: &mut Cache<D, UnwindRuleArm64>,
         read_mem: &mut F,
     ) -> Result<u64, Error>
     where
@@ -150,7 +150,7 @@ impl<D: Deref<Target = [u8]>> Unwinder<D> {
         &self,
         return_address: u64,
         regs: &mut UnwindRegsArm64,
-        cache: &mut Cache<D>,
+        cache: &mut Cache<D, UnwindRuleArm64>,
         read_mem: &mut F,
     ) -> Result<UnwindResult<UnwindRuleArm64>, UnwinderError>
     where
@@ -248,7 +248,7 @@ impl<D: Deref<Target = [u8]>> Module<D> {
         pc: u64,
         rel_pc: u32,
         read_mem: &mut F,
-        cache: &mut Cache<D>,
+        cache: &mut Cache<D, UnwindRuleArm64>,
     ) -> Result<UnwindResult<UnwindRuleArm64>, UnwinderError>
     where
         F: FnMut(u64) -> Result<u64, ()>,
@@ -290,7 +290,7 @@ impl<D: Deref<Target = [u8]>> Module<D> {
         return_address: u64,
         rel_ra: u32,
         read_mem: &mut F,
-        cache: &mut Cache<D>,
+        cache: &mut Cache<D, UnwindRuleArm64>,
     ) -> Result<UnwindResult<UnwindRuleArm64>, UnwinderError>
     where
         F: FnMut(u64) -> Result<u64, ()>,

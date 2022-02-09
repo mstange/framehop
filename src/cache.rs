@@ -1,15 +1,15 @@
 use std::ops::Deref;
 
-use crate::rule_cache::RuleCache;
+use crate::{rule_cache::RuleCache, rules::UnwindRule};
 
 use super::arcdata::ArcDataReader;
 
-pub struct Cache<D: Deref<Target = [u8]>> {
+pub struct Cache<D: Deref<Target = [u8]>, R: UnwindRule> {
     pub(crate) eh_frame_unwind_context: Box<gimli::UnwindContext<ArcDataReader<D>>>,
-    pub(crate) rule_cache: RuleCache,
+    pub(crate) rule_cache: RuleCache<R>,
 }
 
-impl<D: Deref<Target = [u8]>> Cache<D> {
+impl<D: Deref<Target = [u8]>, R: UnwindRule> Cache<D, R> {
     pub fn new() -> Self {
         Self {
             eh_frame_unwind_context: Box::new(gimli::UnwindContext::new()),
@@ -18,7 +18,7 @@ impl<D: Deref<Target = [u8]>> Cache<D> {
     }
 }
 
-impl<D: Deref<Target = [u8]>> Default for Cache<D> {
+impl<D: Deref<Target = [u8]>, R: UnwindRule> Default for Cache<D, R> {
     fn default() -> Self {
         Self::new()
     }

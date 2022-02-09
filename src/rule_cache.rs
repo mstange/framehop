@@ -1,10 +1,10 @@
-use crate::{error::Error, rules::UnwindRuleArm64, UnwindRegsArm64};
+use crate::{error::Error, rules::UnwindRule};
 
-pub struct RuleCache {
-    entries: Box<[Option<CacheEntry>; 509]>,
+pub struct RuleCache<R: UnwindRule> {
+    entries: Box<[Option<CacheEntry<R>>; 509]>,
 }
 
-impl RuleCache {
+impl<R: UnwindRule> RuleCache<R> {
     pub fn new() -> Self {
         Self {
             entries: Box::new([None; 509]),
@@ -15,7 +15,7 @@ impl RuleCache {
         &mut self,
         address: u64,
         modules_generation: u16,
-        regs: &mut UnwindRegsArm64,
+        regs: &mut R::UnwindRegs,
         read_mem: &mut F,
     ) -> CacheResult
     where
@@ -34,7 +34,7 @@ impl RuleCache {
         })
     }
 
-    pub fn insert(&mut self, handle: CacheHandle, unwind_rule: UnwindRuleArm64) {
+    pub fn insert(&mut self, handle: CacheHandle, unwind_rule: R) {
         let CacheHandle {
             slot,
             address,
@@ -60,8 +60,8 @@ pub struct CacheHandle {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct CacheEntry {
+pub struct CacheEntry<R: UnwindRule> {
     address: u64,
     modules_generation: u16,
-    unwind_rule: UnwindRuleArm64,
+    unwind_rule: R,
 }

@@ -1,10 +1,13 @@
+use super::UnwindRule;
 use crate::{error::Error, UnwindRegsX86_64};
 
 /// For all of these: return address is *(new_sp - 8)
 #[derive(Clone, Copy, Debug)]
 pub enum UnwindRuleX86_64 {
+    /// (sp, bp) = (sp + 8, bp)
+    JustReturn,
     /// (sp, bp) = (sp + 8x, bp)
-    OffsetSp { sp_offset_by_8: u8 },
+    OffsetSp { sp_offset_by_8: u16 },
     /// (sp, bp) = (sp + 8x, *(sp + 8y))
     OffsetSpAndRestoreBp {
         sp_offset_by_8: u16,
@@ -18,12 +21,20 @@ fn wrapping_add_signed(lhs: u64, rhs: i64) -> u64 {
     lhs.wrapping_add(rhs as u64)
 }
 
-impl UnwindRuleX86_64 {
-    pub fn exec<F>(self, regs: &mut UnwindRegsX86_64, read_mem: &mut F) -> Result<u64, Error>
+impl UnwindRule for UnwindRuleX86_64 {
+    type UnwindRegs = UnwindRegsX86_64;
+    /// Unlike the regular unwinders, this function does not promise to leave regs unchanged
+    /// if an error is returned.
+    /// That's because the other unwinders fall back to frame pointer unwinding, and there
+    /// is no fallback for this function.
+    fn exec<F>(self, regs: &mut UnwindRegsX86_64, read_mem: &mut F) -> Result<u64, Error>
     where
         F: FnMut(u64) -> Result<u64, ()>,
     {
         match self {
+            UnwindRuleX86_64::JustReturn => {
+                regs.set_sp(regs.sp() + 8);
+            }
             UnwindRuleX86_64::OffsetSp { sp_offset_by_8 } => {
                 regs.set_sp(regs.sp() + sp_offset_by_8 as u64 * 8);
             }

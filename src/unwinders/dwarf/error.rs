@@ -21,3 +21,21 @@ pub enum DwarfUnwinderError {
     #[error("Could not recover the frame pointer")]
     CouldNotRecoverFramePointer,
 }
+
+#[derive(Clone, Debug)]
+pub enum ConversionError {
+    CfaIsExpression,
+    CfaIsOffsetFromUnknownRegister,
+    SpOffsetDoesNotFit,
+    RegisterNotStoredRelativeToCfa,
+    RestoringFpButNotLr,
+    LrStorageOffsetDoesNotFit,
+    FpStorageOffsetDoesNotFit,
+    BpStorageOffsetDoesNotFit,
+    SpOffsetFromFpDoesNotFit,
+    SpOffsetFromBpDoesNotFit,
+    FramePointerRuleDoesNotRestoreLr,
+    FramePointerRuleDoesNotRestoreFp,
+    FramePointerRuleDoesNotRestoreBp,
+    FramePointerRuleHasStrangeBpOffset,
+}
