@@ -35,6 +35,14 @@ fn wrapping_add_signed(lhs: u64, rhs: i64) -> u64 {
 
 impl UnwindRule for UnwindRuleArm64 {
     type UnwindRegs = UnwindRegsArm64;
+
+    fn rule_for_stub_functions() -> Self {
+        UnwindRuleArm64::NoOp
+    }
+    fn rule_for_function_start() -> Self {
+        UnwindRuleArm64::NoOp
+    }
+
     fn exec<F>(self, regs: &mut UnwindRegsArm64, read_mem: &mut F) -> Result<u64, Error>
     where
         F: FnMut(u64) -> Result<u64, ()>,

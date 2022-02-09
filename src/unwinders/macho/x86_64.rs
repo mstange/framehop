@@ -1,68 +1,27 @@
 use gimli::Reader;
 
 use super::super::{DwarfUnwinder, FramepointerUnwinderX86_64};
-use super::CompactUnwindInfoUnwinderError;
+use super::{CompactUnwindInfoUnwinderError, CompactUnwindInfoUnwinding};
 use crate::arch::ArchX86_64;
 use crate::rules::UnwindRuleX86_64;
 use crate::unwind_result::UnwindResult;
 use crate::unwindregs::UnwindRegsX86_64;
 use macho_unwind_info::opcodes::{OpcodeX86_64, RegisterNameX86_64};
-use macho_unwind_info::UnwindInfo;
 
-pub struct CompactUnwindInfoUnwinderX86_46<'a: 'c, 'u, 'c, R: Reader> {
-    unwind_info_data: &'a [u8],
-    dwarf_unwinder: Option<&'u mut DwarfUnwinder<'c, R, ArchX86_64>>,
-}
-
-impl<'a: 'c, 'u, 'c, R: Reader> CompactUnwindInfoUnwinderX86_46<'a, 'u, 'c, R> {
-    pub fn new(
-        unwind_info_data: &'a [u8],
-        dwarf_unwinder: Option<&'u mut DwarfUnwinder<'c, R, ArchX86_64>>,
-    ) -> Self {
-        Self {
-            unwind_info_data,
-            dwarf_unwinder,
-        }
-    }
-
-    fn function_for_address(
-        &self,
-        address: u32,
-    ) -> Result<macho_unwind_info::Function, CompactUnwindInfoUnwinderError> {
-        let unwind_info = UnwindInfo::parse(self.unwind_info_data)
-            .map_err(CompactUnwindInfoUnwinderError::BadFormat)?;
-        let function = unwind_info
-            .lookup(address)
-            .map_err(CompactUnwindInfoUnwinderError::BadFormat)?;
-        function.ok_or(CompactUnwindInfoUnwinderError::AddressOutsideRange(address))
-    }
-
-    pub fn unwind_first<F>(
-        &mut self,
+impl CompactUnwindInfoUnwinding for ArchX86_64 {
+    fn unwind_first<F, R>(
+        opcode: u32,
         regs: &mut UnwindRegsX86_64,
         pc: u64,
-        rel_pc: u32,
+        _rel_pc: u32,
+        dwarf_unwinder: Option<&mut DwarfUnwinder<R, ArchX86_64>>,
         read_mem: &mut F,
     ) -> Result<UnwindResult<UnwindRuleX86_64>, CompactUnwindInfoUnwinderError>
     where
         F: FnMut(u64) -> Result<u64, ()>,
+        R: Reader,
     {
-        let function = match self.function_for_address(rel_pc) {
-            Ok(f) => f,
-            Err(CompactUnwindInfoUnwinderError::AddressOutsideRange(_)) => {
-                // pc is falling into this module's address range, but it's not covered by __unwind_info.
-                // This could mean that we're inside a stub function, in the __stubs section.
-                // All stub functions are frameless.
-                // TODO: Obtain the actual __stubs address range and do better checking here.
-                return Ok(UnwindResult::ExecRule(UnwindRuleX86_64::JustReturn));
-            }
-            Err(err) => return Err(err),
-        };
-        if rel_pc == function.start_address {
-            return Ok(UnwindResult::ExecRule(UnwindRuleX86_64::JustReturn));
-        }
-
-        let opcode = OpcodeX86_64::parse(function.opcode);
+        let opcode = OpcodeX86_64::parse(opcode);
         let unwind_result = match opcode {
             OpcodeX86_64::Null => UnwindResult::ExecRule(UnwindRuleX86_64::JustReturn),
             OpcodeX86_64::FramelessImmediate {
@@ -111,10 +70,8 @@ impl<'a: 'c, 'u, 'c, R: Reader> CompactUnwindInfoUnwinderX86_46<'a, 'u, 'c, R> {
                 return Err(CompactUnwindInfoUnwinderError::CantHandleFramelessIndirect);
             }
             OpcodeX86_64::Dwarf { eh_frame_fde } => {
-                let dwarf_unwinder = self
-                    .dwarf_unwinder
-                    .as_mut()
-                    .ok_or(CompactUnwindInfoUnwinderError::NoDwarfUnwinder)?;
+                let dwarf_unwinder =
+                    dwarf_unwinder.ok_or(CompactUnwindInfoUnwinderError::NoDwarfUnwinder)?;
                 dwarf_unwinder.unwind_first_with_fde(regs, pc, eh_frame_fde, read_mem)?
             }
             OpcodeX86_64::FrameBased { .. } => {
@@ -133,18 +90,18 @@ impl<'a: 'c, 'u, 'c, R: Reader> CompactUnwindInfoUnwinderX86_46<'a, 'u, 'c, R> {
         Ok(unwind_result)
     }
 
-    pub fn unwind_next<F>(
-        &mut self,
+    fn unwind_next<F, R>(
+        opcode: u32,
         regs: &mut UnwindRegsX86_64,
         return_address: u64,
-        rel_ra: u32,
+        dwarf_unwinder: Option<&mut DwarfUnwinder<R, ArchX86_64>>,
         read_mem: &mut F,
     ) -> Result<UnwindResult<UnwindRuleX86_64>, CompactUnwindInfoUnwinderError>
     where
         F: FnMut(u64) -> Result<u64, ()>,
+        R: Reader,
     {
-        let function = self.function_for_address(rel_ra - 1)?;
-        let opcode = OpcodeX86_64::parse(function.opcode);
+        let opcode = OpcodeX86_64::parse(opcode);
         let unwind_result = match opcode {
             OpcodeX86_64::Null => {
                 return Err(CompactUnwindInfoUnwinderError::FunctionHasNoInfo);
@@ -198,10 +155,8 @@ impl<'a: 'c, 'u, 'c, R: Reader> CompactUnwindInfoUnwinderX86_46<'a, 'u, 'c, R> {
                 return Err(CompactUnwindInfoUnwinderError::CantHandleFramelessIndirect);
             }
             OpcodeX86_64::Dwarf { eh_frame_fde } => {
-                let dwarf_unwinder = self
-                    .dwarf_unwinder
-                    .as_mut()
-                    .ok_or(CompactUnwindInfoUnwinderError::NoDwarfUnwinder)?;
+                let dwarf_unwinder =
+                    dwarf_unwinder.ok_or(CompactUnwindInfoUnwinderError::NoDwarfUnwinder)?;
                 dwarf_unwinder.unwind_next_with_fde(regs, return_address, eh_frame_fde, read_mem)?
             }
             OpcodeX86_64::FrameBased { .. } => {

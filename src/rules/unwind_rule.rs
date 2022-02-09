@@ -6,4 +6,7 @@ pub trait UnwindRule: Copy {
     fn exec<F>(self, regs: &mut Self::UnwindRegs, read_mem: &mut F) -> Result<u64, Error>
     where
         F: FnMut(u64) -> Result<u64, ()>;
+
+    fn rule_for_stub_functions() -> Self;
+    fn rule_for_function_start() -> Self;
 }

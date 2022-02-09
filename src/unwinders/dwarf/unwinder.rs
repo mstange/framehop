@@ -35,7 +35,7 @@ pub trait DwarfUnwinding {
         S: UnwindContextStorage<R>;
 }
 
-pub struct DwarfUnwinder<'a, R: Reader, A: DwarfUnwinding> {
+pub struct DwarfUnwinder<'a, R: Reader, A: DwarfUnwinding + ?Sized> {
     eh_frame_data: R,
     unwind_context: &'a mut UnwindContext<R>,
     bases: BaseAddresses,

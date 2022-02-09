@@ -23,6 +23,14 @@ fn wrapping_add_signed(lhs: u64, rhs: i64) -> u64 {
 
 impl UnwindRule for UnwindRuleX86_64 {
     type UnwindRegs = UnwindRegsX86_64;
+
+    fn rule_for_stub_functions() -> Self {
+        UnwindRuleX86_64::JustReturn
+    }
+    fn rule_for_function_start() -> Self {
+        UnwindRuleX86_64::JustReturn
+    }
+
     /// Unlike the regular unwinders, this function does not promise to leave regs unchanged
     /// if an error is returned.
     /// That's because the other unwinders fall back to frame pointer unwinding, and there

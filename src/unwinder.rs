@@ -125,7 +125,7 @@ impl<D: Deref<Target = [u8]>, A: Arch> Unwinder<D, A> {
             UnwindData::CompactUnwindInfo(data) => {
                 // eprintln!("unwinding with cui in module {}", module.name);
                 let mut unwinder =
-                    CompactUnwindInfoUnwinder::<ArcDataReader<D>>::new(&data[..], None);
+                    CompactUnwindInfoUnwinder::<ArcDataReader<D>, ArchArm64>::new(&data[..], None);
                 unwinder.unwind_first(regs, pc, rel_pc, read_mem)?
             }
             UnwindData::CompactUnwindInfoAndEhFrame(unwind_data, eh_frame_data) => {
@@ -135,8 +135,10 @@ impl<D: Deref<Target = [u8]>, A: Arch> Unwinder<D, A> {
                     cache.eh_frame_unwind_context.deref_mut(),
                     &module.sections,
                 );
-                let mut unwinder =
-                    CompactUnwindInfoUnwinder::new(&unwind_data[..], Some(&mut dwarf_unwinder));
+                let mut unwinder = CompactUnwindInfoUnwinder::<_, ArchArm64>::new(
+                    &unwind_data[..],
+                    Some(&mut dwarf_unwinder),
+                );
                 unwinder.unwind_first(regs, pc, rel_pc, read_mem)?
             }
             UnwindData::EhFrameHdrAndEhFrame(_, _) => {
@@ -202,7 +204,7 @@ impl<D: Deref<Target = [u8]>, A: Arch> Unwinder<D, A> {
             UnwindData::CompactUnwindInfo(data) => {
                 // eprintln!("unwinding with cui in module {}", module.name);
                 let mut unwinder =
-                    CompactUnwindInfoUnwinder::<ArcDataReader<D>>::new(&data[..], None);
+                    CompactUnwindInfoUnwinder::<ArcDataReader<D>, ArchArm64>::new(&data[..], None);
                 unwinder.unwind_next(regs, return_address, rel_ra, read_mem)?
             }
             UnwindData::CompactUnwindInfoAndEhFrame(unwind_data, eh_frame_data) => {
@@ -212,8 +214,10 @@ impl<D: Deref<Target = [u8]>, A: Arch> Unwinder<D, A> {
                     &mut cache.eh_frame_unwind_context,
                     &module.sections,
                 );
-                let mut unwinder =
-                    CompactUnwindInfoUnwinder::new(&unwind_data[..], Some(&mut dwarf_unwinder));
+                let mut unwinder = CompactUnwindInfoUnwinder::<_, ArchArm64>::new(
+                    &unwind_data[..],
+                    Some(&mut dwarf_unwinder),
+                );
                 unwinder.unwind_next(regs, return_address, rel_ra, read_mem)?
             }
             UnwindData::EhFrameHdrAndEhFrame(_, _) => {
