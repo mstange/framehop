@@ -14,7 +14,7 @@ impl DwarfUnwinding for ArchX86_64 {
     fn unwind_first<F, R, S>(
         unwind_info: &UnwindTableRow<R, S>,
         regs: &mut Self::UnwindRegs,
-        pc: u64,
+        _pc: u64,
         read_mem: &mut F,
     ) -> Result<UnwindResult<Self::UnwindRule>, DwarfUnwinderError>
     where
