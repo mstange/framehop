@@ -8,7 +8,7 @@ use crate::{
     SectionAddresses,
 };
 
-use super::{ConversionError, DwarfUnwinderError};
+use super::{ConversionError, DwarfUnwinder, DwarfUnwinderError};
 
 pub struct DwarfUnwinderAarch64<'a, R: Reader> {
     eh_frame_data: R,
@@ -32,8 +32,13 @@ impl<'a, R: Reader> DwarfUnwinderAarch64<'a, R> {
                 .set_got(sections.got),
         }
     }
+}
 
-    pub fn unwind_first_with_fde<F>(
+impl<'a, R: Reader> DwarfUnwinder for DwarfUnwinderAarch64<'a, R> {
+    type UnwindRegs = UnwindRegsArm64;
+    type UnwindRule = UnwindRuleArm64;
+
+    fn unwind_first_with_fde<F>(
         &mut self,
         regs: &mut UnwindRegsArm64,
         pc: u64,
@@ -99,7 +104,7 @@ impl<'a, R: Reader> DwarfUnwinderAarch64<'a, R> {
         Ok(UnwindResult::Uncacheable(lr))
     }
 
-    pub fn unwind_next_with_fde<F>(
+    fn unwind_next_with_fde<F>(
         &mut self,
         regs: &mut UnwindRegsArm64,
         return_address: u64,

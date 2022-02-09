@@ -9,6 +9,7 @@ use super::unwind_result::UnwindResult;
 use super::unwinders::{CompactUnwindInfoUnwinder, DwarfUnwinderAarch64};
 use super::unwindregs::UnwindRegsArm64;
 
+use std::marker::PhantomData;
 use std::ops::DerefMut;
 use std::{
     fmt::Debug,
@@ -16,24 +17,37 @@ use std::{
     sync::Arc,
 };
 
-pub struct Unwinder<D: Deref<Target = [u8]>> {
+pub trait Arch {
+    type UnwindRule: UnwindRule;
+    type Regs;
+}
+
+struct ArchArm64;
+impl Arch for ArchArm64 {
+    type UnwindRule = UnwindRuleArm64;
+    type Regs = UnwindRegsArm64;
+}
+
+pub struct Unwinder<D: Deref<Target = [u8]>, A: Arch> {
     /// sorted by address_range.start
     modules: Vec<Module<D>>,
     /// Incremented every time modules is changed.
     modules_generation: u16,
+    _placeholder: PhantomData<A>,
 }
 
-impl<D: Deref<Target = [u8]>> Default for Unwinder<D> {
+impl<D: Deref<Target = [u8]>, A: Arch> Default for Unwinder<D, A> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<D: Deref<Target = [u8]>> Unwinder<D> {
+impl<D: Deref<Target = [u8]>, A: Arch> Unwinder<D, A> {
     pub fn new() -> Self {
         Self {
             modules: Vec::new(),
             modules_generation: 0,
+            _placeholder: PhantomData,
         }
     }
 
@@ -336,7 +350,7 @@ mod test {
     #[test]
     fn test_basic() {
         let mut cache = Cache::new();
-        let mut unwinder = Unwinder::new();
+        let mut unwinder = Unwinder::<_, ArchArm64>::new();
         let mut unwind_info = Vec::new();
         let mut file = std::fs::File::open("fixtures/macos/arm64/fp/query-api.__unwind_info")
             .expect("file opening failed");

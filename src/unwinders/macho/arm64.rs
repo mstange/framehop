@@ -1,6 +1,6 @@
 use gimli::Reader;
 
-use super::super::{DwarfUnwinderAarch64, FramepointerUnwinderArm64};
+use super::super::{DwarfUnwinder, DwarfUnwinderAarch64, FramepointerUnwinderArm64};
 use super::CompactUnwindInfoUnwinderError;
 use crate::rules::UnwindRuleArm64;
 use crate::unwind_result::UnwindResult;
