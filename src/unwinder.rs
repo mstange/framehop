@@ -120,18 +120,6 @@ impl<D: Deref<Target = [u8]>, A: Arch> Unwinder<D, A> {
         let rel_pc = (pc - module.base_address) as u32;
 
         let unwind_result = match &module.unwind_data {
-            UnwindData::CompactUnwindInfo(data) => {
-                // eprintln!("unwinding with cui in module {}", module.name);
-                let mut unwinder = CompactUnwindInfoUnwinder::<ArchArm64>::new(&data[..]);
-                match unwinder.unwind_first(regs, pc, rel_pc, read_mem) {
-                    CuiUnwindResult::ExecRule(rule) => UnwindResult::ExecRule(rule),
-                    CuiUnwindResult::Uncacheable(return_address) => {
-                        UnwindResult::Uncacheable(return_address)
-                    }
-                    CuiUnwindResult::NeedDwarf(_) => return Err(UnwinderError::NoDwarfData),
-                    CuiUnwindResult::Err(err) => return Err(err.into()),
-                }
-            }
             UnwindData::CompactUnwindInfoAndEhFrame(unwind_data, eh_frame_data) => {
                 // eprintln!("unwinding with cui and eh_frame in module {}", module.name);
                 let mut unwinder = CompactUnwindInfoUnwinder::<ArchArm64>::new(&unwind_data[..]);
@@ -141,8 +129,12 @@ impl<D: Deref<Target = [u8]>, A: Arch> Unwinder<D, A> {
                         UnwindResult::Uncacheable(return_address)
                     }
                     CuiUnwindResult::NeedDwarf(fde_offset) => {
+                        let eh_frame_data = match eh_frame_data {
+                            Some(data) => ArcData(data.clone()),
+                            None => return Err(UnwinderError::NoDwarfData),
+                        };
                         let mut dwarf_unwinder = DwarfUnwinder::<_, ArchArm64>::new(
-                            EndianReader::new(ArcData(eh_frame_data.clone()), LittleEndian),
+                            EndianReader::new(eh_frame_data, LittleEndian),
                             &mut cache.eh_frame_unwind_context,
                             &module.sections,
                         );
@@ -211,18 +203,6 @@ impl<D: Deref<Target = [u8]>, A: Arch> Unwinder<D, A> {
         //     self.name, rel_ra, return_address, regs
         // );
         let unwind_result = match &module.unwind_data {
-            UnwindData::CompactUnwindInfo(data) => {
-                // eprintln!("unwinding with cui in module {}", module.name);
-                let mut unwinder = CompactUnwindInfoUnwinder::<ArchArm64>::new(&data[..]);
-                match unwinder.unwind_next(regs, rel_ra, read_mem) {
-                    CuiUnwindResult::ExecRule(rule) => UnwindResult::ExecRule(rule),
-                    CuiUnwindResult::Uncacheable(return_address) => {
-                        UnwindResult::Uncacheable(return_address)
-                    }
-                    CuiUnwindResult::NeedDwarf(_) => return Err(UnwinderError::NoDwarfData),
-                    CuiUnwindResult::Err(err) => return Err(err.into()),
-                }
-            }
             UnwindData::CompactUnwindInfoAndEhFrame(unwind_data, eh_frame_data) => {
                 // eprintln!("unwinding with cui and eh_frame in module {}", module.name);
                 let mut unwinder = CompactUnwindInfoUnwinder::<ArchArm64>::new(&unwind_data[..]);
@@ -232,8 +212,12 @@ impl<D: Deref<Target = [u8]>, A: Arch> Unwinder<D, A> {
                         UnwindResult::Uncacheable(return_address)
                     }
                     CuiUnwindResult::NeedDwarf(fde_offset) => {
+                        let eh_frame_data = match eh_frame_data {
+                            Some(data) => ArcData(data.clone()),
+                            None => return Err(UnwinderError::NoDwarfData),
+                        };
                         let mut dwarf_unwinder = DwarfUnwinder::<_, ArchArm64>::new(
-                            EndianReader::new(ArcData(eh_frame_data.clone()), LittleEndian),
+                            EndianReader::new(eh_frame_data, LittleEndian),
                             &mut cache.eh_frame_unwind_context,
                             &module.sections,
                         );
@@ -280,8 +264,7 @@ impl<D: Deref<Target = [u8]>, A: Arch> Unwinder<D, A> {
 }
 
 pub enum UnwindData<D: Deref<Target = [u8]>> {
-    CompactUnwindInfo(D),
-    CompactUnwindInfoAndEhFrame(D, Arc<D>),
+    CompactUnwindInfoAndEhFrame(D, Option<Arc<D>>),
     EhFrameHdrAndEhFrame(D, Arc<D>),
     EhFrame(Arc<D>),
     None,
@@ -361,7 +344,7 @@ mod test {
                 eh_frame_hdr: 0,
                 got: 0,
             },
-            UnwindData::CompactUnwindInfo(unwind_info),
+            UnwindData::CompactUnwindInfoAndEhFrame(unwind_info, None),
         ));
         let stack = [
             1,
