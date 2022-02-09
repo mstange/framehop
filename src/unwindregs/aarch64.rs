@@ -9,6 +9,9 @@ pub struct UnwindRegsAarch64 {
     fp: u64,
 }
 
+#[cfg(target_arch = "aarch64")]
+pub type UnwindRegsNative = UnwindRegsAarch64;
+
 /// On macOS arm64, system libraries are aarch64e binaries, and aarch64e can do pointer authentication:
 /// The low bits of the pointer are the actual pointer value, and the high bits are an encrypted hash.
 /// During stackwalking, we need to strip off this hash.
