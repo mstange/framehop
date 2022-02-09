@@ -17,9 +17,6 @@ pub enum CompactUnwindInfoUnwinderError {
     #[error("Unrecognized __unwind_info opcode kind {0}")]
     BadOpcodeKind(u8),
 
-    #[error("Needed DWARF unwinder but didn't have one")]
-    NoDwarfUnwinder,
-
     #[error("DWARF unwinding failed: {0}")]
     BadDwarfUnwinding(#[from] DwarfUnwinderError),
 

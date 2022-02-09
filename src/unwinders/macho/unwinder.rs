@@ -1,52 +1,49 @@
-use gimli::Reader;
+use std::marker::PhantomData;
 
-use super::super::DwarfUnwinder;
 use super::CompactUnwindInfoUnwinderError;
 use crate::rules::UnwindRule;
-use crate::unwind_result::UnwindResult;
-use crate::unwinders::DwarfUnwinding;
 use macho_unwind_info::UnwindInfo;
 
-pub trait CompactUnwindInfoUnwinding: DwarfUnwinding {
-    fn unwind_first<F, R>(
+pub enum CuiUnwindResult<R: UnwindRule> {
+    ExecRule(R),
+    Uncacheable(u64),
+    NeedDwarf(u32),
+    Err(CompactUnwindInfoUnwinderError),
+}
+
+pub trait CompactUnwindInfoUnwinding {
+    type UnwindRegs;
+    type UnwindRule: UnwindRule<UnwindRegs = Self::UnwindRegs>;
+
+    fn unwind_first<F>(
         opcode: u32,
         regs: &mut Self::UnwindRegs,
         pc: u64,
-        _rel_pc: u32,
-        dwarf_unwinder: Option<&mut DwarfUnwinder<R, Self>>,
+        rel_pc: u32,
         read_mem: &mut F,
-    ) -> Result<UnwindResult<Self::UnwindRule>, CompactUnwindInfoUnwinderError>
+    ) -> CuiUnwindResult<Self::UnwindRule>
     where
-        F: FnMut(u64) -> Result<u64, ()>,
-        R: Reader;
+        F: FnMut(u64) -> Result<u64, ()>;
 
-    fn unwind_next<F, R>(
+    fn unwind_next<F>(
         opcode: u32,
         regs: &mut Self::UnwindRegs,
-        return_address: u64,
-        dwarf_unwinder: Option<&mut DwarfUnwinder<R, Self>>,
         read_mem: &mut F,
-    ) -> Result<UnwindResult<Self::UnwindRule>, CompactUnwindInfoUnwinderError>
+    ) -> CuiUnwindResult<Self::UnwindRule>
     where
-        F: FnMut(u64) -> Result<u64, ()>,
-        R: Reader;
+        F: FnMut(u64) -> Result<u64, ()>;
 }
 
-pub struct CompactUnwindInfoUnwinder<'a: 'c, 'u, 'c, R: Reader, A: CompactUnwindInfoUnwinding> {
+pub struct CompactUnwindInfoUnwinder<'a, A: CompactUnwindInfoUnwinding> {
     unwind_info_data: &'a [u8],
-    dwarf_unwinder: Option<&'u mut DwarfUnwinder<'c, R, A>>,
+    _arch: PhantomData<A>,
 }
 
-impl<'a: 'c, 'u, 'c, R: Reader, A: CompactUnwindInfoUnwinding>
-    CompactUnwindInfoUnwinder<'a, 'u, 'c, R, A>
-{
-    pub fn new(
-        unwind_info_data: &'a [u8],
-        dwarf_unwinder: Option<&'u mut DwarfUnwinder<'c, R, A>>,
-    ) -> Self {
+impl<'a, A: CompactUnwindInfoUnwinding> CompactUnwindInfoUnwinder<'a, A> {
+    pub fn new(unwind_info_data: &'a [u8]) -> Self {
         Self {
             unwind_info_data,
-            dwarf_unwinder,
+            _arch: PhantomData,
         }
     }
 
@@ -68,7 +65,7 @@ impl<'a: 'c, 'u, 'c, R: Reader, A: CompactUnwindInfoUnwinding>
         pc: u64,
         rel_pc: u32,
         read_mem: &mut F,
-    ) -> Result<UnwindResult<A::UnwindRule>, CompactUnwindInfoUnwinderError>
+    ) -> CuiUnwindResult<A::UnwindRule>
     where
         F: FnMut(u64) -> Result<u64, ()>,
     {
@@ -79,44 +76,29 @@ impl<'a: 'c, 'u, 'c, R: Reader, A: CompactUnwindInfoUnwinding>
                 // This could mean that we're inside a stub function, in the __stubs section.
                 // All stub functions are frameless.
                 // TODO: Obtain the actual __stubs address range and do better checking here.
-                return Ok(UnwindResult::ExecRule(
-                    A::UnwindRule::rule_for_stub_functions(),
-                ));
+                return CuiUnwindResult::ExecRule(A::UnwindRule::rule_for_stub_functions());
             }
-            Err(err) => return Err(err),
+            Err(err) => return CuiUnwindResult::Err(err),
         };
         if rel_pc == function.start_address {
-            return Ok(UnwindResult::ExecRule(
-                A::UnwindRule::rule_for_function_start(),
-            ));
+            return CuiUnwindResult::ExecRule(A::UnwindRule::rule_for_function_start());
         }
-        <A as CompactUnwindInfoUnwinding>::unwind_first(
-            function.opcode,
-            regs,
-            pc,
-            rel_pc,
-            self.dwarf_unwinder.as_deref_mut(),
-            read_mem,
-        )
+        <A as CompactUnwindInfoUnwinding>::unwind_first(function.opcode, regs, pc, rel_pc, read_mem)
     }
 
     pub fn unwind_next<F>(
         &mut self,
         regs: &mut A::UnwindRegs,
-        return_address: u64,
         rel_ra: u32,
         read_mem: &mut F,
-    ) -> Result<UnwindResult<A::UnwindRule>, CompactUnwindInfoUnwinderError>
+    ) -> CuiUnwindResult<A::UnwindRule>
     where
         F: FnMut(u64) -> Result<u64, ()>,
     {
-        let function = self.function_for_address(rel_ra - 1)?;
-        <A as CompactUnwindInfoUnwinding>::unwind_next(
-            function.opcode,
-            regs,
-            return_address,
-            self.dwarf_unwinder.as_deref_mut(),
-            read_mem,
-        )
+        let function = match self.function_for_address(rel_ra - 1) {
+            Ok(f) => f,
+            Err(err) => return CuiUnwindResult::Err(err),
+        };
+        <A as CompactUnwindInfoUnwinding>::unwind_next(function.opcode, regs, read_mem)
     }
 }
