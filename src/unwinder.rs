@@ -1,12 +1,14 @@
 use gimli::{EndianReader, LittleEndian};
 
+use crate::arch::{Arch, ArchArm64};
+
 use super::arcdata::{ArcData, ArcDataReader};
 use super::cache::Cache;
 use super::error::{Error, UnwinderError};
 use super::rule_cache::CacheResult;
 use super::rules::{UnwindRule, UnwindRuleArm64};
 use super::unwind_result::UnwindResult;
-use super::unwinders::{CompactUnwindInfoUnwinder, DwarfUnwinderAarch64};
+use super::unwinders::{CompactUnwindInfoUnwinder, DwarfUnwinder};
 use super::unwindregs::UnwindRegsArm64;
 
 use std::marker::PhantomData;
@@ -17,17 +19,6 @@ use std::{
     sync::Arc,
 };
 
-pub trait Arch {
-    type UnwindRule: UnwindRule;
-    type Regs;
-}
-
-struct ArchArm64;
-impl Arch for ArchArm64 {
-    type UnwindRule = UnwindRuleArm64;
-    type Regs = UnwindRegsArm64;
-}
-
 pub struct Unwinder<D: Deref<Target = [u8]>, A: Arch> {
     /// sorted by address_range.start
     modules: Vec<Module<D>>,
@@ -35,6 +26,8 @@ pub struct Unwinder<D: Deref<Target = [u8]>, A: Arch> {
     modules_generation: u16,
     _placeholder: PhantomData<A>,
 }
+
+pub type UnwinderAarch64<D> = Unwinder<D, ArchArm64>;
 
 impl<D: Deref<Target = [u8]>, A: Arch> Default for Unwinder<D, A> {
     fn default() -> Self {
@@ -127,7 +120,32 @@ impl<D: Deref<Target = [u8]>, A: Arch> Unwinder<D, A> {
             .ok_or(UnwinderError::NoModule)?;
         let module = &self.modules[module_index];
         let rel_pc = (pc - module.base_address) as u32;
-        module.unwind_first(regs, pc, rel_pc, read_mem, cache)
+
+        let unwind_result = match &module.unwind_data {
+            UnwindData::CompactUnwindInfo(data) => {
+                // eprintln!("unwinding with cui in module {}", module.name);
+                let mut unwinder =
+                    CompactUnwindInfoUnwinder::<ArcDataReader<D>>::new(&data[..], None);
+                unwinder.unwind_first(regs, pc, rel_pc, read_mem)?
+            }
+            UnwindData::CompactUnwindInfoAndEhFrame(unwind_data, eh_frame_data) => {
+                // eprintln!("unwinding with cui and eh_frame in module {}", module.name);
+                let mut dwarf_unwinder = DwarfUnwinder::new(
+                    EndianReader::new(ArcData(eh_frame_data.clone()), LittleEndian),
+                    cache.eh_frame_unwind_context.deref_mut(),
+                    &module.sections,
+                );
+                let mut unwinder =
+                    CompactUnwindInfoUnwinder::new(&unwind_data[..], Some(&mut dwarf_unwinder));
+                unwinder.unwind_first(regs, pc, rel_pc, read_mem)?
+            }
+            UnwindData::EhFrameHdrAndEhFrame(_, _) => {
+                return Err(UnwinderError::UnhandledUnwindDataType)
+            }
+            UnwindData::EhFrame(_) => return Err(UnwinderError::UnhandledUnwindDataType),
+            UnwindData::None => return Err(UnwinderError::NoUnwindData),
+        };
+        Ok(unwind_result)
     }
 
     pub fn unwind_next<F>(
@@ -175,7 +193,36 @@ impl<D: Deref<Target = [u8]>, A: Arch> Unwinder<D, A> {
             .ok_or(UnwinderError::NoModule)?;
         let module = &self.modules[module_index];
         let rel_ra = (return_address - module.base_address) as u32;
-        module.unwind_next(regs, return_address, rel_ra, read_mem, cache)
+
+        // eprintln!(
+        //     "Unwinding at ra {} + 0x{:x} (= 0x{:x}) with regs {:?}",
+        //     self.name, rel_ra, return_address, regs
+        // );
+        let unwind_result = match &module.unwind_data {
+            UnwindData::CompactUnwindInfo(data) => {
+                // eprintln!("unwinding with cui in module {}", module.name);
+                let mut unwinder =
+                    CompactUnwindInfoUnwinder::<ArcDataReader<D>>::new(&data[..], None);
+                unwinder.unwind_next(regs, return_address, rel_ra, read_mem)?
+            }
+            UnwindData::CompactUnwindInfoAndEhFrame(unwind_data, eh_frame_data) => {
+                // eprintln!("unwinding with cui and eh_frame in module {}", module.name);
+                let mut dwarf_unwinder = DwarfUnwinder::new(
+                    EndianReader::new(ArcData(eh_frame_data.clone()), LittleEndian),
+                    &mut cache.eh_frame_unwind_context,
+                    &module.sections,
+                );
+                let mut unwinder =
+                    CompactUnwindInfoUnwinder::new(&unwind_data[..], Some(&mut dwarf_unwinder));
+                unwinder.unwind_next(regs, return_address, rel_ra, read_mem)?
+            }
+            UnwindData::EhFrameHdrAndEhFrame(_, _) => {
+                return Err(UnwinderError::UnhandledUnwindDataType)
+            }
+            UnwindData::EhFrame(_) => return Err(UnwinderError::UnhandledUnwindDataType),
+            UnwindData::None => return Err(UnwinderError::NoUnwindData),
+        };
+        Ok(unwind_result)
     }
 
     fn find_module_for_address(&self, pc: u64) -> Option<usize> {
@@ -254,90 +301,6 @@ impl<D: Deref<Target = [u8]>> Module<D> {
             sections,
             unwind_data,
         }
-    }
-
-    fn unwind_first<F>(
-        &self,
-        regs: &mut UnwindRegsArm64,
-        pc: u64,
-        rel_pc: u32,
-        read_mem: &mut F,
-        cache: &mut Cache<D, UnwindRuleArm64>,
-    ) -> Result<UnwindResult<UnwindRuleArm64>, UnwinderError>
-    where
-        F: FnMut(u64) -> Result<u64, ()>,
-    {
-        // eprintln!(
-        //     "Unwinding at pc {} + 0x{:x} (= 0x{:x}) with regs {:?}",
-        //     self.name, rel_pc, pc, regs
-        // );
-        let unwind_result = match &self.unwind_data {
-            UnwindData::CompactUnwindInfo(data) => {
-                // eprintln!("unwinding with cui in module {}", self.name);
-                let mut unwinder =
-                    CompactUnwindInfoUnwinder::<ArcDataReader<D>>::new(&data[..], None);
-                unwinder.unwind_first(regs, pc, rel_pc, read_mem)?
-            }
-            UnwindData::CompactUnwindInfoAndEhFrame(unwind_data, eh_frame_data) => {
-                // eprintln!("unwinding with cui and eh_frame in module {}", self.name);
-                let mut dwarf_unwinder = DwarfUnwinderAarch64::new(
-                    EndianReader::new(ArcData(eh_frame_data.clone()), LittleEndian),
-                    cache.eh_frame_unwind_context.deref_mut(),
-                    &self.sections,
-                );
-                let mut unwinder =
-                    CompactUnwindInfoUnwinder::new(&unwind_data[..], Some(&mut dwarf_unwinder));
-                unwinder.unwind_first(regs, pc, rel_pc, read_mem)?
-            }
-            UnwindData::EhFrameHdrAndEhFrame(_, _) => {
-                return Err(UnwinderError::UnhandledUnwindDataType)
-            }
-            UnwindData::EhFrame(_) => return Err(UnwinderError::UnhandledUnwindDataType),
-            UnwindData::None => return Err(UnwinderError::NoUnwindData),
-        };
-        Ok(unwind_result)
-    }
-
-    fn unwind_next<F>(
-        &self,
-        regs: &mut UnwindRegsArm64,
-        return_address: u64,
-        rel_ra: u32,
-        read_mem: &mut F,
-        cache: &mut Cache<D, UnwindRuleArm64>,
-    ) -> Result<UnwindResult<UnwindRuleArm64>, UnwinderError>
-    where
-        F: FnMut(u64) -> Result<u64, ()>,
-    {
-        // eprintln!(
-        //     "Unwinding at ra {} + 0x{:x} (= 0x{:x}) with regs {:?}",
-        //     self.name, rel_ra, return_address, regs
-        // );
-        let unwind_result = match &self.unwind_data {
-            UnwindData::CompactUnwindInfo(data) => {
-                // eprintln!("unwinding with cui in module {}", self.name);
-                let mut unwinder =
-                    CompactUnwindInfoUnwinder::<ArcDataReader<D>>::new(&data[..], None);
-                unwinder.unwind_next(regs, return_address, rel_ra, read_mem)?
-            }
-            UnwindData::CompactUnwindInfoAndEhFrame(unwind_data, eh_frame_data) => {
-                // eprintln!("unwinding with cui and eh_frame in module {}", self.name);
-                let mut dwarf_unwinder = DwarfUnwinderAarch64::new(
-                    EndianReader::new(ArcData(eh_frame_data.clone()), LittleEndian),
-                    &mut cache.eh_frame_unwind_context,
-                    &self.sections,
-                );
-                let mut unwinder =
-                    CompactUnwindInfoUnwinder::new(&unwind_data[..], Some(&mut dwarf_unwinder));
-                unwinder.unwind_next(regs, return_address, rel_ra, read_mem)?
-            }
-            UnwindData::EhFrameHdrAndEhFrame(_, _) => {
-                return Err(UnwinderError::UnhandledUnwindDataType)
-            }
-            UnwindData::EhFrame(_) => return Err(UnwinderError::UnhandledUnwindDataType),
-            UnwindData::None => return Err(UnwinderError::NoUnwindData),
-        };
-        Ok(unwind_result)
     }
 }
 

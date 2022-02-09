@@ -1,7 +1,8 @@
 use gimli::Reader;
 
-use super::super::{DwarfUnwinder, DwarfUnwinderX86_64, FramepointerUnwinderX86_64};
+use super::super::{DwarfUnwinder, FramepointerUnwinderX86_64};
 use super::CompactUnwindInfoUnwinderError;
+use crate::arch::ArchX86_64;
 use crate::rules::UnwindRuleX86_64;
 use crate::unwind_result::UnwindResult;
 use crate::unwindregs::UnwindRegsX86_64;
@@ -10,13 +11,13 @@ use macho_unwind_info::UnwindInfo;
 
 pub struct CompactUnwindInfoUnwinderX86_46<'a: 'c, 'u, 'c, R: Reader> {
     unwind_info_data: &'a [u8],
-    dwarf_unwinder: Option<&'u mut DwarfUnwinderX86_64<'c, R>>,
+    dwarf_unwinder: Option<&'u mut DwarfUnwinder<'c, R, ArchX86_64>>,
 }
 
 impl<'a: 'c, 'u, 'c, R: Reader> CompactUnwindInfoUnwinderX86_46<'a, 'u, 'c, R> {
     pub fn new(
         unwind_info_data: &'a [u8],
-        dwarf_unwinder: Option<&'u mut DwarfUnwinderX86_64<'c, R>>,
+        dwarf_unwinder: Option<&'u mut DwarfUnwinder<'c, R, ArchX86_64>>,
     ) -> Self {
         Self {
             unwind_info_data,

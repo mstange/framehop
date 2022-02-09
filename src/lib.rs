@@ -1,4 +1,5 @@
 mod arcdata;
+mod arch;
 mod cache;
 mod display_utils;
 mod error;
