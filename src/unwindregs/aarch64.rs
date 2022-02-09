@@ -3,17 +3,17 @@ use std::fmt::Debug;
 use crate::display_utils::HexNum;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub struct UnwindRegsArm64 {
+pub struct UnwindRegsAarch64 {
     lr: u64,
     sp: u64,
     fp: u64,
 }
 
-/// On macOS arm64, system libraries are arm64e binaries, and arm64e can do pointer authentication:
+/// On macOS arm64, system libraries are aarch64e binaries, and aarch64e can do pointer authentication:
 /// The low bits of the pointer are the actual pointer value, and the high bits are an encrypted hash.
 /// During stackwalking, we need to strip off this hash.
 /// I don't know of an easy way to get the correct mask dynamically - all the potential functions
-/// I've seen for this are no-ops when called from regular arm64 code.
+/// I've seen for this are no-ops when called from regular aarch64 code.
 /// So for now, we hardcode a mask that seems to work today, and worry about it if it stops working.
 /// 24 bits hash + 40 bits pointer
 const PTR_MASK: u64 = (1 << 40) - 1;
@@ -23,7 +23,7 @@ pub fn strip_ptr_auth(ptr: u64) -> u64 {
     ptr & PTR_MASK
 }
 
-impl UnwindRegsArm64 {
+impl UnwindRegsAarch64 {
     pub fn new(lr: u64, sp: u64, fp: u64) -> Self {
         Self {
             lr: strip_ptr_auth(lr),
@@ -60,9 +60,9 @@ impl UnwindRegsArm64 {
     }
 }
 
-impl Debug for UnwindRegsArm64 {
+impl Debug for UnwindRegsAarch64 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("UnwindRegsArm64")
+        f.debug_struct("UnwindRegsAarch64")
             .field("lr", &HexNum(self.lr))
             .field("sp", &HexNum(self.sp))
             .field("fp", &HexNum(self.fp))

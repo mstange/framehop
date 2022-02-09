@@ -1,6 +1,6 @@
 use crate::{
-    rules::{UnwindRule, UnwindRuleArm64, UnwindRuleX86_64},
-    UnwindRegsArm64, UnwindRegsX86_64,
+    rules::{UnwindRule, UnwindRuleAarch64, UnwindRuleX86_64},
+    UnwindRegsAarch64, UnwindRegsX86_64,
 };
 
 pub trait Arch {
@@ -8,10 +8,10 @@ pub trait Arch {
     type UnwindRule: UnwindRule<UnwindRegs = Self::UnwindRegs>;
 }
 
-pub struct ArchArm64;
-impl Arch for ArchArm64 {
-    type UnwindRule = UnwindRuleArm64;
-    type UnwindRegs = UnwindRegsArm64;
+pub struct ArchAarch64;
+impl Arch for ArchAarch64 {
+    type UnwindRule = UnwindRuleAarch64;
+    type UnwindRegs = UnwindRegsAarch64;
 }
 
 pub struct ArchX86_64;

@@ -1,5 +1,5 @@
 use crate::{
-    rules::{UnwindRuleArm64, UnwindRuleX86_64},
+    rules::{UnwindRuleAarch64, UnwindRuleX86_64},
     unwind_result::UnwindResult,
 };
 use std::result::Result;
@@ -10,7 +10,7 @@ pub enum FramepointerUnwinderError {
     CouldNotDisassemble,
 }
 
-// Do a frame pointer stack walk. Frame-based arm64 functions store the caller's fp and lr
+// Do a frame pointer stack walk. Frame-based aarch64 functions store the caller's fp and lr
 // on the stack and then set fp to the address where the caller's fp is stored.
 //
 // Function prologue example (this one also stores x19, x20, x21 and x22):
@@ -27,7 +27,7 @@ pub enum FramepointerUnwinderError {
 //
 // Functions are called with bl ("branch with link"); bl puts the return address into the lr register.
 // When a function reaches its end, ret reads the return address from lr and jumps to it.
-// On arm64, the stack pointer is always aligned to 16 bytes, and registers are usually written
+// On aarch64, the stack pointer is always aligned to 16 bytes, and registers are usually written
 // to and read from the stack in pairs.
 // In frame-based functions, fp and lr are placed next to each other on the stack.
 // So when a function is called, we have the following stack layout:
@@ -48,14 +48,16 @@ pub enum FramepointerUnwinderError {
 //  ^ sp                    ^ fp
 //
 // So: *fp is the caller's frame pointer, and *(fp + 8) is the return address.
-pub struct FramepointerUnwinderArm64;
+pub struct FramepointerUnwinderAarch64;
 
-impl FramepointerUnwinderArm64 {
-    pub fn unwind_first(&self) -> Result<UnwindResult<UnwindRuleArm64>, FramepointerUnwinderError> {
+impl FramepointerUnwinderAarch64 {
+    pub fn unwind_first(
+        &self,
+    ) -> Result<UnwindResult<UnwindRuleAarch64>, FramepointerUnwinderError> {
         // TODO: Disassemble starting from pc and detect prologue / epiloge
 
         // For now, just return prologue / epilogue and pretend we're in the middle of a function.
-        Ok(UnwindResult::ExecRule(UnwindRuleArm64::UseFramePointer))
+        Ok(UnwindResult::ExecRule(UnwindRuleAarch64::UseFramePointer))
     }
 }
 

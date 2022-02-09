@@ -1,9 +1,9 @@
-use crate::{error::Error, UnwindRegsArm64};
+use crate::{error::Error, UnwindRegsAarch64};
 
 use super::UnwindRule;
 
 #[derive(Clone, Copy, Debug)]
-pub enum UnwindRuleArm64 {
+pub enum UnwindRuleAarch64 {
     /// (sp, fp, lr) = (sp, fp, lr)
     NoOp,
     /// (sp, fp, lr) = (sp + 16x, fp, lr)
@@ -33,29 +33,29 @@ fn wrapping_add_signed(lhs: u64, rhs: i64) -> u64 {
     lhs.wrapping_add(rhs as u64)
 }
 
-impl UnwindRule for UnwindRuleArm64 {
-    type UnwindRegs = UnwindRegsArm64;
+impl UnwindRule for UnwindRuleAarch64 {
+    type UnwindRegs = UnwindRegsAarch64;
 
     fn rule_for_stub_functions() -> Self {
-        UnwindRuleArm64::NoOp
+        UnwindRuleAarch64::NoOp
     }
     fn rule_for_function_start() -> Self {
-        UnwindRuleArm64::NoOp
+        UnwindRuleAarch64::NoOp
     }
     fn fallback_rule() -> Self {
-        UnwindRuleArm64::UseFramePointer
+        UnwindRuleAarch64::UseFramePointer
     }
 
-    fn exec<F>(self, regs: &mut UnwindRegsArm64, read_mem: &mut F) -> Result<u64, Error>
+    fn exec<F>(self, regs: &mut UnwindRegsAarch64, read_mem: &mut F) -> Result<u64, Error>
     where
         F: FnMut(u64) -> Result<u64, ()>,
     {
         match self {
-            UnwindRuleArm64::NoOp => {}
-            UnwindRuleArm64::OffsetSp { sp_offset_by_16 } => {
+            UnwindRuleAarch64::NoOp => {}
+            UnwindRuleAarch64::OffsetSp { sp_offset_by_16 } => {
                 regs.set_sp(regs.sp() + sp_offset_by_16 as u64 * 16);
             }
-            UnwindRuleArm64::OffsetSpAndRestoreLr {
+            UnwindRuleAarch64::OffsetSpAndRestoreLr {
                 sp_offset_by_16,
                 lr_storage_offset_from_sp_by_8,
             } => {
@@ -67,7 +67,7 @@ impl UnwindRule for UnwindRuleArm64 {
                 regs.set_sp(new_sp);
                 regs.set_lr(new_lr);
             }
-            UnwindRuleArm64::OffsetSpAndRestoreFpAndLr {
+            UnwindRuleAarch64::OffsetSpAndRestoreFpAndLr {
                 sp_offset_by_16,
                 fp_storage_offset_from_sp_by_8,
                 lr_storage_offset_from_sp_by_8,
@@ -84,7 +84,7 @@ impl UnwindRule for UnwindRuleArm64 {
                 regs.set_fp(new_fp);
                 regs.set_lr(new_lr);
             }
-            UnwindRuleArm64::UseFramePointer => {
+            UnwindRuleAarch64::UseFramePointer => {
                 let sp = regs.sp();
                 let fp = regs.fp();
                 let new_sp = fp + 16;
@@ -100,7 +100,7 @@ impl UnwindRule for UnwindRuleArm64 {
                 regs.set_fp(new_fp);
                 regs.set_lr(new_lr);
             }
-            UnwindRuleArm64::UseFramepointerWithOffsets {
+            UnwindRuleAarch64::UseFramepointerWithOffsets {
                 sp_offset_from_fp_by_8,
                 fp_storage_offset_from_fp_by_8,
                 lr_storage_offset_from_fp_by_8,
@@ -139,19 +139,19 @@ mod test {
             1, 2, 3, 4, 0x40, 0x100200, 5, 6, 0x70, 0x100100, 7, 8, 9, 10, 0x0, 0x0,
         ];
         let mut read_mem = |addr| Ok(stack[(addr / 8) as usize]);
-        let mut regs = UnwindRegsArm64::new(0x100300, 0x10, 0x20);
-        let res = UnwindRuleArm64::NoOp.exec(&mut regs, &mut read_mem);
+        let mut regs = UnwindRegsAarch64::new(0x100300, 0x10, 0x20);
+        let res = UnwindRuleAarch64::NoOp.exec(&mut regs, &mut read_mem);
         assert_eq!(res, Ok(0x100300));
         assert_eq!(regs.sp(), 0x10);
-        let res = UnwindRuleArm64::UseFramePointer.exec(&mut regs, &mut read_mem);
+        let res = UnwindRuleAarch64::UseFramePointer.exec(&mut regs, &mut read_mem);
         assert_eq!(res, Ok(0x100200));
         assert_eq!(regs.sp(), 0x30);
         assert_eq!(regs.fp(), 0x40);
-        let res = UnwindRuleArm64::UseFramePointer.exec(&mut regs, &mut read_mem);
+        let res = UnwindRuleAarch64::UseFramePointer.exec(&mut regs, &mut read_mem);
         assert_eq!(res, Ok(0x100100));
         assert_eq!(regs.sp(), 0x50);
         assert_eq!(regs.fp(), 0x70);
-        let res = UnwindRuleArm64::UseFramePointer.exec(&mut regs, &mut read_mem);
+        let res = UnwindRuleAarch64::UseFramePointer.exec(&mut regs, &mut read_mem);
         assert_eq!(res, Err(Error::StackEndReached));
     }
 }

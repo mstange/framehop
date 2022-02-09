@@ -1,13 +1,13 @@
 use gimli::{AArch64, CfaRule, Reader, RegisterRule, UnwindContextStorage, UnwindTableRow};
 
 use crate::{
-    arch::ArchArm64, rules::UnwindRuleArm64, unwind_result::UnwindResult,
-    unwindregs::UnwindRegsArm64,
+    arch::ArchAarch64, rules::UnwindRuleAarch64, unwind_result::UnwindResult,
+    unwindregs::UnwindRegsAarch64,
 };
 
 use super::{ConversionError, DwarfUnwinderError, DwarfUnwinding};
 
-impl DwarfUnwinding for ArchArm64 {
+impl DwarfUnwinding for ArchAarch64 {
     fn unwind_first<F, R, S>(
         unwind_info: &UnwindTableRow<R, S>,
         regs: &mut Self::UnwindRegs,
@@ -115,7 +115,7 @@ fn translate_into_unwind_rule<R: gimli::Reader>(
     cfa_rule: &CfaRule<R>,
     fp_rule: &RegisterRule<R>,
     lr_rule: &RegisterRule<R>,
-) -> Result<UnwindRuleArm64, ConversionError> {
+) -> Result<UnwindRuleAarch64, ConversionError> {
     match cfa_rule {
         CfaRule::RegisterAndOffset { register, offset } => match *register {
             AArch64::SP => {
@@ -125,12 +125,12 @@ fn translate_into_unwind_rule<R: gimli::Reader>(
                 let fp_cfa_offset = register_rule_to_cfa_offset(fp_rule)?;
                 match (lr_cfa_offset, fp_cfa_offset) {
                     (None, Some(_)) => Err(ConversionError::RestoringFpButNotLr),
-                    (None, None) => Ok(UnwindRuleArm64::OffsetSp { sp_offset_by_16 }),
+                    (None, None) => Ok(UnwindRuleAarch64::OffsetSp { sp_offset_by_16 }),
                     (Some(lr_cfa_offset), None) => {
                         let lr_storage_offset_from_sp_by_8 =
                             i8::try_from((offset + lr_cfa_offset) / 8)
                                 .map_err(|_| ConversionError::LrStorageOffsetDoesNotFit)?;
-                        Ok(UnwindRuleArm64::OffsetSpAndRestoreLr {
+                        Ok(UnwindRuleAarch64::OffsetSpAndRestoreLr {
                             sp_offset_by_16,
                             lr_storage_offset_from_sp_by_8,
                         })
@@ -142,7 +142,7 @@ fn translate_into_unwind_rule<R: gimli::Reader>(
                         let fp_storage_offset_from_sp_by_8 =
                             i8::try_from((offset + fp_cfa_offset) / 8)
                                 .map_err(|_| ConversionError::FpStorageOffsetDoesNotFit)?;
-                        Ok(UnwindRuleArm64::OffsetSpAndRestoreFpAndLr {
+                        Ok(UnwindRuleAarch64::OffsetSpAndRestoreFpAndLr {
                             sp_offset_by_16,
                             fp_storage_offset_from_sp_by_8,
                             lr_storage_offset_from_sp_by_8,
@@ -156,7 +156,7 @@ fn translate_into_unwind_rule<R: gimli::Reader>(
                 let fp_cfa_offset = register_rule_to_cfa_offset(fp_rule)?
                     .ok_or(ConversionError::FramePointerRuleDoesNotRestoreFp)?;
                 if *offset == 16 && fp_cfa_offset == -16 && lr_cfa_offset == -8 {
-                    Ok(UnwindRuleArm64::UseFramePointer)
+                    Ok(UnwindRuleAarch64::UseFramePointer)
                 } else {
                     let sp_offset_from_fp_by_8 = u8::try_from(offset / 8)
                         .map_err(|_| ConversionError::SpOffsetFromFpDoesNotFit)?;
@@ -164,7 +164,7 @@ fn translate_into_unwind_rule<R: gimli::Reader>(
                         .map_err(|_| ConversionError::LrStorageOffsetDoesNotFit)?;
                     let fp_storage_offset_from_fp_by_8 = i8::try_from((offset + fp_cfa_offset) / 8)
                         .map_err(|_| ConversionError::FpStorageOffsetDoesNotFit)?;
-                    Ok(UnwindRuleArm64::UseFramepointerWithOffsets {
+                    Ok(UnwindRuleAarch64::UseFramepointerWithOffsets {
                         sp_offset_from_fp_by_8,
                         fp_storage_offset_from_fp_by_8,
                         lr_storage_offset_from_fp_by_8,
@@ -177,7 +177,7 @@ fn translate_into_unwind_rule<R: gimli::Reader>(
     }
 }
 
-fn eval_cfa_rule<R: gimli::Reader>(rule: &CfaRule<R>, regs: &UnwindRegsArm64) -> Option<u64> {
+fn eval_cfa_rule<R: gimli::Reader>(rule: &CfaRule<R>, regs: &UnwindRegsAarch64) -> Option<u64> {
     match rule {
         CfaRule::RegisterAndOffset { register, offset } => {
             let val = match *register {
@@ -196,7 +196,7 @@ fn eval_rule<R, F>(
     rule: RegisterRule<R>,
     cfa: u64,
     val: u64,
-    regs: &UnwindRegsArm64,
+    regs: &UnwindRegsAarch64,
     read_mem: &mut F,
 ) -> Option<u64>
 where

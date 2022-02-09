@@ -1,17 +1,17 @@
 use gimli::{EndianReader, LittleEndian};
 
 use crate::arcdata::ArcData;
-use crate::arch::{Arch, ArchArm64, ArchX86_64};
+use crate::arch::{Arch, ArchAarch64, ArchX86_64};
 use crate::cache::Cache;
 use crate::error::{Error, UnwinderError};
 use crate::rule_cache::CacheResult;
-use crate::rules::{UnwindRule, UnwindRuleArm64, UnwindRuleX86_64};
+use crate::rules::{UnwindRule, UnwindRuleAarch64, UnwindRuleX86_64};
 use crate::unwind_result::UnwindResult;
 use crate::unwinders::{
     CompactUnwindInfoUnwinder, CompactUnwindInfoUnwinding, CuiUnwindResult, DwarfUnwinder,
     DwarfUnwinding,
 };
-use crate::unwindregs::{UnwindRegsArm64, UnwindRegsX86_64};
+use crate::unwindregs::{UnwindRegsAarch64, UnwindRegsX86_64};
 
 use std::marker::PhantomData;
 use std::{
@@ -21,7 +21,7 @@ use std::{
 };
 
 #[derive(Default)]
-pub struct CacheAarch64<D: Deref<Target = [u8]>>(Cache<D, UnwindRuleArm64>);
+pub struct CacheAarch64<D: Deref<Target = [u8]>>(Cache<D, UnwindRuleAarch64>);
 
 impl<D: Deref<Target = [u8]>> CacheAarch64<D> {
     pub fn new() -> Self {
@@ -52,7 +52,7 @@ impl<D: Deref<Target = [u8]>> UnwinderAarch64<D> {
     pub fn unwind_first<F>(
         &self,
         pc: u64,
-        regs: &mut UnwindRegsArm64,
+        regs: &mut UnwindRegsAarch64,
         cache: &mut CacheAarch64<D>,
         read_mem: &mut F,
     ) -> Result<u64, Error>
@@ -60,13 +60,13 @@ impl<D: Deref<Target = [u8]>> UnwinderAarch64<D> {
         F: FnMut(u64) -> Result<u64, ()>,
     {
         // eprintln!("unwind_first for {:x}", pc);
-        self.internal.with_cache::<_, _, ArchArm64>(
+        self.internal.with_cache::<_, _, ArchAarch64>(
             pc,
             regs,
             &mut cache.0,
             read_mem,
             |module, regs, cache, read_mem| {
-                UnwinderInternal::<D, ArchArm64>::unwind_first(module, pc, regs, cache, read_mem)
+                UnwinderInternal::<D, ArchAarch64>::unwind_first(module, pc, regs, cache, read_mem)
             },
         )
     }
@@ -74,7 +74,7 @@ impl<D: Deref<Target = [u8]>> UnwinderAarch64<D> {
     pub fn unwind_next<F>(
         &self,
         return_address: u64,
-        regs: &mut UnwindRegsArm64,
+        regs: &mut UnwindRegsAarch64,
         cache: &mut CacheAarch64<D>,
         read_mem: &mut F,
     ) -> Result<u64, Error>
@@ -82,13 +82,13 @@ impl<D: Deref<Target = [u8]>> UnwinderAarch64<D> {
         F: FnMut(u64) -> Result<u64, ()>,
     {
         // eprintln!("unwind_next for {:x}", return_address);
-        self.internal.with_cache::<_, _, ArchArm64>(
+        self.internal.with_cache::<_, _, ArchAarch64>(
             return_address - 1,
             regs,
             &mut cache.0,
             read_mem,
             |module, regs, cache, read_mem| {
-                UnwinderInternal::<D, ArchArm64>::unwind_next(
+                UnwinderInternal::<D, ArchAarch64>::unwind_next(
                     module,
                     return_address,
                     regs,
@@ -471,7 +471,7 @@ mod test {
         let mut cache = CacheAarch64::default();
         let mut unwinder = UnwinderAarch64::new();
         let mut unwind_info = Vec::new();
-        let mut file = std::fs::File::open("fixtures/macos/arm64/fp/query-api.__unwind_info")
+        let mut file = std::fs::File::open("fixtures/macos/aarch64/fp/query-api.__unwind_info")
             .expect("file opening failed");
         file.read_to_end(&mut unwind_info)
             .expect("file reading failed");
@@ -507,7 +507,7 @@ mod test {
             0x0,
         ];
         let mut read_mem = |addr| Ok(stack[(addr / 8) as usize]);
-        let mut regs = UnwindRegsArm64::new(0x1003fc000 + 0xe4830, 0x10, 0x20);
+        let mut regs = UnwindRegsAarch64::new(0x1003fc000 + 0xe4830, 0x10, 0x20);
         // There's a frameless function at e0d2c.
         let res =
             unwinder.unwind_first(0x1003fc000 + 0x1292c0, &mut regs, &mut cache, &mut read_mem);
