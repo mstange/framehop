@@ -8,9 +8,6 @@ use crate::{
 use super::{ConversionError, DwarfUnwinderError, DwarfUnwinding};
 
 impl DwarfUnwinding for ArchX86_64 {
-    type UnwindRegs = UnwindRegsX86_64;
-    type UnwindRule = UnwindRuleX86_64;
-
     fn unwind_first<F, R, S>(
         unwind_info: &UnwindTableRow<R, S>,
         regs: &mut Self::UnwindRegs,

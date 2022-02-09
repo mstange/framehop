@@ -5,14 +5,11 @@ use gimli::{
     UnwindTableRow,
 };
 
-use crate::{rules::UnwindRule, unwind_result::UnwindResult, SectionAddresses};
+use crate::{arch::Arch, unwind_result::UnwindResult, SectionAddresses};
 
 use super::DwarfUnwinderError;
 
-pub trait DwarfUnwinding {
-    type UnwindRegs;
-    type UnwindRule: UnwindRule<UnwindRegs = Self::UnwindRegs>;
-
+pub trait DwarfUnwinding: Arch {
     fn unwind_first<F, R, S>(
         unwind_info: &UnwindTableRow<R, S>,
         regs: &mut Self::UnwindRegs,

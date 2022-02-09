@@ -42,6 +42,9 @@ impl UnwindRule for UnwindRuleArm64 {
     fn rule_for_function_start() -> Self {
         UnwindRuleArm64::NoOp
     }
+    fn fallback_rule() -> Self {
+        UnwindRuleArm64::UseFramePointer
+    }
 
     fn exec<F>(self, regs: &mut UnwindRegsArm64, read_mem: &mut F) -> Result<u64, Error>
     where

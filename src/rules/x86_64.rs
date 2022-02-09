@@ -30,6 +30,9 @@ impl UnwindRule for UnwindRuleX86_64 {
     fn rule_for_function_start() -> Self {
         UnwindRuleX86_64::JustReturn
     }
+    fn fallback_rule() -> Self {
+        UnwindRuleX86_64::UseFramePointer
+    }
 
     /// Unlike the regular unwinders, this function does not promise to leave regs unchanged
     /// if an error is returned.

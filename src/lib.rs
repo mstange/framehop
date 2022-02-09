@@ -10,6 +10,5 @@ mod unwinder;
 mod unwinders;
 mod unwindregs;
 
-pub use cache::*;
 pub use unwinder::*;
 pub use unwindregs::*;

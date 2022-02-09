@@ -28,9 +28,6 @@ pub enum UnwinderError {
     #[error("DWARF unwinding failed: {0}")]
     Dwarf(#[from] DwarfUnwinderError),
 
-    #[error("No module covers the address")]
-    NoModule,
-
     #[error("__unwind_info referred to DWARF FDE but we do not have __eh_frame data")]
     NoDwarfData,
 

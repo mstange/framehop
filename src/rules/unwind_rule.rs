@@ -9,4 +9,5 @@ pub trait UnwindRule: Copy {
 
     fn rule_for_stub_functions() -> Self;
     fn rule_for_function_start() -> Self;
+    fn fallback_rule() -> Self;
 }

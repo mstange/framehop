@@ -7,9 +7,6 @@ use crate::unwindregs::UnwindRegsX86_64;
 use macho_unwind_info::opcodes::{OpcodeX86_64, RegisterNameX86_64};
 
 impl CompactUnwindInfoUnwinding for ArchX86_64 {
-    type UnwindRegs = UnwindRegsX86_64;
-    type UnwindRule = UnwindRuleX86_64;
-
     fn unwind_first<F>(
         opcode: u32,
         regs: &mut UnwindRegsX86_64,

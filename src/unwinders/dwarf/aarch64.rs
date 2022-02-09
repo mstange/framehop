@@ -8,8 +8,6 @@ use crate::{
 use super::{ConversionError, DwarfUnwinderError, DwarfUnwinding};
 
 impl DwarfUnwinding for ArchArm64 {
-    type UnwindRegs = UnwindRegsArm64;
-    type UnwindRule = UnwindRuleArm64;
     fn unwind_first<F, R, S>(
         unwind_info: &UnwindTableRow<R, S>,
         regs: &mut Self::UnwindRegs,

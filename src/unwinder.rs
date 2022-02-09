@@ -1,14 +1,17 @@
 use gimli::{EndianReader, LittleEndian};
 
-use super::arcdata::ArcData;
-use super::arch::{Arch, ArchArm64};
-use super::cache::Cache;
-use super::error::{Error, UnwinderError};
-use super::rule_cache::CacheResult;
-use super::rules::{UnwindRule, UnwindRuleArm64};
-use super::unwind_result::UnwindResult;
-use super::unwinders::{CompactUnwindInfoUnwinder, CuiUnwindResult, DwarfUnwinder};
-use super::unwindregs::UnwindRegsArm64;
+use crate::arcdata::ArcData;
+use crate::arch::{Arch, ArchArm64, ArchX86_64};
+use crate::cache::Cache;
+use crate::error::{Error, UnwinderError};
+use crate::rule_cache::CacheResult;
+use crate::rules::{UnwindRule, UnwindRuleArm64, UnwindRuleX86_64};
+use crate::unwind_result::UnwindResult;
+use crate::unwinders::{
+    CompactUnwindInfoUnwinder, CompactUnwindInfoUnwinding, CuiUnwindResult, DwarfUnwinder,
+    DwarfUnwinding,
+};
+use crate::unwindregs::{UnwindRegsArm64, UnwindRegsX86_64};
 
 use std::marker::PhantomData;
 use std::{
@@ -17,28 +20,184 @@ use std::{
     sync::Arc,
 };
 
-pub struct Unwinder<D: Deref<Target = [u8]>, A: Arch> {
+#[derive(Default)]
+pub struct CacheAarch64<D: Deref<Target = [u8]>>(Cache<D, UnwindRuleArm64>);
+
+impl<D: Deref<Target = [u8]>> CacheAarch64<D> {
+    pub fn new() -> Self {
+        Self(Cache::new())
+    }
+}
+
+#[derive(Default)]
+pub struct UnwinderAarch64<D: Deref<Target = [u8]>> {
+    internal: CachingUnwinder<D>,
+}
+
+impl<D: Deref<Target = [u8]>> UnwinderAarch64<D> {
+    pub fn new() -> Self {
+        Self {
+            internal: CachingUnwinder::new(),
+        }
+    }
+
+    pub fn add_module(&mut self, module: Module<D>) {
+        self.internal.add_module(module);
+    }
+
+    pub fn remove_module(&mut self, module_address_range_start: u64) {
+        self.internal.remove_module(module_address_range_start);
+    }
+
+    pub fn unwind_first<F>(
+        &self,
+        pc: u64,
+        regs: &mut UnwindRegsArm64,
+        cache: &mut CacheAarch64<D>,
+        read_mem: &mut F,
+    ) -> Result<u64, Error>
+    where
+        F: FnMut(u64) -> Result<u64, ()>,
+    {
+        // eprintln!("unwind_first for {:x}", pc);
+        self.internal.with_cache::<_, _, ArchArm64>(
+            pc,
+            regs,
+            &mut cache.0,
+            read_mem,
+            |module, regs, cache, read_mem| {
+                UnwinderInternal::<D, ArchArm64>::unwind_first(module, pc, regs, cache, read_mem)
+            },
+        )
+    }
+
+    pub fn unwind_next<F>(
+        &self,
+        return_address: u64,
+        regs: &mut UnwindRegsArm64,
+        cache: &mut CacheAarch64<D>,
+        read_mem: &mut F,
+    ) -> Result<u64, Error>
+    where
+        F: FnMut(u64) -> Result<u64, ()>,
+    {
+        // eprintln!("unwind_next for {:x}", return_address);
+        self.internal.with_cache::<_, _, ArchArm64>(
+            return_address - 1,
+            regs,
+            &mut cache.0,
+            read_mem,
+            |module, regs, cache, read_mem| {
+                UnwinderInternal::<D, ArchArm64>::unwind_next(
+                    module,
+                    return_address,
+                    regs,
+                    cache,
+                    read_mem,
+                )
+            },
+        )
+    }
+}
+
+#[derive(Default)]
+pub struct CacheX86_64<D: Deref<Target = [u8]>>(Cache<D, UnwindRuleX86_64>);
+
+impl<D: Deref<Target = [u8]>> CacheX86_64<D> {
+    pub fn new() -> Self {
+        Self(Cache::new())
+    }
+}
+
+#[derive(Default)]
+pub struct UnwinderX86_64<D: Deref<Target = [u8]>> {
+    internal: CachingUnwinder<D>,
+}
+
+impl<D: Deref<Target = [u8]>> UnwinderX86_64<D> {
+    pub fn new() -> Self {
+        Self {
+            internal: CachingUnwinder::new(),
+        }
+    }
+
+    pub fn add_module(&mut self, module: Module<D>) {
+        self.internal.add_module(module);
+    }
+
+    pub fn remove_module(&mut self, module_address_range_start: u64) {
+        self.internal.remove_module(module_address_range_start);
+    }
+
+    pub fn unwind_first<F>(
+        &self,
+        pc: u64,
+        regs: &mut UnwindRegsX86_64,
+        cache: &mut CacheX86_64<D>,
+        read_mem: &mut F,
+    ) -> Result<u64, Error>
+    where
+        F: FnMut(u64) -> Result<u64, ()>,
+    {
+        // eprintln!("unwind_first for {:x}", pc);
+        self.internal.with_cache::<_, _, ArchX86_64>(
+            pc,
+            regs,
+            &mut cache.0,
+            read_mem,
+            |module, regs, cache, read_mem| {
+                UnwinderInternal::<D, ArchX86_64>::unwind_first(module, pc, regs, cache, read_mem)
+            },
+        )
+    }
+
+    pub fn unwind_next<F>(
+        &self,
+        return_address: u64,
+        regs: &mut UnwindRegsX86_64,
+        cache: &mut CacheX86_64<D>,
+        read_mem: &mut F,
+    ) -> Result<u64, Error>
+    where
+        F: FnMut(u64) -> Result<u64, ()>,
+    {
+        // eprintln!("unwind_next for {:x}", return_address);
+        self.internal.with_cache::<_, _, ArchX86_64>(
+            return_address - 1,
+            regs,
+            &mut cache.0,
+            read_mem,
+            |module, regs, cache, read_mem| {
+                UnwinderInternal::<D, ArchX86_64>::unwind_next(
+                    module,
+                    return_address,
+                    regs,
+                    cache,
+                    read_mem,
+                )
+            },
+        )
+    }
+}
+
+struct CachingUnwinder<D: Deref<Target = [u8]>> {
     /// sorted by address_range.start
     modules: Vec<Module<D>>,
     /// Incremented every time modules is changed.
     modules_generation: u16,
-    _placeholder: PhantomData<A>,
 }
 
-pub type UnwinderAarch64<D> = Unwinder<D, ArchArm64>;
-
-impl<D: Deref<Target = [u8]>, A: Arch> Default for Unwinder<D, A> {
+impl<D: Deref<Target = [u8]>> Default for CachingUnwinder<D> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<D: Deref<Target = [u8]>, A: Arch> Unwinder<D, A> {
+impl<D: Deref<Target = [u8]>> CachingUnwinder<D> {
     pub fn new() -> Self {
         Self {
             modules: Vec::new(),
             modules_generation: 0,
-            _placeholder: PhantomData,
         }
     }
 
@@ -73,56 +232,95 @@ impl<D: Deref<Target = [u8]>, A: Arch> Unwinder<D, A> {
         };
     }
 
-    pub fn unwind_first<F>(
+    fn find_module_for_address(&self, pc: u64) -> Option<usize> {
+        let module_index = match self
+            .modules
+            .binary_search_by_key(&pc, |m| m.address_range.start)
+        {
+            Ok(i) => i,
+            Err(insertion_index) => {
+                if insertion_index == 0 {
+                    // pc is before first known module
+                    return None;
+                }
+                let i = insertion_index - 1;
+                if self.modules[i].address_range.end <= pc {
+                    // pc is after this module
+                    return None;
+                }
+                i
+            }
+        };
+        Some(module_index)
+    }
+
+    fn with_cache<F, G, A: Arch>(
         &self,
-        pc: u64,
-        regs: &mut UnwindRegsArm64,
-        cache: &mut Cache<D, UnwindRuleArm64>,
+        address: u64,
+        regs: &mut A::UnwindRegs,
+        cache: &mut Cache<D, A::UnwindRule>,
         read_mem: &mut F,
+        callback: G,
     ) -> Result<u64, Error>
     where
         F: FnMut(u64) -> Result<u64, ()>,
+        G: FnOnce(
+            &Module<D>,
+            &mut A::UnwindRegs,
+            &mut Cache<D, A::UnwindRule>,
+            &mut F,
+        ) -> Result<UnwindResult<A::UnwindRule>, UnwinderError>,
     {
-        // eprintln!("unwind_first for {:x}", pc);
-
         let cache_handle =
             match cache
                 .rule_cache
-                .try_unwind(pc, self.modules_generation, regs, read_mem)
+                .try_unwind(address, self.modules_generation, regs, read_mem)
             {
                 CacheResult::Hit(result) => return result,
                 CacheResult::Miss(handle) => handle,
             };
 
-        let unwind_rule = match self.unwind_first_impl(pc, regs, cache, read_mem) {
+        let module_index = self
+            .find_module_for_address(address)
+            .ok_or(Error::UnwindingFailed)?;
+        let module = &self.modules[module_index];
+        let unwind_rule = match callback(module, regs, cache, read_mem) {
             Ok(UnwindResult::ExecRule(rule)) => rule,
             Ok(UnwindResult::Uncacheable(return_address)) => return Ok(return_address),
-            Err(_) => UnwindRuleArm64::UseFramePointer,
+            Err(_) => A::UnwindRule::fallback_rule(),
         };
         cache.rule_cache.insert(cache_handle, unwind_rule);
         unwind_rule.exec(regs, read_mem)
     }
+}
 
-    fn unwind_first_impl<F>(
-        &self,
+struct UnwinderInternal<
+    D: Deref<Target = [u8]>,
+    A: Arch + DwarfUnwinding + CompactUnwindInfoUnwinding,
+> {
+    _phantom: PhantomData<D>,
+    _phantom2: PhantomData<A>,
+}
+
+impl<D: Deref<Target = [u8]>, A: Arch + DwarfUnwinding + CompactUnwindInfoUnwinding>
+    UnwinderInternal<D, A>
+{
+    fn unwind_first<F>(
+        module: &Module<D>,
         pc: u64,
-        regs: &mut UnwindRegsArm64,
-        cache: &mut Cache<D, UnwindRuleArm64>,
+        regs: &mut A::UnwindRegs,
+        cache: &mut Cache<D, A::UnwindRule>,
         read_mem: &mut F,
-    ) -> Result<UnwindResult<UnwindRuleArm64>, UnwinderError>
+    ) -> Result<UnwindResult<A::UnwindRule>, UnwinderError>
     where
         F: FnMut(u64) -> Result<u64, ()>,
     {
-        let module_index = self
-            .find_module_for_address(pc)
-            .ok_or(UnwinderError::NoModule)?;
-        let module = &self.modules[module_index];
         let rel_pc = (pc - module.base_address) as u32;
 
         let unwind_result = match &module.unwind_data {
             UnwindData::CompactUnwindInfoAndEhFrame(unwind_data, eh_frame_data) => {
                 // eprintln!("unwinding with cui and eh_frame in module {}", module.name);
-                let mut unwinder = CompactUnwindInfoUnwinder::<ArchArm64>::new(&unwind_data[..]);
+                let mut unwinder = CompactUnwindInfoUnwinder::<A>::new(&unwind_data[..]);
                 match unwinder.unwind_first(regs, pc, rel_pc, read_mem) {
                     CuiUnwindResult::ExecRule(rule) => UnwindResult::ExecRule(rule),
                     CuiUnwindResult::Uncacheable(return_address) => {
@@ -133,7 +331,7 @@ impl<D: Deref<Target = [u8]>, A: Arch> Unwinder<D, A> {
                             Some(data) => ArcData(data.clone()),
                             None => return Err(UnwinderError::NoDwarfData),
                         };
-                        let mut dwarf_unwinder = DwarfUnwinder::<_, ArchArm64>::new(
+                        let mut dwarf_unwinder = DwarfUnwinder::<_, A>::new(
                             EndianReader::new(eh_frame_data, LittleEndian),
                             &mut cache.eh_frame_unwind_context,
                             &module.sections,
@@ -152,50 +350,16 @@ impl<D: Deref<Target = [u8]>, A: Arch> Unwinder<D, A> {
         Ok(unwind_result)
     }
 
-    pub fn unwind_next<F>(
-        &self,
+    fn unwind_next<F>(
+        module: &Module<D>,
         return_address: u64,
-        regs: &mut UnwindRegsArm64,
-        cache: &mut Cache<D, UnwindRuleArm64>,
+        regs: &mut A::UnwindRegs,
+        cache: &mut Cache<D, A::UnwindRule>,
         read_mem: &mut F,
-    ) -> Result<u64, Error>
+    ) -> Result<UnwindResult<A::UnwindRule>, UnwinderError>
     where
         F: FnMut(u64) -> Result<u64, ()>,
     {
-        // eprintln!("unwind_next for {:x}", return_address);
-        let cache_handle = match cache.rule_cache.try_unwind(
-            return_address - 1,
-            self.modules_generation,
-            regs,
-            read_mem,
-        ) {
-            CacheResult::Hit(result) => return result,
-            CacheResult::Miss(handle) => handle,
-        };
-
-        let unwind_rule = match self.unwind_next_impl(return_address, regs, cache, read_mem) {
-            Ok(UnwindResult::ExecRule(rule)) => rule,
-            Ok(UnwindResult::Uncacheable(return_address)) => return Ok(return_address),
-            Err(_) => UnwindRuleArm64::UseFramePointer,
-        };
-        cache.rule_cache.insert(cache_handle, unwind_rule);
-        unwind_rule.exec(regs, read_mem)
-    }
-
-    fn unwind_next_impl<F>(
-        &self,
-        return_address: u64,
-        regs: &mut UnwindRegsArm64,
-        cache: &mut Cache<D, UnwindRuleArm64>,
-        read_mem: &mut F,
-    ) -> Result<UnwindResult<UnwindRuleArm64>, UnwinderError>
-    where
-        F: FnMut(u64) -> Result<u64, ()>,
-    {
-        let module_index = self
-            .find_module_for_address(return_address - 1)
-            .ok_or(UnwinderError::NoModule)?;
-        let module = &self.modules[module_index];
         let rel_ra = (return_address - module.base_address) as u32;
 
         // eprintln!(
@@ -205,7 +369,7 @@ impl<D: Deref<Target = [u8]>, A: Arch> Unwinder<D, A> {
         let unwind_result = match &module.unwind_data {
             UnwindData::CompactUnwindInfoAndEhFrame(unwind_data, eh_frame_data) => {
                 // eprintln!("unwinding with cui and eh_frame in module {}", module.name);
-                let mut unwinder = CompactUnwindInfoUnwinder::<ArchArm64>::new(&unwind_data[..]);
+                let mut unwinder = CompactUnwindInfoUnwinder::<A>::new(&unwind_data[..]);
                 match unwinder.unwind_next(regs, rel_ra, read_mem) {
                     CuiUnwindResult::ExecRule(rule) => UnwindResult::ExecRule(rule),
                     CuiUnwindResult::Uncacheable(return_address) => {
@@ -216,7 +380,7 @@ impl<D: Deref<Target = [u8]>, A: Arch> Unwinder<D, A> {
                             Some(data) => ArcData(data.clone()),
                             None => return Err(UnwinderError::NoDwarfData),
                         };
-                        let mut dwarf_unwinder = DwarfUnwinder::<_, ArchArm64>::new(
+                        let mut dwarf_unwinder = DwarfUnwinder::<_, A>::new(
                             EndianReader::new(eh_frame_data, LittleEndian),
                             &mut cache.eh_frame_unwind_context,
                             &module.sections,
@@ -238,28 +402,6 @@ impl<D: Deref<Target = [u8]>, A: Arch> Unwinder<D, A> {
             UnwindData::None => return Err(UnwinderError::NoUnwindData),
         };
         Ok(unwind_result)
-    }
-
-    fn find_module_for_address(&self, pc: u64) -> Option<usize> {
-        let module_index = match self
-            .modules
-            .binary_search_by_key(&pc, |m| m.address_range.start)
-        {
-            Ok(i) => i,
-            Err(insertion_index) => {
-                if insertion_index == 0 {
-                    // pc is before first known module
-                    return None;
-                }
-                let i = insertion_index - 1;
-                if self.modules[i].address_range.end <= pc {
-                    // pc is after this module
-                    return None;
-                }
-                i
-            }
-        };
-        Some(module_index)
     }
 }
 
@@ -326,8 +468,8 @@ mod test {
 
     #[test]
     fn test_basic() {
-        let mut cache = Cache::new();
-        let mut unwinder = Unwinder::<_, ArchArm64>::new();
+        let mut cache = CacheAarch64::default();
+        let mut unwinder = UnwinderAarch64::new();
         let mut unwind_info = Vec::new();
         let mut file = std::fs::File::open("fixtures/macos/arm64/fp/query-api.__unwind_info")
             .expect("file opening failed");

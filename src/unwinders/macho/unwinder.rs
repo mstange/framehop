@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
 use super::CompactUnwindInfoUnwinderError;
-use crate::rules::UnwindRule;
+use crate::{arch::Arch, rules::UnwindRule};
 use macho_unwind_info::UnwindInfo;
 
 pub enum CuiUnwindResult<R: UnwindRule> {
@@ -11,10 +11,7 @@ pub enum CuiUnwindResult<R: UnwindRule> {
     Err(CompactUnwindInfoUnwinderError),
 }
 
-pub trait CompactUnwindInfoUnwinding {
-    type UnwindRegs;
-    type UnwindRule: UnwindRule<UnwindRegs = Self::UnwindRegs>;
-
+pub trait CompactUnwindInfoUnwinding: Arch {
     fn unwind_first<F>(
         opcode: u32,
         regs: &mut Self::UnwindRegs,
