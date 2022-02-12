@@ -10,16 +10,15 @@ fn test_basic() {
     let mut unwinder = UnwinderX86_64::new();
     common::add_object(
         &mut unwinder,
-        &Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/linux/x86_64/nofp/libpthread-2.19.so"),
+        &Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("fixtures/linux/x86_64/nofp/libpthread-2.19.so"),
         0x7f54b14fc000,
     );
     let mut stack = vec![0u64; 0x100];
     stack[(0x10 + 0x80) / 8] = 0xbe7042;
-    let mut read_mem = |addr| {
-        match stack.get((addr / 8) as usize) {
-            Some(val) => Ok(*val),
-            None => Err(()),
-        }
+    let mut read_mem = |addr| match stack.get((addr / 8) as usize) {
+        Some(val) => Ok(*val),
+        None => Err(()),
     };
     let mut regs = UnwindRegsX86_64::new(0x10, 0x1234);
     // ...
@@ -31,7 +30,12 @@ fn test_basic() {
     // 000000000000943d         jmp        loc_8c2c
     // _L_unlock_4791:
     // ...
-    let res = unwinder.unwind_first(0x7f54b14fc000 + 0x9431, &mut regs, &mut cache, &mut read_mem);
+    let res = unwinder.unwind_first(
+        0x7f54b14fc000 + 0x9431,
+        &mut regs,
+        &mut cache,
+        &mut read_mem,
+    );
     assert_eq!(res, Ok(0xbe7042));
     assert_eq!(regs.sp(), 0x98);
     assert_eq!(regs.bp(), 0x1234);
