@@ -1,0 +1,64 @@
+use std::io::Read;
+
+use framehop::*;
+
+#[test]
+fn test_basic() {
+    let mut cache = CacheAarch64::default();
+    let mut unwinder = UnwinderAarch64::new();
+    let mut unwind_info = Vec::new();
+    let mut file = std::fs::File::open(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("fixtures/macos/arm64/fp/query-api.__unwind_info"),
+    )
+    .expect("file opening failed");
+    file.read_to_end(&mut unwind_info)
+        .expect("file reading failed");
+    unwinder.add_module(Module::new(
+        "query-api".to_string(),
+        0x1003fc000..0x100634000,
+        0x1003fc000,
+        0x100000000,
+        SectionAddresses {
+            text: 0,
+            eh_frame: 0,
+            eh_frame_hdr: 0,
+            got: 0,
+        },
+        UnwindData::CompactUnwindInfoAndEhFrame(unwind_info, None),
+    ));
+    let stack = [
+        /* 0x0: */ 1,
+        /* 0x8: */ 2,
+        /* 0x10: */ 3,
+        /* 0x18: */ 4,
+        /* 0x20: */ 0x40, // stored fp
+        /* 0x28: */ 0x1003fc000 + 0x100dc4, // stored lr
+        /* 0x30: */ 5,
+        /* 0x38: */ 6,
+        /* 0x40: */ 0x70, // stored fp
+        /* 0x48: */ 0x1003fc000 + 0x12ca28, // stored lr
+        /* 0x50: */ 7,
+        /* 0x58: */ 8,
+        /* 0x60: */ 9,
+        /* 0x68: */ 10,
+        /* 0x70: */ 0x0, // sentinel fp
+        /* 0x78: */ 0x0, // sentinel lr
+    ];
+    let mut read_mem = |addr| Ok(stack[(addr / 8) as usize]);
+    let mut regs = UnwindRegsAarch64::new(0x1003fc000 + 0xe4830, 0x10, 0x20);
+    // There's a frameless function at e0d2c.
+    let res = unwinder.unwind_first(0x1003fc000 + 0x1292c0, &mut regs, &mut cache, &mut read_mem);
+    assert_eq!(res, Ok(0x1003fc000 + 0xe4830));
+    assert_eq!(regs.sp(), 0x10);
+    let res = unwinder.unwind_next(0x1003fc000 + 0xe4830, &mut regs, &mut cache, &mut read_mem);
+    assert_eq!(res, Ok(0x1003fc000 + 0x100dc4));
+    assert_eq!(regs.sp(), 0x30);
+    assert_eq!(regs.fp(), 0x40);
+    let res = unwinder.unwind_next(0x1003fc000 + 0x100dc4, &mut regs, &mut cache, &mut read_mem);
+    assert_eq!(res, Ok(0x1003fc000 + 0x12ca28));
+    assert_eq!(regs.sp(), 0x50);
+    assert_eq!(regs.fp(), 0x70);
+    let res = unwinder.unwind_next(0x1003fc000 + 0x100dc4, &mut regs, &mut cache, &mut read_mem);
+    assert_eq!(res, Err(Error::StackEndReached));
+}
