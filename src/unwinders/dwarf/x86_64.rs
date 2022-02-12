@@ -11,7 +11,7 @@ impl DwarfUnwinding for ArchX86_64 {
     fn unwind_first<F, R, S>(
         unwind_info: &UnwindTableRow<R, S>,
         regs: &mut Self::UnwindRegs,
-        _pc: u64,
+        pc: u64,
         read_mem: &mut F,
     ) -> Result<UnwindResult<Self::UnwindRule>, DwarfUnwinderError>
     where
@@ -30,7 +30,8 @@ impl DwarfUnwinding for ArchX86_64 {
         }
 
         // println!("cfa rule: {:?}, regs: {:?}", cfa_rule, regs);
-        let cfa = eval_cfa_rule(cfa_rule, regs).ok_or(DwarfUnwinderError::CouldNotRecoverCfa)?;
+        let cfa =
+            eval_cfa_rule(cfa_rule, pc, regs).ok_or(DwarfUnwinderError::CouldNotRecoverCfa)?;
 
         let bp = regs.bp();
         let sp = regs.sp();
@@ -58,6 +59,7 @@ impl DwarfUnwinding for ArchX86_64 {
     fn unwind_next<F, R, S>(
         unwind_info: &UnwindTableRow<R, S>,
         regs: &mut Self::UnwindRegs,
+        return_address: u64, // regs.rip()
         read_mem: &mut F,
     ) -> Result<UnwindResult<Self::UnwindRule>, DwarfUnwinderError>
     where
@@ -76,7 +78,9 @@ impl DwarfUnwinding for ArchX86_64 {
         }
 
         // println!("cfa rule: {:?}, regs: {:?}", cfa_rule, regs);
-        let cfa = eval_cfa_rule(cfa_rule, regs).ok_or(DwarfUnwinderError::CouldNotRecoverCfa)?;
+        let rip = return_address;
+        let cfa =
+            eval_cfa_rule(cfa_rule, rip, regs).ok_or(DwarfUnwinderError::CouldNotRecoverCfa)?;
         if cfa <= regs.sp() {
             return Err(DwarfUnwinderError::StackPointerMovedBackwards);
         }
@@ -156,7 +160,11 @@ fn translate_into_unwind_rule<R: gimli::Reader>(
     }
 }
 
-fn eval_cfa_rule<R: gimli::Reader>(rule: &CfaRule<R>, regs: &UnwindRegsX86_64) -> Option<u64> {
+fn eval_cfa_rule<R: gimli::Reader>(
+    rule: &CfaRule<R>,
+    _rip: u64,
+    regs: &UnwindRegsX86_64,
+) -> Option<u64> {
     match rule {
         CfaRule::RegisterAndOffset { register, offset } => {
             let val = match *register {

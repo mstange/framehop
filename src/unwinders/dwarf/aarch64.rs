@@ -59,6 +59,7 @@ impl DwarfUnwinding for ArchAarch64 {
     fn unwind_next<F, R, S>(
         unwind_info: &UnwindTableRow<R, S>,
         regs: &mut Self::UnwindRegs,
+        _return_address: u64,
         read_mem: &mut F,
     ) -> Result<UnwindResult<Self::UnwindRule>, DwarfUnwinderError>
     where

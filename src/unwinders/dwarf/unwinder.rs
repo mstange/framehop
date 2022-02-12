@@ -24,6 +24,7 @@ pub trait DwarfUnwinding: Arch {
     fn unwind_next<F, R, S>(
         unwind_info: &UnwindTableRow<R, S>,
         regs: &mut Self::UnwindRegs,
+        return_address: u64,
         read_mem: &mut F,
     ) -> Result<UnwindResult<Self::UnwindRule>, DwarfUnwinderError>
     where
@@ -124,6 +125,6 @@ impl<'a, R: Reader, A: DwarfUnwinding> DwarfUnwinder<'a, R, A> {
                 return Err(DwarfUnwinderError::UnwindInfoForAddressFailed(e));
             }
         };
-        A::unwind_next(unwind_info, regs, read_mem)
+        A::unwind_next(unwind_info, regs, return_address, read_mem)
     }
 }
