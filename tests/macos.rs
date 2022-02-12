@@ -1,32 +1,18 @@
-use std::io::Read;
+use std::path::Path;
 
 use framehop::*;
+
+mod common;
 
 #[test]
 fn test_basic() {
     let mut cache = CacheAarch64::default();
     let mut unwinder = UnwinderAarch64::new();
-    let mut unwind_info = Vec::new();
-    let mut file = std::fs::File::open(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("fixtures/macos/arm64/fp/query-api.__unwind_info"),
-    )
-    .expect("file opening failed");
-    file.read_to_end(&mut unwind_info)
-        .expect("file reading failed");
-    unwinder.add_module(Module::new(
-        "query-api".to_string(),
-        0x1003fc000..0x100634000,
+    common::add_object(
+        &mut unwinder,
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/macos/arm64/fp/query-api"),
         0x1003fc000,
-        0x100000000,
-        SectionAddresses {
-            text: 0,
-            eh_frame: 0,
-            eh_frame_hdr: 0,
-            got: 0,
-        },
-        UnwindData::CompactUnwindInfoAndEhFrame(unwind_info, None),
-    ));
+    );
     let stack = [
         /* 0x0: */ 1,
         /* 0x8: */ 2,
