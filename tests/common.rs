@@ -33,15 +33,19 @@ where
     let unwind_data = match (
         unwind_info.as_ref().and_then(section_data),
         eh_frame.as_ref().and_then(section_data),
+        eh_frame_hdr.as_ref().and_then(section_data),
     ) {
-        (Some(unwind_info), Some(eh_frame)) => {
+        (Some(unwind_info), Some(eh_frame), _) => {
             framehop::UnwindData::CompactUnwindInfoAndEhFrame(unwind_info, Some(Arc::new(eh_frame)))
         }
-        (Some(unwind_info), None) => {
+        (Some(unwind_info), None, _) => {
             framehop::UnwindData::CompactUnwindInfoAndEhFrame(unwind_info, None)
         }
-        (None, Some(eh_frame)) => framehop::UnwindData::EhFrame(Arc::new(eh_frame)),
-        (None, None) => framehop::UnwindData::None,
+        (None, Some(eh_frame), Some(eh_frame_hdr)) => {
+            framehop::UnwindData::EhFrameHdrAndEhFrame(eh_frame_hdr, Arc::new(eh_frame))
+        }
+        (None, Some(eh_frame), None) => framehop::UnwindData::EhFrame(Arc::new(eh_frame)),
+        (None, None, _) => framehop::UnwindData::None,
     };
 
     let module = framehop::Module::new(
