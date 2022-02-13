@@ -257,11 +257,11 @@ impl<D: Deref<Target = [u8]>, A: Arch + DwarfUnwinding + CompactUnwindInfoUnwind
                 }
             }
             UnwindData::EhFrameHdrAndEhFrame(eh_frame_hdr, eh_frame_data) => {
-                let data = &eh_frame_hdr[..];
+                let eh_frame_hdr_data = ArcData(eh_frame_hdr.clone());
                 let eh_frame_data = ArcData(eh_frame_data.clone());
                 let mut dwarf_unwinder = DwarfUnwinder::<_, A>::new(
                     EndianReader::new(eh_frame_data, LittleEndian),
-                    Some(data),
+                    Some(EndianReader::new(eh_frame_hdr_data, LittleEndian)),
                     &mut cache.eh_frame_unwind_context,
                     &module.sections,
                 );
@@ -323,11 +323,11 @@ impl<D: Deref<Target = [u8]>, A: Arch + DwarfUnwinding + CompactUnwindInfoUnwind
                 }
             }
             UnwindData::EhFrameHdrAndEhFrame(eh_frame_hdr, eh_frame_data) => {
-                let data = &eh_frame_hdr[..];
+                let eh_frame_hdr_data = ArcData(eh_frame_hdr.clone());
                 let eh_frame_data = ArcData(eh_frame_data.clone());
                 let mut dwarf_unwinder = DwarfUnwinder::<_, A>::new(
                     EndianReader::new(eh_frame_data, LittleEndian),
-                    Some(data),
+                    Some(EndianReader::new(eh_frame_hdr_data, LittleEndian)),
                     &mut cache.eh_frame_unwind_context,
                     &module.sections,
                 );
@@ -345,7 +345,7 @@ impl<D: Deref<Target = [u8]>, A: Arch + DwarfUnwinding + CompactUnwindInfoUnwind
 
 pub enum UnwindData<D: Deref<Target = [u8]>> {
     CompactUnwindInfoAndEhFrame(D, Option<Arc<D>>),
-    EhFrameHdrAndEhFrame(D, Arc<D>),
+    EhFrameHdrAndEhFrame(Arc<D>, Arc<D>),
     EhFrame(Arc<D>),
     None,
 }

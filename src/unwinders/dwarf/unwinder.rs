@@ -1,9 +1,9 @@
 use std::marker::PhantomData;
 
 use gimli::{
-    BaseAddresses, CfaRule, EhFrameHdr, Encoding, EndianSlice, EvaluationResult, Expression,
-    LittleEndian, Location, ParsedEhFrameHdr, Reader, ReaderOffset, Register, RegisterRule,
-    UnwindContext, UnwindContextStorage, UnwindSection, UnwindTableRow, Value,
+    BaseAddresses, CfaRule, EhFrameHdr, Encoding, EvaluationResult, Expression, Location,
+    ParsedEhFrameHdr, Reader, ReaderOffset, Register, RegisterRule, UnwindContext,
+    UnwindContextStorage, UnwindSection, UnwindTableRow, Value,
 };
 
 use crate::{arch::Arch, unwind_result::UnwindResult, SectionAddresses};
@@ -35,18 +35,18 @@ pub trait DwarfUnwinding: Arch {
         S: UnwindContextStorage<R>;
 }
 
-pub struct DwarfUnwinder<'a, 'b, R: Reader, A: DwarfUnwinding + ?Sized> {
+pub struct DwarfUnwinder<'a, R: Reader, A: DwarfUnwinding + ?Sized> {
     eh_frame_data: R,
-    eh_frame_hdr: Option<ParsedEhFrameHdr<EndianSlice<'b, LittleEndian>>>,
+    eh_frame_hdr: Option<ParsedEhFrameHdr<R>>,
     unwind_context: &'a mut UnwindContext<R>,
     bases: BaseAddresses,
     _arch: PhantomData<A>,
 }
 
-impl<'a, 'b, R: Reader, A: DwarfUnwinding> DwarfUnwinder<'a, 'b, R, A> {
+impl<'a, R: Reader, A: DwarfUnwinding> DwarfUnwinder<'a, R, A> {
     pub fn new(
         eh_frame_data: R,
-        eh_frame_hdr_data: Option<&'b [u8]>,
+        eh_frame_hdr_data: Option<R>,
         unwind_context: &'a mut UnwindContext<R>,
         sections: &SectionAddresses,
     ) -> Self {
@@ -57,7 +57,7 @@ impl<'a, 'b, R: Reader, A: DwarfUnwinding> DwarfUnwinder<'a, 'b, R, A> {
             .set_got(sections.got);
         let eh_frame_hdr = match eh_frame_hdr_data {
             Some(eh_frame_hdr_data) => {
-                let hdr = EhFrameHdr::new(eh_frame_hdr_data, LittleEndian);
+                let hdr = EhFrameHdr::from(eh_frame_hdr_data);
                 match hdr.parse(&bases, 8) {
                     Ok(hdr) => Some(hdr),
                     Err(_) => None,
@@ -79,7 +79,7 @@ impl<'a, 'b, R: Reader, A: DwarfUnwinding> DwarfUnwinder<'a, 'b, R, A> {
         let table = eh_frame_hdr.table()?;
         let fde_ptr = table.lookup(address, &self.bases).ok()?;
         let fde_offset = table.pointer_to_offset(fde_ptr).ok()?;
-        fde_offset.0.try_into().ok()
+        fde_offset.0.into_u64().try_into().ok()
     }
 
     pub fn unwind_first_with_fde<F>(

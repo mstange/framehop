@@ -42,7 +42,7 @@ where
             framehop::UnwindData::CompactUnwindInfoAndEhFrame(unwind_info, None)
         }
         (None, Some(eh_frame), Some(eh_frame_hdr)) => {
-            framehop::UnwindData::EhFrameHdrAndEhFrame(eh_frame_hdr, Arc::new(eh_frame))
+            framehop::UnwindData::EhFrameHdrAndEhFrame(Arc::new(eh_frame_hdr), Arc::new(eh_frame))
         }
         (None, Some(eh_frame), None) => framehop::UnwindData::EhFrame(Arc::new(eh_frame)),
         (None, None, _) => framehop::UnwindData::None,
