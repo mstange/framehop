@@ -1,6 +1,6 @@
 use crate::{
     rules::{UnwindRule, UnwindRuleAarch64, UnwindRuleX86_64},
-    UnwindRegsAarch64, UnwindRegsX86_64,
+    unwindregs::{UnwindRegsAarch64, UnwindRegsX86_64},
 };
 
 pub trait Arch {

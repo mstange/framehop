@@ -1,5 +1,5 @@
 use super::UnwindRule;
-use crate::{error::Error, UnwindRegsX86_64};
+use crate::{error::Error, unwindregs::UnwindRegsX86_64};
 
 /// For all of these: return address is *(new_sp - 8)
 #[derive(Clone, Copy, Debug)]

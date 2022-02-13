@@ -1,7 +1,8 @@
 use std::path::Path;
 
-use archunwinders::*;
-use framehop::*;
+use framehop::archunwinders::*;
+use framehop::unwindregs::*;
+use framehop::Unwinder;
 
 mod common;
 
