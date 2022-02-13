@@ -187,14 +187,6 @@ fn translate_into_unwind_rule<R: gimli::Reader>(
                     Ok(UnwindRuleX86_64::UseFramePointer)
                 } else {
                     Err(ConversionError::FramePointerRuleHasStrangeBpOffset)
-                    // let sp_offset_from_bp_by_8 = u8::try_from(offset / 8)
-                    //     .map_err(|_| ConversionError::SpOffsetFromBpDoesNotFit)?;
-                    // let bp_storage_offset_from_bp_by_8 = i8::try_from((offset + bp_cfa_offset) / 8)
-                    //     .map_err(|_| ConversionError::BpStorageOffsetDoesNotFit)?;
-                    // Ok(UnwindRuleX86_64::UseFramepointerWithOffsets {
-                    //     sp_offset_from_bp_by_8,
-                    //     bp_storage_offset_from_bp_by_8,
-                    // })
                 }
             }
             _ => Err(ConversionError::CfaIsOffsetFromUnknownRegister),
