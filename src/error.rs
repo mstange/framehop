@@ -21,10 +21,10 @@ pub enum UnwinderError {
     NoDwarfData,
 
     #[error("Unhandled unwind data type")]
-    UnhandledUnwindDataType,
+    UnhandledModuleUnwindDataType,
 
     #[error("No unwind data for the module containing the address")]
-    NoUnwindData,
+    NoModuleUnwindData,
 
     #[error(".eh_frame_hdr was not successful in looking up the address in the table")]
     EhFrameHdrCouldNotFindAddress,

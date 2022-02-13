@@ -317,7 +317,7 @@ impl<D: Deref<Target = [u8]>, A: Arch + DwarfUnwinding + CompactUnwindInfoUnwind
         let rel_pc = (pc - module.base_address) as u32;
 
         let unwind_result = match &module.unwind_data {
-            UnwindData::CompactUnwindInfoAndEhFrame(unwind_data, eh_frame_data) => {
+            ModuleUnwindData::CompactUnwindInfoAndEhFrame(unwind_data, eh_frame_data) => {
                 // eprintln!("unwinding with cui and eh_frame in module {}", module.name);
                 let mut unwinder = CompactUnwindInfoUnwinder::<A>::new(&unwind_data[..]);
                 match unwinder.unwind_first(regs, pc, rel_pc, read_mem) {
@@ -341,7 +341,7 @@ impl<D: Deref<Target = [u8]>, A: Arch + DwarfUnwinding + CompactUnwindInfoUnwind
                     CuiUnwindResult::Err(err) => return Err(err.into()),
                 }
             }
-            UnwindData::EhFrameHdrAndEhFrame(eh_frame_hdr, eh_frame_data) => {
+            ModuleUnwindData::EhFrameHdrAndEhFrame(eh_frame_hdr, eh_frame_data) => {
                 let eh_frame_hdr_data = ArcData(eh_frame_hdr.clone());
                 let eh_frame_data = ArcData(eh_frame_data.clone());
                 let mut dwarf_unwinder = DwarfUnwinder::<_, A>::new(
@@ -355,8 +355,10 @@ impl<D: Deref<Target = [u8]>, A: Arch + DwarfUnwinding + CompactUnwindInfoUnwind
                     .ok_or(UnwinderError::EhFrameHdrCouldNotFindAddress)?;
                 dwarf_unwinder.unwind_first_with_fde(regs, pc, fde_offset, read_mem)?
             }
-            UnwindData::EhFrame(_) => return Err(UnwinderError::UnhandledUnwindDataType),
-            UnwindData::None => return Err(UnwinderError::NoUnwindData),
+            ModuleUnwindData::EhFrame(_) => {
+                return Err(UnwinderError::UnhandledModuleUnwindDataType)
+            }
+            ModuleUnwindData::None => return Err(UnwinderError::NoModuleUnwindData),
         };
         Ok(unwind_result)
     }
@@ -378,7 +380,7 @@ impl<D: Deref<Target = [u8]>, A: Arch + DwarfUnwinding + CompactUnwindInfoUnwind
         //     self.name, rel_ra, return_address, regs
         // );
         let unwind_result = match &module.unwind_data {
-            UnwindData::CompactUnwindInfoAndEhFrame(unwind_data, eh_frame_data) => {
+            ModuleUnwindData::CompactUnwindInfoAndEhFrame(unwind_data, eh_frame_data) => {
                 // eprintln!("unwinding with cui and eh_frame in module {}", module.name);
                 let mut unwinder = CompactUnwindInfoUnwinder::<A>::new(&unwind_data[..]);
                 match unwinder.unwind_next(regs, rel_ra, read_mem) {
@@ -407,7 +409,7 @@ impl<D: Deref<Target = [u8]>, A: Arch + DwarfUnwinding + CompactUnwindInfoUnwind
                     CuiUnwindResult::Err(err) => return Err(err.into()),
                 }
             }
-            UnwindData::EhFrameHdrAndEhFrame(eh_frame_hdr, eh_frame_data) => {
+            ModuleUnwindData::EhFrameHdrAndEhFrame(eh_frame_hdr, eh_frame_data) => {
                 let eh_frame_hdr_data = ArcData(eh_frame_hdr.clone());
                 let eh_frame_data = ArcData(eh_frame_data.clone());
                 let mut dwarf_unwinder = DwarfUnwinder::<_, A>::new(
@@ -421,14 +423,16 @@ impl<D: Deref<Target = [u8]>, A: Arch + DwarfUnwinding + CompactUnwindInfoUnwind
                     .ok_or(UnwinderError::EhFrameHdrCouldNotFindAddress)?;
                 dwarf_unwinder.unwind_first_with_fde(regs, return_address, fde_offset, read_mem)?
             }
-            UnwindData::EhFrame(_) => return Err(UnwinderError::UnhandledUnwindDataType),
-            UnwindData::None => return Err(UnwinderError::NoUnwindData),
+            ModuleUnwindData::EhFrame(_) => {
+                return Err(UnwinderError::UnhandledModuleUnwindDataType)
+            }
+            ModuleUnwindData::None => return Err(UnwinderError::NoModuleUnwindData),
         };
         Ok(unwind_result)
     }
 }
 
-pub enum UnwindData<D: Deref<Target = [u8]>> {
+pub enum ModuleUnwindData<D: Deref<Target = [u8]>> {
     CompactUnwindInfoAndEhFrame(D, Option<Arc<D>>),
     EhFrameHdrAndEhFrame(Arc<D>, Arc<D>),
     EhFrame(Arc<D>),
@@ -442,12 +446,12 @@ pub struct Module<D: Deref<Target = [u8]>> {
     base_address: u64,
     #[allow(unused)]
     vm_addr_at_base_addr: u64,
-    sections: SectionAddresses,
-    unwind_data: UnwindData<D>,
+    sections: ModuleSectionAddresses,
+    unwind_data: ModuleUnwindData<D>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SectionAddresses {
+pub struct ModuleSectionAddresses {
     pub text: u64,
     pub eh_frame: u64,
     pub eh_frame_hdr: u64,
@@ -469,8 +473,8 @@ impl<D: Deref<Target = [u8]>> Module<D> {
         address_range: std::ops::Range<u64>,
         base_address: u64,
         vm_addr_at_base_addr: u64,
-        sections: SectionAddresses,
-        unwind_data: UnwindData<D>,
+        sections: ModuleSectionAddresses,
+        unwind_data: ModuleUnwindData<D>,
     ) -> Self {
         Self {
             name,

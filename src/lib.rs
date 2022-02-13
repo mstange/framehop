@@ -14,7 +14,7 @@ mod unwindregs;
 
 pub use code_address::CodeAddress;
 pub use error::Error;
-pub use unwinder::{Module, SectionAddresses, UnwindData, UnwindIterator, Unwinder};
+pub use unwinder::{Module, ModuleSectionAddresses, ModuleUnwindData, UnwindIterator, Unwinder};
 pub use unwindregs::*;
 
 #[cfg(target_arch = "aarch64")]

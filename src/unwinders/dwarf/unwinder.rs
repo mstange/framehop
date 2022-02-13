@@ -6,7 +6,7 @@ use gimli::{
     UnwindContextStorage, UnwindSection, UnwindTableRow, Value,
 };
 
-use crate::{arch::Arch, unwind_result::UnwindResult, SectionAddresses};
+use crate::{arch::Arch, unwind_result::UnwindResult, ModuleSectionAddresses};
 
 use super::DwarfUnwinderError;
 
@@ -48,7 +48,7 @@ impl<'a, R: Reader, A: DwarfUnwinding> DwarfUnwinder<'a, R, A> {
         eh_frame_data: R,
         eh_frame_hdr_data: Option<R>,
         unwind_context: &'a mut UnwindContext<R>,
-        sections: &SectionAddresses,
+        sections: &ModuleSectionAddresses,
     ) -> Self {
         let bases = BaseAddresses::default()
             .set_eh_frame(sections.eh_frame)

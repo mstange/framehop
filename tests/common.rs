@@ -36,16 +36,22 @@ where
         eh_frame_hdr.as_ref().and_then(section_data),
     ) {
         (Some(unwind_info), Some(eh_frame), _) => {
-            framehop::UnwindData::CompactUnwindInfoAndEhFrame(unwind_info, Some(Arc::new(eh_frame)))
+            framehop::ModuleUnwindData::CompactUnwindInfoAndEhFrame(
+                unwind_info,
+                Some(Arc::new(eh_frame)),
+            )
         }
         (Some(unwind_info), None, _) => {
-            framehop::UnwindData::CompactUnwindInfoAndEhFrame(unwind_info, None)
+            framehop::ModuleUnwindData::CompactUnwindInfoAndEhFrame(unwind_info, None)
         }
         (None, Some(eh_frame), Some(eh_frame_hdr)) => {
-            framehop::UnwindData::EhFrameHdrAndEhFrame(Arc::new(eh_frame_hdr), Arc::new(eh_frame))
+            framehop::ModuleUnwindData::EhFrameHdrAndEhFrame(
+                Arc::new(eh_frame_hdr),
+                Arc::new(eh_frame),
+            )
         }
-        (None, Some(eh_frame), None) => framehop::UnwindData::EhFrame(Arc::new(eh_frame)),
-        (None, None, _) => framehop::UnwindData::None,
+        (None, Some(eh_frame), None) => framehop::ModuleUnwindData::EhFrame(Arc::new(eh_frame)),
+        (None, None, _) => framehop::ModuleUnwindData::None,
     };
 
     let module = framehop::Module::new(
@@ -53,7 +59,7 @@ where
         base_address..(base_address + buf.len() as u64),
         base_address,
         0,
-        SectionAddresses {
+        ModuleSectionAddresses {
             text: base_address + text.map_or(0, |s| s.address()),
             eh_frame: base_address + eh_frame.map_or(0, |s| s.address()),
             eh_frame_hdr: base_address + eh_frame_hdr.map_or(0, |s| s.address()),
