@@ -34,7 +34,7 @@ pub trait Unwinder {
         regs: &mut Self::UnwindRegs,
         cache: &mut Self::Cache,
         read_mem: &mut F,
-    ) -> Result<u64, Error>
+    ) -> Result<Option<u64>, Error>
     where
         F: FnMut(u64) -> Result<u64, ()>;
 
@@ -44,7 +44,7 @@ pub trait Unwinder {
         regs: &mut Self::UnwindRegs,
         cache: &mut Self::Cache,
         read_mem: &mut F,
-    ) -> Result<u64, Error>
+    ) -> Result<Option<u64>, Error>
     where
         F: FnMut(u64) -> Result<u64, ()>;
 }
@@ -139,7 +139,7 @@ impl<D: Deref<Target = [u8]>, A: Arch + DwarfUnwinding + CompactUnwindInfoUnwind
         cache: &mut Cache<D, A::UnwindRule>,
         read_mem: &mut F,
         callback: G,
-    ) -> Result<u64, Error>
+    ) -> Result<Option<u64>, Error>
     where
         F: FnMut(u64) -> Result<u64, ()>,
         G: FnOnce(
@@ -167,7 +167,9 @@ impl<D: Deref<Target = [u8]>, A: Arch + DwarfUnwinding + CompactUnwindInfoUnwind
                 let module = &self.modules[module_index];
                 match callback(module, address.address(), regs, cache, read_mem) {
                     Ok(UnwindResult::ExecRule(rule)) => rule,
-                    Ok(UnwindResult::Uncacheable(return_address)) => return Ok(return_address),
+                    Ok(UnwindResult::Uncacheable(return_address)) => {
+                        return Ok(Some(return_address))
+                    }
                     Err(_err) => {
                         // eprintln!("Unwinder error: {}", err);
                         A::UnwindRule::fallback_rule()
@@ -185,7 +187,7 @@ impl<D: Deref<Target = [u8]>, A: Arch + DwarfUnwinding + CompactUnwindInfoUnwind
         regs: &mut A::UnwindRegs,
         cache: &mut Cache<D, A::UnwindRule>,
         read_mem: &mut F,
-    ) -> Result<u64, Error>
+    ) -> Result<Option<u64>, Error>
     where
         F: FnMut(u64) -> Result<u64, ()>,
     {
@@ -205,7 +207,7 @@ impl<D: Deref<Target = [u8]>, A: Arch + DwarfUnwinding + CompactUnwindInfoUnwind
         regs: &mut A::UnwindRegs,
         cache: &mut Cache<D, A::UnwindRule>,
         read_mem: &mut F,
-    ) -> Result<u64, Error>
+    ) -> Result<Option<u64>, Error>
     where
         F: FnMut(u64) -> Result<u64, ()>,
     {

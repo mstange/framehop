@@ -1,27 +1,16 @@
-use super::unwinders::{
-    CompactUnwindInfoUnwinderError, DwarfUnwinderError, FramepointerUnwinderError,
-};
+use super::unwinders::{CompactUnwindInfoUnwinderError, DwarfUnwinderError};
 
 #[derive(thiserror::Error, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Error {
-    #[error("Unwinding failed")]
-    UnwindingFailed,
+    #[error("Could not read stack memory at 0x{0:x}")]
+    CouldNotReadStack(u64),
 
-    #[error("The end of the stack has been reached.")]
-    StackEndReached,
-}
-
-impl From<FramepointerUnwinderError> for Error {
-    fn from(_: FramepointerUnwinderError) -> Self {
-        Error::UnwindingFailed
-    }
+    #[error("Frame pointer unwinding moved backwards")]
+    FramepointerUnwindingMovedBackwards,
 }
 
 #[derive(thiserror::Error, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnwinderError {
-    #[error("Framepointer unwinding failed: {0}")]
-    FramePointer(#[from] FramepointerUnwinderError),
-
     #[error("Compact Unwind Info unwinding failed: {0}")]
     CompactUnwindInfo(#[source] CompactUnwindInfoUnwinderError),
 
@@ -45,9 +34,6 @@ impl From<CompactUnwindInfoUnwinderError> for UnwinderError {
     fn from(e: CompactUnwindInfoUnwinderError) -> Self {
         match e {
             CompactUnwindInfoUnwinderError::BadDwarfUnwinding(e) => UnwinderError::Dwarf(e),
-            CompactUnwindInfoUnwinderError::BadFramepointerUnwinding(e) => {
-                UnwinderError::FramePointer(e)
-            }
             e => UnwinderError::CompactUnwindInfo(e),
         }
     }

@@ -35,16 +35,16 @@ fn test_basic() {
     let mut regs = UnwindRegsAarch64::new(0x1003fc000 + 0xe4830, 0x10, 0x20);
     // There's a frameless function at e0d2c.
     let res = unwinder.unwind_first(0x1003fc000 + 0x1292c0, &mut regs, &mut cache, &mut read_mem);
-    assert_eq!(res, Ok(0x1003fc000 + 0xe4830));
+    assert_eq!(res, Ok(Some(0x1003fc000 + 0xe4830)));
     assert_eq!(regs.sp(), 0x10);
     let res = unwinder.unwind_next(0x1003fc000 + 0xe4830, &mut regs, &mut cache, &mut read_mem);
-    assert_eq!(res, Ok(0x1003fc000 + 0x100dc4));
+    assert_eq!(res, Ok(Some(0x1003fc000 + 0x100dc4)));
     assert_eq!(regs.sp(), 0x30);
     assert_eq!(regs.fp(), 0x40);
     let res = unwinder.unwind_next(0x1003fc000 + 0x100dc4, &mut regs, &mut cache, &mut read_mem);
-    assert_eq!(res, Ok(0x1003fc000 + 0x12ca28));
+    assert_eq!(res, Ok(Some(0x1003fc000 + 0x12ca28)));
     assert_eq!(regs.sp(), 0x50);
     assert_eq!(regs.fp(), 0x70);
     let res = unwinder.unwind_next(0x1003fc000 + 0x100dc4, &mut regs, &mut cache, &mut read_mem);
-    assert_eq!(res, Err(Error::StackEndReached));
+    assert_eq!(res, Ok(None));
 }

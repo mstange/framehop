@@ -70,7 +70,7 @@ impl<D: Deref<Target = [u8]>> Unwinder for UnwinderAarch64<D> {
         regs: &mut UnwindRegsAarch64,
         cache: &mut CacheAarch64<D>,
         read_mem: &mut F,
-    ) -> Result<u64, Error>
+    ) -> Result<Option<u64>, Error>
     where
         F: FnMut(u64) -> Result<u64, ()>,
     {
@@ -83,7 +83,7 @@ impl<D: Deref<Target = [u8]>> Unwinder for UnwinderAarch64<D> {
         regs: &mut UnwindRegsAarch64,
         cache: &mut CacheAarch64<D>,
         read_mem: &mut F,
-    ) -> Result<u64, Error>
+    ) -> Result<Option<u64>, Error>
     where
         F: FnMut(u64) -> Result<u64, ()>,
     {
@@ -129,7 +129,7 @@ impl<D: Deref<Target = [u8]>> Unwinder for UnwinderX86_64<D> {
         regs: &mut UnwindRegsX86_64,
         cache: &mut CacheX86_64<D>,
         read_mem: &mut F,
-    ) -> Result<u64, Error>
+    ) -> Result<Option<u64>, Error>
     where
         F: FnMut(u64) -> Result<u64, ()>,
     {
@@ -142,7 +142,7 @@ impl<D: Deref<Target = [u8]>> Unwinder for UnwinderX86_64<D> {
         regs: &mut UnwindRegsX86_64,
         cache: &mut CacheX86_64<D>,
         read_mem: &mut F,
-    ) -> Result<u64, Error>
+    ) -> Result<Option<u64>, Error>
     where
         F: FnMut(u64) -> Result<u64, ()>,
     {

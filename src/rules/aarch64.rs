@@ -46,7 +46,7 @@ impl UnwindRule for UnwindRuleAarch64 {
         UnwindRuleAarch64::UseFramePointer
     }
 
-    fn exec<F>(self, regs: &mut UnwindRegsAarch64, read_mem: &mut F) -> Result<u64, Error>
+    fn exec<F>(self, regs: &mut UnwindRegsAarch64, read_mem: &mut F) -> Result<Option<u64>, Error>
     where
         F: FnMut(u64) -> Result<u64, ()>,
     {
@@ -63,7 +63,8 @@ impl UnwindRule for UnwindRuleAarch64 {
                 let new_sp = sp + sp_offset_by_16 as u64 * 16;
                 let lr_location =
                     wrapping_add_signed(sp, lr_storage_offset_from_sp_by_8 as i64 * 8);
-                let new_lr = read_mem(lr_location).map_err(|_| Error::UnwindingFailed)?;
+                let new_lr =
+                    read_mem(lr_location).map_err(|_| Error::CouldNotReadStack(lr_location))?;
                 regs.set_sp(new_sp);
                 regs.set_lr(new_lr);
             }
@@ -76,10 +77,12 @@ impl UnwindRule for UnwindRuleAarch64 {
                 let new_sp = sp + sp_offset_by_16 as u64 * 16;
                 let lr_location =
                     wrapping_add_signed(sp, lr_storage_offset_from_sp_by_8 as i64 * 8);
-                let new_lr = read_mem(lr_location).map_err(|_| Error::UnwindingFailed)?;
+                let new_lr =
+                    read_mem(lr_location).map_err(|_| Error::CouldNotReadStack(lr_location))?;
                 let fp_location =
                     wrapping_add_signed(sp, fp_storage_offset_from_sp_by_8 as i64 * 8);
-                let new_fp = read_mem(fp_location).map_err(|_| Error::UnwindingFailed)?;
+                let new_fp =
+                    read_mem(fp_location).map_err(|_| Error::CouldNotReadStack(fp_location))?;
                 regs.set_sp(new_sp);
                 regs.set_fp(new_fp);
                 regs.set_lr(new_lr);
@@ -88,13 +91,13 @@ impl UnwindRule for UnwindRuleAarch64 {
                 let sp = regs.sp();
                 let fp = regs.fp();
                 let new_sp = fp + 16;
-                let new_lr = read_mem(fp + 8).map_err(|_| Error::UnwindingFailed)?;
-                let new_fp = read_mem(fp).map_err(|_| Error::UnwindingFailed)?;
+                let new_lr = read_mem(fp + 8).map_err(|_| Error::CouldNotReadStack(fp + 8))?;
+                let new_fp = read_mem(fp).map_err(|_| Error::CouldNotReadStack(fp))?;
                 if new_fp == 0 {
-                    return Err(Error::StackEndReached);
+                    return Ok(None);
                 }
                 if new_fp <= fp || new_sp <= sp {
-                    return Err(Error::UnwindingFailed);
+                    return Err(Error::FramepointerUnwindingMovedBackwards);
                 }
                 regs.set_sp(new_sp);
                 regs.set_fp(new_fp);
@@ -110,22 +113,24 @@ impl UnwindRule for UnwindRuleAarch64 {
                 let new_sp = fp + sp_offset_from_fp_by_8 as u64 * 8;
                 let lr_location =
                     wrapping_add_signed(fp, lr_storage_offset_from_fp_by_8 as i64 * 8);
-                let new_lr = read_mem(lr_location).map_err(|_| Error::UnwindingFailed)?;
+                let new_lr =
+                    read_mem(lr_location).map_err(|_| Error::CouldNotReadStack(lr_location))?;
                 let fp_location =
                     wrapping_add_signed(fp, fp_storage_offset_from_fp_by_8 as i64 * 8);
-                let new_fp = read_mem(fp_location).map_err(|_| Error::UnwindingFailed)?;
+                let new_fp =
+                    read_mem(fp_location).map_err(|_| Error::CouldNotReadStack(fp_location))?;
                 if new_fp == 0 {
-                    return Err(Error::StackEndReached);
+                    return Ok(None);
                 }
                 if new_fp <= fp || new_sp <= sp {
-                    return Err(Error::UnwindingFailed);
+                    return Err(Error::FramepointerUnwindingMovedBackwards);
                 }
                 regs.set_sp(new_sp);
                 regs.set_fp(new_fp);
                 regs.set_lr(new_lr);
             }
         }
-        Ok(regs.lr())
+        Ok(Some(regs.lr()))
     }
 }
 
@@ -141,17 +146,17 @@ mod test {
         let mut read_mem = |addr| Ok(stack[(addr / 8) as usize]);
         let mut regs = UnwindRegsAarch64::new(0x100300, 0x10, 0x20);
         let res = UnwindRuleAarch64::NoOp.exec(&mut regs, &mut read_mem);
-        assert_eq!(res, Ok(0x100300));
+        assert_eq!(res, Ok(Some(0x100300)));
         assert_eq!(regs.sp(), 0x10);
         let res = UnwindRuleAarch64::UseFramePointer.exec(&mut regs, &mut read_mem);
-        assert_eq!(res, Ok(0x100200));
+        assert_eq!(res, Ok(Some(0x100200)));
         assert_eq!(regs.sp(), 0x30);
         assert_eq!(regs.fp(), 0x40);
         let res = UnwindRuleAarch64::UseFramePointer.exec(&mut regs, &mut read_mem);
-        assert_eq!(res, Ok(0x100100));
+        assert_eq!(res, Ok(Some(0x100100)));
         assert_eq!(regs.sp(), 0x50);
         assert_eq!(regs.fp(), 0x70);
         let res = UnwindRuleAarch64::UseFramePointer.exec(&mut regs, &mut read_mem);
-        assert_eq!(res, Err(Error::StackEndReached));
+        assert_eq!(res, Ok(None));
     }
 }

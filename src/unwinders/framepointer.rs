@@ -2,13 +2,6 @@ use crate::{
     rules::{UnwindRuleAarch64, UnwindRuleX86_64},
     unwind_result::UnwindResult,
 };
-use std::result::Result;
-
-#[derive(thiserror::Error, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum FramepointerUnwinderError {
-    #[error("There was a problem reading values from the __text section.")]
-    CouldNotDisassemble,
-}
 
 // Do a frame pointer stack walk. Frame-based aarch64 functions store the caller's fp and lr
 // on the stack and then set fp to the address where the caller's fp is stored.
@@ -51,13 +44,11 @@ pub enum FramepointerUnwinderError {
 pub struct FramepointerUnwinderAarch64;
 
 impl FramepointerUnwinderAarch64 {
-    pub fn unwind_first(
-        &self,
-    ) -> Result<UnwindResult<UnwindRuleAarch64>, FramepointerUnwinderError> {
+    pub fn unwind_first(&self) -> UnwindResult<UnwindRuleAarch64> {
         // TODO: Disassemble starting from pc and detect prologue / epiloge
 
         // For now, just return prologue / epilogue and pretend we're in the middle of a function.
-        Ok(UnwindResult::ExecRule(UnwindRuleAarch64::UseFramePointer))
+        UnwindResult::ExecRule(UnwindRuleAarch64::UseFramePointer)
     }
 }
 
@@ -103,12 +94,10 @@ impl FramepointerUnwinderAarch64 {
 pub struct FramepointerUnwinderX86_64;
 
 impl FramepointerUnwinderX86_64 {
-    pub fn unwind_first(
-        &self,
-    ) -> Result<UnwindResult<UnwindRuleX86_64>, FramepointerUnwinderError> {
+    pub fn unwind_first(&self) -> UnwindResult<UnwindRuleX86_64> {
         // TODO: Disassemble starting from pc and detect prologue / epiloge
 
         // For now, just return prologue / epilogue and pretend we're in the middle of a function.
-        Ok(UnwindResult::ExecRule(UnwindRuleX86_64::UseFramePointer))
+        UnwindResult::ExecRule(UnwindRuleX86_64::UseFramePointer)
     }
 }

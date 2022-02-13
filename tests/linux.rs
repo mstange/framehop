@@ -47,7 +47,7 @@ fn test_plt_cfa_expr() {
     {
         let mut regs = UnwindRegsX86_64::new(0x1000000 + rel_pc, *sp, 0x345);
         let res = unwinder.unwind_first(0x1000000 + rel_pc, &mut regs, &mut cache, &mut read_mem);
-        assert_eq!(res, Ok(0x123456));
+        assert_eq!(res, Ok(Some(0x123456)));
         assert_eq!(regs.sp(), 0x38);
         assert_eq!(regs.bp(), 0x345);
     }
@@ -109,7 +109,7 @@ fn test_pthread_cfa_expr() {
         &mut cache,
         &mut read_mem,
     );
-    assert_eq!(res, Ok(0x7f54b14fc000 + 0x9436));
+    assert_eq!(res, Ok(Some(0x7f54b14fc000 + 0x9436)));
     assert_eq!(regs.sp(), 0x10);
     assert_eq!(regs.bp(), 0x120);
 
@@ -119,7 +119,7 @@ fn test_pthread_cfa_expr() {
         &mut cache,
         &mut read_mem,
     );
-    assert_eq!(res, Ok(0x7f54b14fc000 + 0x8c2c));
+    assert_eq!(res, Ok(Some(0x7f54b14fc000 + 0x8c2c)));
     assert_eq!(regs.sp(), 0x90);
     assert_eq!(regs.bp(), 0x120);
 
@@ -131,7 +131,7 @@ fn test_pthread_cfa_expr() {
         &mut cache,
         &mut read_mem,
     );
-    assert_eq!(res, Ok(0xbe7042));
+    assert_eq!(res, Ok(Some(0xbe7042)));
     assert_eq!(regs.sp(), 0x130);
     assert_eq!(regs.bp(), 0x1234);
 }

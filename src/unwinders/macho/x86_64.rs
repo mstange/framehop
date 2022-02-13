@@ -82,11 +82,10 @@ impl CompactUnwindInfoUnwinding for ArchX86_64 {
                 // TODO: Detect if we're in an epilogue, by seeing if the current instruction restores
                 // registers from the stack (and then keep reading) or is a return instruction.
                 match FramepointerUnwinderX86_64.unwind_first() {
-                    Ok(UnwindResult::ExecRule(rule)) => CuiUnwindResult::ExecRule(rule),
-                    Ok(UnwindResult::Uncacheable(return_address)) => {
+                    UnwindResult::ExecRule(rule) => CuiUnwindResult::ExecRule(rule),
+                    UnwindResult::Uncacheable(return_address) => {
                         CuiUnwindResult::Uncacheable(return_address)
                     }
-                    Err(err) => CuiUnwindResult::Err(err.into()),
                 }
             }
             OpcodeX86_64::UnrecognizedKind(kind) => {

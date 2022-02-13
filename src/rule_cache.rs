@@ -50,7 +50,7 @@ impl<R: UnwindRule> RuleCache<R> {
 
 pub enum CacheResult {
     Miss(CacheHandle),
-    Hit(Result<u64, Error>),
+    Hit(Result<Option<u64>, Error>),
 }
 
 pub struct CacheHandle {

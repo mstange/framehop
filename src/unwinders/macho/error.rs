@@ -1,4 +1,4 @@
-use super::super::{DwarfUnwinderError, FramepointerUnwinderError};
+use super::super::DwarfUnwinderError;
 
 #[derive(thiserror::Error, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CompactUnwindInfoUnwinderError {
@@ -19,9 +19,6 @@ pub enum CompactUnwindInfoUnwinderError {
 
     #[error("DWARF unwinding failed: {0}")]
     BadDwarfUnwinding(#[from] DwarfUnwinderError),
-
-    #[error("Framepointer unwinding failed: {0}")]
-    BadFramepointerUnwinding(#[from] FramepointerUnwinderError),
 
     #[error("Encountered frameless function with indirect stack offset, TODO")]
     CantHandleFramelessIndirect,
