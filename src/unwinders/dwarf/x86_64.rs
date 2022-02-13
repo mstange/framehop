@@ -1,6 +1,5 @@
 use gimli::{
-    CfaRule, Encoding, EvaluationResult, Expression, Location, Reader, RegisterRule,
-    UnwindContextStorage, UnwindTableRow, Value, X86_64,
+    CfaRule, Encoding, Reader, Register, RegisterRule, UnwindContextStorage, UnwindTableRow, X86_64,
 };
 
 use crate::{
@@ -8,7 +7,21 @@ use crate::{
     unwindregs::UnwindRegsX86_64,
 };
 
-use super::{ConversionError, DwarfUnwinderError, DwarfUnwinding};
+use super::{
+    eval_cfa_rule, eval_register_rule, ConversionError, DwarfUnwindRegs, DwarfUnwinderError,
+    DwarfUnwinding,
+};
+
+impl DwarfUnwindRegs for UnwindRegsX86_64 {
+    fn get(&self, register: Register) -> Option<u64> {
+        match register {
+            X86_64::RA => Some(self.ip()),
+            X86_64::RSP => Some(self.sp()),
+            X86_64::RBP => Some(self.bp()),
+            _ => None,
+        }
+    }
+}
 
 impl DwarfUnwinding for ArchX86_64 {
     fn unwind_first<F, R, S>(
@@ -46,14 +59,18 @@ impl DwarfUnwinding for ArchX86_64 {
         // eprintln!("cfa: {:x}", cfa);
 
         let bp = regs.bp();
-        let bp = eval_rule(bp_rule, cfa, encoding, bp, regs, read_mem).unwrap_or(bp);
+        let bp = eval_register_rule(bp_rule, cfa, encoding, bp, regs, read_mem).unwrap_or(bp);
 
-        let return_address = match eval_rule(ra_rule, cfa, encoding, pc, regs, read_mem) {
+        let return_address = match eval_register_rule(ra_rule, cfa, encoding, pc, regs, read_mem) {
             Some(ra) => ra,
             None => {
                 read_mem(cfa - 8).map_err(|_| DwarfUnwinderError::CouldNotRecoverReturnAddress)?
             }
         };
+
+        if cfa == regs.sp() && return_address == regs.ip() {
+            return Err(DwarfUnwinderError::DidNotAdvance);
+        }
 
         regs.set_ip(return_address);
         regs.set_bp(bp);
@@ -93,15 +110,15 @@ impl DwarfUnwinding for ArchX86_64 {
 
         // eprintln!("cfa: {:x}", cfa);
         // println!("rules: fp {:?}, lr {:?}", bp_rule, lr_rule);
-        let bp = eval_rule(bp_rule, cfa, encoding, regs.bp(), regs, read_mem)
+        let bp = eval_register_rule(bp_rule, cfa, encoding, regs.bp(), regs, read_mem)
             .ok_or(DwarfUnwinderError::CouldNotRecoverFramePointer)?;
 
-        let return_address = match eval_rule(ra_rule, cfa, encoding, regs.ip(), regs, read_mem) {
-            Some(ra) => ra,
-            None => {
-                read_mem(cfa - 8).map_err(|_| DwarfUnwinderError::CouldNotRecoverReturnAddress)?
-            }
-        };
+        let return_address =
+            match eval_register_rule(ra_rule, cfa, encoding, regs.ip(), regs, read_mem) {
+                Some(ra) => ra,
+                None => read_mem(cfa - 8)
+                    .map_err(|_| DwarfUnwinderError::CouldNotRecoverReturnAddress)?,
+            };
 
         regs.set_ip(return_address);
         regs.set_bp(bp);
@@ -183,95 +200,5 @@ fn translate_into_unwind_rule<R: gimli::Reader>(
             _ => Err(ConversionError::CfaIsOffsetFromUnknownRegister),
         },
         CfaRule::Expression(_) => Err(ConversionError::CfaIsExpression),
-    }
-}
-
-fn eval_cfa_rule<R: gimli::Reader>(
-    rule: &CfaRule<R>,
-    encoding: Encoding,
-    regs: &UnwindRegsX86_64,
-) -> Option<u64> {
-    match rule {
-        CfaRule::RegisterAndOffset { register, offset } => {
-            let val = match *register {
-                X86_64::RA => regs.ip(),
-                X86_64::RSP => regs.sp(),
-                X86_64::RBP => regs.bp(),
-                _ => return None,
-            };
-            u64::try_from(i64::try_from(val).ok()?.checked_add(*offset)?).ok()
-        }
-        CfaRule::Expression(expr) => eval_expr(expr.clone(), encoding, regs),
-    }
-}
-
-fn eval_expr<R: gimli::Reader>(
-    expr: Expression<R>,
-    encoding: Encoding,
-    regs: &UnwindRegsX86_64,
-) -> Option<u64> {
-    let mut eval = expr.evaluation(encoding);
-    let mut result = eval.evaluate().ok()?;
-    loop {
-        match result {
-            EvaluationResult::Complete => break,
-            EvaluationResult::RequiresRegister { register, .. } => {
-                let value = match register {
-                    X86_64::RA => regs.ip(),
-                    X86_64::RSP => regs.sp(),
-                    X86_64::RBP => regs.bp(),
-                    _ => return None,
-                };
-                result = eval.resume_with_register(Value::Generic(value as _)).ok()?;
-            }
-            _ => return None,
-        }
-    }
-    let x = &eval.as_result().last()?.location;
-    if let Location::Address { address } = x {
-        Some(*address)
-    } else {
-        None
-    }
-}
-
-fn eval_rule<R, F>(
-    rule: RegisterRule<R>,
-    cfa: u64,
-    encoding: Encoding,
-    val: u64,
-    regs: &UnwindRegsX86_64,
-    read_mem: &mut F,
-) -> Option<u64>
-where
-    R: gimli::Reader,
-    F: FnMut(u64) -> Result<u64, ()>,
-{
-    match rule {
-        RegisterRule::Undefined => None,
-        RegisterRule::SameValue => Some(val),
-        RegisterRule::Offset(offset) => {
-            let cfa_plus_offset =
-                u64::try_from(i64::try_from(cfa).ok()?.checked_add(offset)?).ok()?;
-            read_mem(cfa_plus_offset).ok()
-        }
-        RegisterRule::ValOffset(offset) => {
-            u64::try_from(i64::try_from(cfa).ok()?.checked_add(offset)?).ok()
-        }
-        RegisterRule::Register(register) => match register {
-            X86_64::RA => Some(regs.ip()),
-            X86_64::RSP => Some(regs.sp()),
-            X86_64::RBP => Some(regs.bp()),
-            _ => None,
-        },
-        RegisterRule::Expression(_) => {
-            println!("Unimplemented RegisterRule::Expression");
-            None
-        }
-        RegisterRule::ValExpression(expr) => eval_expr(expr, encoding, regs),
-        RegisterRule::Architectural => {
-            println!("Unimplemented RegisterRule::Architectural");
-            None
-        }
     }
 }

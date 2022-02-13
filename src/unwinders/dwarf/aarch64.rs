@@ -1,5 +1,6 @@
 use gimli::{
-    AArch64, CfaRule, Encoding, Reader, RegisterRule, UnwindContextStorage, UnwindTableRow,
+    AArch64, CfaRule, Encoding, Reader, Register, RegisterRule, UnwindContextStorage,
+    UnwindTableRow,
 };
 
 use crate::{
@@ -7,12 +8,26 @@ use crate::{
     unwindregs::UnwindRegsAarch64,
 };
 
-use super::{ConversionError, DwarfUnwinderError, DwarfUnwinding};
+use super::{
+    eval_cfa_rule, eval_register_rule, ConversionError, DwarfUnwindRegs, DwarfUnwinderError,
+    DwarfUnwinding,
+};
+
+impl DwarfUnwindRegs for UnwindRegsAarch64 {
+    fn get(&self, register: Register) -> Option<u64> {
+        match register {
+            AArch64::SP => Some(self.sp()),
+            AArch64::X29 => Some(self.fp()),
+            AArch64::X30 => Some(self.lr()),
+            _ => None,
+        }
+    }
+}
 
 impl DwarfUnwinding for ArchAarch64 {
     fn unwind_first<F, R, S>(
         unwind_info: &UnwindTableRow<R, S>,
-        _encoding: Encoding,
+        encoding: Encoding,
         regs: &mut Self::UnwindRegs,
         pc: u64,
         read_mem: &mut F,
@@ -34,19 +49,17 @@ impl DwarfUnwinding for ArchAarch64 {
         }
 
         // println!("cfa rule: {:?}, regs: {:?}", cfa_rule, regs);
-        let cfa = eval_cfa_rule(cfa_rule, regs).ok_or(DwarfUnwinderError::CouldNotRecoverCfa)?;
+        let cfa = eval_cfa_rule(cfa_rule, encoding, regs)
+            .ok_or(DwarfUnwinderError::CouldNotRecoverCfa)?;
 
         let lr = regs.lr();
         let fp = regs.fp();
         let sp = regs.sp();
 
-        if cfa < sp {
-            return Err(DwarfUnwinderError::StackPointerMovedBackwards);
-        }
         // println!("cfa: {:x}", cfa);
         // println!("rules: fp {:?}, lr {:?}", fp_rule, lr_rule);
-        let fp = eval_rule(fp_rule, cfa, fp, regs, read_mem).unwrap_or(fp);
-        let lr = eval_rule(lr_rule, cfa, lr, regs, read_mem).unwrap_or(lr);
+        let fp = eval_register_rule(fp_rule, cfa, encoding, fp, regs, read_mem).unwrap_or(fp);
+        let lr = eval_register_rule(lr_rule, cfa, encoding, lr, regs, read_mem).unwrap_or(lr);
 
         if cfa == sp && lr == pc {
             return Err(DwarfUnwinderError::DidNotAdvance);
@@ -61,7 +74,7 @@ impl DwarfUnwinding for ArchAarch64 {
 
     fn unwind_next<F, R, S>(
         unwind_info: &UnwindTableRow<R, S>,
-        _encoding: Encoding,
+        encoding: Encoding,
         regs: &mut Self::UnwindRegs,
         read_mem: &mut F,
     ) -> Result<UnwindResult<Self::UnwindRule>, DwarfUnwinderError>
@@ -82,16 +95,17 @@ impl DwarfUnwinding for ArchAarch64 {
         }
 
         // println!("cfa rule: {:?}, regs: {:?}", cfa_rule, regs);
-        let cfa = eval_cfa_rule(cfa_rule, regs).ok_or(DwarfUnwinderError::CouldNotRecoverCfa)?;
+        let cfa = eval_cfa_rule(cfa_rule, encoding, regs)
+            .ok_or(DwarfUnwinderError::CouldNotRecoverCfa)?;
         if cfa <= regs.sp() {
             return Err(DwarfUnwinderError::StackPointerMovedBackwards);
         }
 
         // println!("cfa: {:x}", cfa);
         // println!("rules: fp {:?}, lr {:?}", fp_rule, lr_rule);
-        let fp = eval_rule(fp_rule, cfa, regs.fp(), regs, read_mem)
+        let fp = eval_register_rule(fp_rule, cfa, encoding, regs.fp(), regs, read_mem)
             .ok_or(DwarfUnwinderError::CouldNotRecoverFramePointer)?;
-        let lr = eval_rule(lr_rule, cfa, regs.lr(), regs, read_mem)
+        let lr = eval_register_rule(lr_rule, cfa, encoding, regs.lr(), regs, read_mem)
             .ok_or(DwarfUnwinderError::CouldNotRecoverReturnAddress)?;
         regs.set_fp(fp);
         regs.set_sp(cfa);
@@ -107,11 +121,7 @@ fn register_rule_to_cfa_offset<R: gimli::Reader>(
     match *rule {
         RegisterRule::Undefined | RegisterRule::SameValue => Ok(None),
         RegisterRule::Offset(offset) => Ok(Some(offset)),
-        RegisterRule::ValOffset(_)
-        | RegisterRule::Register(_)
-        | RegisterRule::Expression(_)
-        | RegisterRule::ValExpression(_)
-        | RegisterRule::Architectural => Err(ConversionError::RegisterNotStoredRelativeToCfa),
+        _ => Err(ConversionError::RegisterNotStoredRelativeToCfa),
     }
 }
 
@@ -180,63 +190,5 @@ fn translate_into_unwind_rule<R: gimli::Reader>(
             _ => Err(ConversionError::CfaIsOffsetFromUnknownRegister),
         },
         CfaRule::Expression(_) => Err(ConversionError::CfaIsExpression),
-    }
-}
-
-fn eval_cfa_rule<R: gimli::Reader>(rule: &CfaRule<R>, regs: &UnwindRegsAarch64) -> Option<u64> {
-    match rule {
-        CfaRule::RegisterAndOffset { register, offset } => {
-            let val = match *register {
-                AArch64::SP => regs.sp(),
-                AArch64::X29 => regs.fp(),
-                AArch64::X30 => regs.lr(),
-                _ => return None,
-            };
-            u64::try_from(i64::try_from(val).ok()?.checked_add(*offset)?).ok()
-        }
-        CfaRule::Expression(_) => None,
-    }
-}
-
-fn eval_rule<R, F>(
-    rule: RegisterRule<R>,
-    cfa: u64,
-    val: u64,
-    regs: &UnwindRegsAarch64,
-    read_mem: &mut F,
-) -> Option<u64>
-where
-    R: gimli::Reader,
-    F: FnMut(u64) -> Result<u64, ()>,
-{
-    match rule {
-        RegisterRule::Undefined => None,
-        RegisterRule::SameValue => Some(val),
-        RegisterRule::Offset(offset) => {
-            let cfa_plus_offset =
-                u64::try_from(i64::try_from(cfa).ok()?.checked_add(offset)?).ok()?;
-            read_mem(cfa_plus_offset).ok()
-        }
-        RegisterRule::ValOffset(offset) => {
-            u64::try_from(i64::try_from(cfa).ok()?.checked_add(offset)?).ok()
-        }
-        RegisterRule::Register(register) => match register {
-            AArch64::SP => Some(regs.sp()),
-            AArch64::X29 => Some(regs.fp()),
-            AArch64::X30 => Some(regs.lr()),
-            _ => None,
-        },
-        RegisterRule::Expression(_) => {
-            println!("Unimplemented RegisterRule::Expression");
-            None
-        }
-        RegisterRule::ValExpression(_) => {
-            println!("Unimplemented RegisterRule::ValExpression");
-            None
-        }
-        RegisterRule::Architectural => {
-            println!("Unimplemented RegisterRule::Architectural");
-            None
-        }
     }
 }

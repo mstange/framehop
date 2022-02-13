@@ -1,8 +1,9 @@
 use std::marker::PhantomData;
 
 use gimli::{
-    BaseAddresses, EhFrameHdr, Encoding, EndianSlice, LittleEndian, ParsedEhFrameHdr, Reader,
-    ReaderOffset, UnwindContext, UnwindContextStorage, UnwindSection, UnwindTableRow,
+    BaseAddresses, CfaRule, EhFrameHdr, Encoding, EndianSlice, EvaluationResult, Expression,
+    LittleEndian, Location, ParsedEhFrameHdr, Reader, ReaderOffset, Register, RegisterRule,
+    UnwindContext, UnwindContextStorage, UnwindSection, UnwindTableRow, Value,
 };
 
 use crate::{arch::Arch, unwind_result::UnwindResult, SectionAddresses};
@@ -151,5 +152,85 @@ impl<'a, 'b, R: Reader, A: DwarfUnwinding> DwarfUnwinder<'a, 'b, R, A> {
             }
         };
         A::unwind_next(unwind_info, encoding, regs, read_mem)
+    }
+}
+
+pub trait DwarfUnwindRegs {
+    fn get(&self, register: Register) -> Option<u64>;
+}
+
+pub fn eval_cfa_rule<R: gimli::Reader, UR: DwarfUnwindRegs>(
+    rule: &CfaRule<R>,
+    encoding: Encoding,
+    regs: &UR,
+) -> Option<u64> {
+    match rule {
+        CfaRule::RegisterAndOffset { register, offset } => {
+            let val = regs.get(*register)?;
+            u64::try_from(i64::try_from(val).ok()?.checked_add(*offset)?).ok()
+        }
+        CfaRule::Expression(expr) => eval_expr(expr.clone(), encoding, regs),
+    }
+}
+
+fn eval_expr<R: gimli::Reader, UR: DwarfUnwindRegs>(
+    expr: Expression<R>,
+    encoding: Encoding,
+    regs: &UR,
+) -> Option<u64> {
+    let mut eval = expr.evaluation(encoding);
+    let mut result = eval.evaluate().ok()?;
+    loop {
+        match result {
+            EvaluationResult::Complete => break,
+            EvaluationResult::RequiresRegister { register, .. } => {
+                let value = regs.get(register)?;
+                result = eval.resume_with_register(Value::Generic(value as _)).ok()?;
+            }
+            _ => return None,
+        }
+    }
+    let x = &eval.as_result().last()?.location;
+    if let Location::Address { address } = x {
+        Some(*address)
+    } else {
+        None
+    }
+}
+
+pub fn eval_register_rule<R, F, UR>(
+    rule: RegisterRule<R>,
+    cfa: u64,
+    encoding: Encoding,
+    val: u64,
+    regs: &UR,
+    read_mem: &mut F,
+) -> Option<u64>
+where
+    R: gimli::Reader,
+    F: FnMut(u64) -> Result<u64, ()>,
+    UR: DwarfUnwindRegs,
+{
+    match rule {
+        RegisterRule::Undefined => None,
+        RegisterRule::SameValue => Some(val),
+        RegisterRule::Offset(offset) => {
+            let cfa_plus_offset =
+                u64::try_from(i64::try_from(cfa).ok()?.checked_add(offset)?).ok()?;
+            read_mem(cfa_plus_offset).ok()
+        }
+        RegisterRule::ValOffset(offset) => {
+            u64::try_from(i64::try_from(cfa).ok()?.checked_add(offset)?).ok()
+        }
+        RegisterRule::Register(register) => regs.get(register),
+        RegisterRule::Expression(_) => {
+            println!("Unimplemented RegisterRule::Expression");
+            None
+        }
+        RegisterRule::ValExpression(expr) => eval_expr(expr, encoding, regs),
+        RegisterRule::Architectural => {
+            println!("Unimplemented RegisterRule::Architectural");
+            None
+        }
     }
 }
