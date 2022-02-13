@@ -1,3 +1,4 @@
+use fallible_iterator::FallibleIterator;
 use gimli::{EndianReader, LittleEndian};
 
 use crate::arcdata::ArcData;
@@ -47,6 +48,88 @@ pub trait Unwinder {
     ) -> Result<Option<u64>, Error>
     where
         F: FnMut(u64) -> Result<u64, ()>;
+
+    fn iter_frames<'u, 'c, 'r, F>(
+        &'u self,
+        pc: u64,
+        regs: Self::UnwindRegs,
+        cache: &'c mut Self::Cache,
+        read_mem: &'r mut F,
+    ) -> UnwindIterator<'u, 'c, 'r, Self, F>
+    where
+        F: FnMut(u64) -> Result<u64, ()>,
+    {
+        UnwindIterator::new(self, pc, regs, cache, read_mem)
+    }
+}
+
+pub struct UnwindIterator<'u, 'c, 'r, U: Unwinder + ?Sized, F: FnMut(u64) -> Result<u64, ()>> {
+    unwinder: &'u U,
+    state: UnwindIteratorState,
+    regs: U::UnwindRegs,
+    cache: &'c mut U::Cache,
+    read_mem: &'r mut F,
+}
+
+enum UnwindIteratorState {
+    Initial(u64),
+    ReadyForFirstUnwind(u64),
+    ReadyForNextUnwind(u64),
+    Done,
+}
+
+impl<'u, 'c, 'r, U: Unwinder + ?Sized, F: FnMut(u64) -> Result<u64, ()>>
+    UnwindIterator<'u, 'c, 'r, U, F>
+{
+    pub fn new(
+        unwinder: &'u U,
+        pc: u64,
+        regs: U::UnwindRegs,
+        cache: &'c mut U::Cache,
+        read_mem: &'r mut F,
+    ) -> Self {
+        Self {
+            unwinder,
+            state: UnwindIteratorState::Initial(pc),
+            regs,
+            cache,
+            read_mem,
+        }
+    }
+}
+
+impl<'u, 'c, 'r, U: Unwinder + ?Sized, F: FnMut(u64) -> Result<u64, ()>> FallibleIterator
+    for UnwindIterator<'u, 'c, 'r, U, F>
+{
+    type Item = u64;
+    type Error = Error;
+
+    fn next(&mut self) -> Result<Option<u64>, Error> {
+        let next =
+            match self.state {
+                UnwindIteratorState::Initial(pc) => {
+                    self.state = UnwindIteratorState::ReadyForFirstUnwind(pc);
+                    return Ok(Some(pc));
+                }
+                UnwindIteratorState::ReadyForFirstUnwind(pc) => {
+                    self.unwinder
+                        .unwind_first(pc, &mut self.regs, self.cache, self.read_mem)?
+                }
+                UnwindIteratorState::ReadyForNextUnwind(return_address) => self
+                    .unwinder
+                    .unwind_next(return_address, &mut self.regs, self.cache, self.read_mem)?,
+                UnwindIteratorState::Done => return Ok(None),
+            };
+        match next {
+            Some(return_address) => {
+                self.state = UnwindIteratorState::ReadyForNextUnwind(return_address);
+            }
+            None => {
+                self.state = UnwindIteratorState::Done;
+            }
+        }
+        Ok(next)
+    }
 }
 
 pub struct UnwinderInternal<

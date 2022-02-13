@@ -15,7 +15,7 @@ use std::ops::Deref;
 
 pub use code_address::CodeAddress;
 pub use error::Error;
-pub use unwinder::{Module, SectionAddresses, UnwindData, Unwinder};
+pub use unwinder::{Module, SectionAddresses, UnwindData, UnwindIterator, Unwinder};
 pub use unwindregs::*;
 
 use arch::{ArchAarch64, ArchX86_64};
