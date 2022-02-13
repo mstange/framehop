@@ -34,20 +34,14 @@ impl UnwindRule for UnwindRuleX86_64 {
         UnwindRuleX86_64::UseFramePointer
     }
 
-    /// Unlike the regular unwinders, this function does not promise to leave regs unchanged
-    /// if an error is returned.
-    /// That's because the other unwinders fall back to frame pointer unwinding, and there
-    /// is no fallback for this function.
     fn exec<F>(self, regs: &mut UnwindRegsX86_64, read_mem: &mut F) -> Result<u64, Error>
     where
         F: FnMut(u64) -> Result<u64, ()>,
     {
-        match self {
-            UnwindRuleX86_64::JustReturn => {
-                regs.set_sp(regs.sp() + 8);
-            }
+        let (new_sp, new_bp) = match self {
+            UnwindRuleX86_64::JustReturn => (regs.sp() + 8, regs.bp()),
             UnwindRuleX86_64::OffsetSp { sp_offset_by_8 } => {
-                regs.set_sp(regs.sp() + sp_offset_by_8 as u64 * 8);
+                (regs.sp() + sp_offset_by_8 as u64 * 8, regs.bp())
             }
             UnwindRuleX86_64::OffsetSpAndRestoreBp {
                 sp_offset_by_8,
@@ -58,8 +52,7 @@ impl UnwindRule for UnwindRuleX86_64 {
                 let bp_location =
                     wrapping_add_signed(sp, bp_storage_offset_from_sp_by_8 as i64 * 8);
                 let new_bp = read_mem(bp_location).map_err(|_| Error::UnwindingFailed)?;
-                regs.set_sp(new_sp);
-                regs.set_bp(new_bp);
+                (new_sp, new_bp)
             }
             UnwindRuleX86_64::UseFramePointer => {
                 let sp = regs.sp();
@@ -72,11 +65,14 @@ impl UnwindRule for UnwindRuleX86_64 {
                 if new_bp <= bp || new_sp <= sp {
                     return Err(Error::UnwindingFailed);
                 }
-                regs.set_sp(new_sp);
-                regs.set_bp(new_bp);
+                (new_sp, new_bp)
             }
-        }
-        read_mem(regs.sp() - 8).map_err(|_| Error::UnwindingFailed)
+        };
+        let return_address = read_mem(new_sp - 8).map_err(|_| Error::UnwindingFailed)?;
+        regs.set_ip(return_address);
+        regs.set_sp(new_sp);
+        regs.set_bp(new_bp);
+        Ok(return_address)
     }
 }
 
@@ -90,16 +86,20 @@ mod test {
             1, 2, 0x100300, 4, 0x40, 0x100200, 5, 6, 0x70, 0x100100, 7, 8, 9, 10, 0x0, 0x0,
         ];
         let mut read_mem = |addr| Ok(stack[(addr / 8) as usize]);
-        let mut regs = UnwindRegsX86_64::new(0x10, 0x20);
+        let mut regs = UnwindRegsX86_64::new(0x100400, 0x10, 0x20);
         let res = UnwindRuleX86_64::OffsetSp { sp_offset_by_8: 1 }.exec(&mut regs, &mut read_mem);
         assert_eq!(res, Ok(0x100300));
+        assert_eq!(regs.ip(), 0x100300);
         assert_eq!(regs.sp(), 0x18);
+        assert_eq!(regs.bp(), 0x20);
         let res = UnwindRuleX86_64::UseFramePointer.exec(&mut regs, &mut read_mem);
         assert_eq!(res, Ok(0x100200));
+        assert_eq!(regs.ip(), 0x100200);
         assert_eq!(regs.sp(), 0x30);
         assert_eq!(regs.bp(), 0x40);
         let res = UnwindRuleX86_64::UseFramePointer.exec(&mut regs, &mut read_mem);
         assert_eq!(res, Ok(0x100100));
+        assert_eq!(regs.ip(), 0x100100);
         assert_eq!(regs.sp(), 0x50);
         assert_eq!(regs.bp(), 0x70);
         let res = UnwindRuleX86_64::UseFramePointer.exec(&mut regs, &mut read_mem);

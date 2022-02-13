@@ -26,7 +26,6 @@ pub trait DwarfUnwinding: Arch {
         unwind_info: &UnwindTableRow<R, S>,
         encoding: Encoding,
         regs: &mut Self::UnwindRegs,
-        return_address: u64,
         read_mem: &mut F,
     ) -> Result<UnwindResult<Self::UnwindRule>, DwarfUnwinderError>
     where
@@ -101,21 +100,17 @@ impl<'a, 'b, R: Reader, A: DwarfUnwinding> DwarfUnwinder<'a, 'b, R, A> {
         );
         let fde = fde.map_err(DwarfUnwinderError::FdeFromOffsetFailed)?;
         let encoding = fde.cie().encoding();
-        let unwind_info: &UnwindTableRow<_, _> = match fde.unwind_info_for_address(
-            &eh_frame,
-            &self.bases,
-            self.unwind_context,
-            pc,
-        ) {
-            Ok(unwind_info) => unwind_info,
-            Err(e) => {
-                eprintln!(
+        let unwind_info: &UnwindTableRow<_, _> =
+            match fde.unwind_info_for_address(&eh_frame, &self.bases, self.unwind_context, pc) {
+                Ok(unwind_info) => unwind_info,
+                Err(e) => {
+                    eprintln!(
                     "unwind_info_for_address error at pc 0x{:x} using FDE at offset 0x{:x}: {:?}",
                     pc, fde_offset, e
                 );
-                return Err(DwarfUnwinderError::UnwindInfoForAddressFailed(e));
-            }
-        };
+                    return Err(DwarfUnwinderError::UnwindInfoForAddressFailed(e));
+                }
+            };
         A::unwind_first(unwind_info, encoding, regs, pc, read_mem)
     }
 
@@ -155,6 +150,6 @@ impl<'a, 'b, R: Reader, A: DwarfUnwinding> DwarfUnwinder<'a, 'b, R, A> {
                 return Err(DwarfUnwinderError::UnwindInfoForAddressFailed(e));
             }
         };
-        A::unwind_next(unwind_info, encoding, regs, return_address, read_mem)
+        A::unwind_next(unwind_info, encoding, regs, read_mem)
     }
 }

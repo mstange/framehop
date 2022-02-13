@@ -35,10 +35,7 @@ fn test_plt_cfa_expr() {
 
     // return address 0x123456 is at stack location 0x30.
     let stack = [1, 2, 3, 4, 5, 0xa, 0x123456, 6, 7, 8, 9];
-    let mut read_mem = |addr| match stack.get((addr / 8) as usize) {
-        Some(val) => Ok(*val),
-        None => Err(()),
-    };
+    let mut read_mem = |addr| stack.get((addr / 8) as usize).cloned().ok_or(());
 
     for (sp, rel_pc) in [
         (0x28, 0xc0db),
@@ -48,7 +45,7 @@ fn test_plt_cfa_expr() {
     ]
     .iter()
     {
-        let mut regs = UnwindRegsX86_64::new(*sp, 0x345);
+        let mut regs = UnwindRegsX86_64::new(0x1000000 + rel_pc, *sp, 0x345);
         let res = unwinder.unwind_first(0x1000000 + rel_pc, &mut regs, &mut cache, &mut read_mem);
         assert_eq!(res, Ok(0x123456));
         assert_eq!(regs.sp(), 0x38);
@@ -66,14 +63,7 @@ fn test_pthread_cfa_expr() {
             .join("fixtures/linux/x86_64/nofp/libpthread-2.19.so"),
         0x7f54b14fc000,
     );
-    let mut stack = vec![0u64; 0x200 / 8];
-    stack[0x120 / 8] = 0x1234;
-    stack[0x128 / 8] = 0xbe7042;
-    let mut read_mem = |addr| match stack.get((addr / 8) as usize) {
-        Some(val) => Ok(*val),
-        None => Err(()),
-    };
-    let mut regs = UnwindRegsX86_64::new(0x10, 0x120);
+
     // ...
     // _L_lock_4767:
     // 9423  lea  rdi, qword [stack_cache_lock]
@@ -107,6 +97,11 @@ fn test_pthread_cfa_expr() {
     // 8c33  lea  rax, qword [r15+0x2c0]
     // ...
     //
+    let mut stack = vec![0u64; 0x200 / 8];
+    stack[0x120 / 8] = 0x1234;
+    stack[0x128 / 8] = 0xbe7042;
+    let mut read_mem = |addr| stack.get((addr / 8) as usize).cloned().ok_or(());
+    let mut regs = UnwindRegsX86_64::new(0x7f54b14fc000 + 0x9431, 0x10, 0x120);
 
     let res = unwinder.unwind_first(
         0x7f54b14fc000 + 0x9431,

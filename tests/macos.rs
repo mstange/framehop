@@ -31,7 +31,7 @@ fn test_basic() {
         /* 0x70: */ 0x0, // sentinel fp
         /* 0x78: */ 0x0, // sentinel lr
     ];
-    let mut read_mem = |addr| Ok(stack[(addr / 8) as usize]);
+    let mut read_mem = |addr| stack.get((addr / 8) as usize).cloned().ok_or(());
     let mut regs = UnwindRegsAarch64::new(0x1003fc000 + 0xe4830, 0x10, 0x20);
     // There's a frameless function at e0d2c.
     let res = unwinder.unwind_first(0x1003fc000 + 0x1292c0, &mut regs, &mut cache, &mut read_mem);

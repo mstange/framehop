@@ -63,7 +63,6 @@ impl DwarfUnwinding for ArchAarch64 {
         unwind_info: &UnwindTableRow<R, S>,
         _encoding: Encoding,
         regs: &mut Self::UnwindRegs,
-        _return_address: u64,
         read_mem: &mut F,
     ) -> Result<UnwindResult<Self::UnwindRule>, DwarfUnwinderError>
     where
