@@ -168,7 +168,10 @@ impl<D: Deref<Target = [u8]>, A: Arch + DwarfUnwinding + CompactUnwindInfoUnwind
                 match callback(module, address.address(), regs, cache, read_mem) {
                     Ok(UnwindResult::ExecRule(rule)) => rule,
                     Ok(UnwindResult::Uncacheable(return_address)) => return Ok(return_address),
-                    Err(_) => A::UnwindRule::fallback_rule(),
+                    Err(_err) => {
+                        // eprintln!("Unwinder error: {}", err);
+                        A::UnwindRule::fallback_rule()
+                    }
                 }
             }
         };
@@ -244,6 +247,7 @@ impl<D: Deref<Target = [u8]>, A: Arch + DwarfUnwinding + CompactUnwindInfoUnwind
                         };
                         let mut dwarf_unwinder = DwarfUnwinder::<_, A>::new(
                             EndianReader::new(eh_frame_data, LittleEndian),
+                            None,
                             &mut cache.eh_frame_unwind_context,
                             &module.sections,
                         );
@@ -252,8 +256,19 @@ impl<D: Deref<Target = [u8]>, A: Arch + DwarfUnwinding + CompactUnwindInfoUnwind
                     CuiUnwindResult::Err(err) => return Err(err.into()),
                 }
             }
-            UnwindData::EhFrameHdrAndEhFrame(_, _) => {
-                return Err(UnwinderError::UnhandledUnwindDataType)
+            UnwindData::EhFrameHdrAndEhFrame(eh_frame_hdr, eh_frame_data) => {
+                let data = &eh_frame_hdr[..];
+                let eh_frame_data = ArcData(eh_frame_data.clone());
+                let mut dwarf_unwinder = DwarfUnwinder::<_, A>::new(
+                    EndianReader::new(eh_frame_data, LittleEndian),
+                    Some(data),
+                    &mut cache.eh_frame_unwind_context,
+                    &module.sections,
+                );
+                let fde_offset = dwarf_unwinder
+                    .get_fde_offset_for_address(pc)
+                    .ok_or(UnwinderError::EhFrameHdrCouldNotFindAddress)?;
+                dwarf_unwinder.unwind_first_with_fde(regs, pc, fde_offset, read_mem)?
             }
             UnwindData::EhFrame(_) => return Err(UnwinderError::UnhandledUnwindDataType),
             UnwindData::None => return Err(UnwinderError::NoUnwindData),
@@ -293,6 +308,7 @@ impl<D: Deref<Target = [u8]>, A: Arch + DwarfUnwinding + CompactUnwindInfoUnwind
                         };
                         let mut dwarf_unwinder = DwarfUnwinder::<_, A>::new(
                             EndianReader::new(eh_frame_data, LittleEndian),
+                            None,
                             &mut cache.eh_frame_unwind_context,
                             &module.sections,
                         );
@@ -306,8 +322,19 @@ impl<D: Deref<Target = [u8]>, A: Arch + DwarfUnwinding + CompactUnwindInfoUnwind
                     CuiUnwindResult::Err(err) => return Err(err.into()),
                 }
             }
-            UnwindData::EhFrameHdrAndEhFrame(_, _) => {
-                return Err(UnwinderError::UnhandledUnwindDataType)
+            UnwindData::EhFrameHdrAndEhFrame(eh_frame_hdr, eh_frame_data) => {
+                let data = &eh_frame_hdr[..];
+                let eh_frame_data = ArcData(eh_frame_data.clone());
+                let mut dwarf_unwinder = DwarfUnwinder::<_, A>::new(
+                    EndianReader::new(eh_frame_data, LittleEndian),
+                    Some(data),
+                    &mut cache.eh_frame_unwind_context,
+                    &module.sections,
+                );
+                let fde_offset = dwarf_unwinder
+                    .get_fde_offset_for_address(return_address - 1)
+                    .ok_or(UnwinderError::EhFrameHdrCouldNotFindAddress)?;
+                dwarf_unwinder.unwind_first_with_fde(regs, return_address, fde_offset, read_mem)?
             }
             UnwindData::EhFrame(_) => return Err(UnwinderError::UnhandledUnwindDataType),
             UnwindData::None => return Err(UnwinderError::NoUnwindData),

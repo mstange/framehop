@@ -66,29 +66,77 @@ fn test_pthread_cfa_expr() {
             .join("fixtures/linux/x86_64/nofp/libpthread-2.19.so"),
         0x7f54b14fc000,
     );
-    let mut stack = vec![0u64; 0x100];
-    stack[(0x10 + 0x80) / 8] = 0xbe7042;
+    let mut stack = vec![0u64; 0x200 / 8];
+    stack[0x120 / 8] = 0x1234;
+    stack[0x128 / 8] = 0xbe7042;
     let mut read_mem = |addr| match stack.get((addr / 8) as usize) {
         Some(val) => Ok(*val),
         None => Err(()),
     };
-    let mut regs = UnwindRegsX86_64::new(0x10, 0x1234);
+    let mut regs = UnwindRegsX86_64::new(0x10, 0x120);
     // ...
     // _L_lock_4767:
-    // 0000000000009423         lea        rdi, qword [stack_cache_lock]               ; End of unwind block (FDE at 0x1436c), Begin of unwind block (FDE at 0x143b4), argument #1 for method __lll_lock_wait_private, stack_cache_lock, CODE XREF=pthread_create@@GLIBC_2.2.5+2038
-    // 000000000000942a         sub        rsp, 0x80
-    // 0000000000009431         call       __lll_lock_wait_private                     ; __lll_lock_wait_private
-    // 0000000000009436         add        rsp, 0x80
-    // 000000000000943d         jmp        loc_8c2c
+    // 9423  lea  rdi, qword [stack_cache_lock]
+    // 942a  sub  rsp, 0x80
+    // 9431  call  __lll_lock_wait_private
+    // 9436  add  rsp, 0x80
+    // 943d  jmp  loc_8c2c
     // _L_unlock_4791:
     // ...
+    //
+    // with DWARF CFI:
+    //
+    // 0x9423: CFA=reg7-128: reg16=DW_OP_breg16 +19 // 0x9423 + 19 == 0x9436
+    // 0x942a: CFA=reg7-128: reg16=DW_OP_breg16 +12 // 0x942a + 12 == 0x9436
+    // 0x9431: CFA=reg7: reg16=DW_OP_breg16 +5 // 0x9431 + 5 == 0x9436
+    // 0x9435: CFA=reg7+128: reg16=DW_OP_breg16 +6, DW_OP_const4s -45616, DW_OP_minus, DW_OP_const4s -47680, DW_OP_plus
+    // 0x943d: CFA=reg7-128: reg16=DW_OP_breg16 -7 // 0x943d - 7 == 0x9436
+    //
+    // This is some super weird stuff. So basically, all addresses other than the add instruction "unwind" by jumping
+    // to the add instruction. And then from there, you unwind by adding and subtracting some literals to rip.
+    // CFA=reg7+128: reg16=rip + 6 - -45616 + -47680 (== 0x8c2c)
+    //
+    // Yes, indeed, 0x8c2c seems like the right target address:
+    //
+    // pthread_create@@GLIBC_2.2.5:
+    // 8430  push  rbp
+    // ...
+    // 8c1e  lock cmpxchg dword [stack_cache_lock], esi
+    // 8c26  jne  _L_lock_4767                    ; <-- _L_lock_4767 is function we just unwound from
+    // 8c2c  mov  rdx, qword [__stack_user]       ; <-- this is the return address we unwound to
+    // 8c33  lea  rax, qword [r15+0x2c0]
+    // ...
+    //
+
     let res = unwinder.unwind_first(
         0x7f54b14fc000 + 0x9431,
         &mut regs,
         &mut cache,
         &mut read_mem,
     );
+    assert_eq!(res, Ok(0x7f54b14fc000 + 0x9436));
+    assert_eq!(regs.sp(), 0x10);
+    assert_eq!(regs.bp(), 0x120);
+
+    let res = unwinder.unwind_next(
+        0x7f54b14fc000 + 0x9436,
+        &mut regs,
+        &mut cache,
+        &mut read_mem,
+    );
+    assert_eq!(res, Ok(0x7f54b14fc000 + 0x8c2c));
+    assert_eq!(regs.sp(), 0x90);
+    assert_eq!(regs.bp(), 0x120);
+
+    // 0x88e8: CFA=reg7+8: reg3=[CFA-56], reg6=[CFA-16], reg12=[CFA-48], reg13=[CFA-40], reg14=[CFA-32], reg15=[CFA-24], reg16=[CFA-8]
+    // This is a frame pointer unwind!
+    let res = unwinder.unwind_next(
+        0x7f54b14fc000 + 0x8c2c,
+        &mut regs,
+        &mut cache,
+        &mut read_mem,
+    );
     assert_eq!(res, Ok(0xbe7042));
-    assert_eq!(regs.sp(), 0x98);
+    assert_eq!(regs.sp(), 0x130);
     assert_eq!(regs.bp(), 0x1234);
 }

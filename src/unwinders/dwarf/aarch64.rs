@@ -1,4 +1,6 @@
-use gimli::{AArch64, CfaRule, Reader, RegisterRule, UnwindContextStorage, UnwindTableRow};
+use gimli::{
+    AArch64, CfaRule, Encoding, Reader, RegisterRule, UnwindContextStorage, UnwindTableRow,
+};
 
 use crate::{
     arch::ArchAarch64, rules::UnwindRuleAarch64, unwind_result::UnwindResult,
@@ -10,6 +12,7 @@ use super::{ConversionError, DwarfUnwinderError, DwarfUnwinding};
 impl DwarfUnwinding for ArchAarch64 {
     fn unwind_first<F, R, S>(
         unwind_info: &UnwindTableRow<R, S>,
+        _encoding: Encoding,
         regs: &mut Self::UnwindRegs,
         pc: u64,
         read_mem: &mut F,
@@ -58,6 +61,7 @@ impl DwarfUnwinding for ArchAarch64 {
 
     fn unwind_next<F, R, S>(
         unwind_info: &UnwindTableRow<R, S>,
+        _encoding: Encoding,
         regs: &mut Self::UnwindRegs,
         _return_address: u64,
         read_mem: &mut F,

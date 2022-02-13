@@ -54,10 +54,10 @@ where
         base_address,
         0,
         SectionAddresses {
-            text: text.map_or(0, |s| s.address()),
-            eh_frame: eh_frame.map_or(0, |s| s.address()),
-            eh_frame_hdr: eh_frame_hdr.map_or(0, |s| s.address()),
-            got: got.map_or(0, |s| s.address()),
+            text: base_address + text.map_or(0, |s| s.address()),
+            eh_frame: base_address + eh_frame.map_or(0, |s| s.address()),
+            eh_frame_hdr: base_address + eh_frame_hdr.map_or(0, |s| s.address()),
+            got: base_address + got.map_or(0, |s| s.address()),
         },
         unwind_data,
     );

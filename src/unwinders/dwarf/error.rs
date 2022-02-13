@@ -26,6 +26,8 @@ pub enum DwarfUnwinderError {
 pub enum ConversionError {
     CfaIsExpression,
     CfaIsOffsetFromUnknownRegister,
+    ReturnAddressRuleWithUnexpectedOffset,
+    ReturnAddressRuleWasWeird,
     SpOffsetDoesNotFit,
     RegisterNotStoredRelativeToCfa,
     RestoringFpButNotLr,

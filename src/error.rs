@@ -36,6 +36,9 @@ pub enum UnwinderError {
 
     #[error("No unwind data for the module containing the address")]
     NoUnwindData,
+
+    #[error(".eh_frame_hdr was not successful in looking up the address in the table")]
+    EhFrameHdrCouldNotFindAddress,
 }
 
 impl From<CompactUnwindInfoUnwinderError> for UnwinderError {
