@@ -8,7 +8,7 @@ mod common;
 
 #[test]
 fn test_plt_cfa_expr() {
-    let mut cache = CacheX86_64::default();
+    let mut cache = CacheX86_64::<_>::new();
     let mut unwinder = UnwinderX86_64::new();
     common::add_object(
         &mut unwinder,
@@ -57,7 +57,7 @@ fn test_plt_cfa_expr() {
 
 #[test]
 fn test_pthread_cfa_expr() {
-    let mut cache = CacheX86_64::default();
+    let mut cache = CacheX86_64::<_>::new();
     let mut unwinder = UnwinderX86_64::new();
     common::add_object(
         &mut unwinder,

@@ -9,7 +9,7 @@ mod common;
 
 #[test]
 fn test_basic() {
-    let mut cache = CacheAarch64::default();
+    let mut cache = CacheAarch64::<_>::new();
     let mut unwinder = UnwinderAarch64::new();
     common::add_object(
         &mut unwinder,
@@ -54,7 +54,7 @@ fn test_basic() {
 
 #[test]
 fn test_basic_iterator() {
-    let mut cache = CacheAarch64::default();
+    let mut cache = CacheAarch64::<_>::new();
     let mut unwinder = UnwinderAarch64::new();
     common::add_object(
         &mut unwinder,

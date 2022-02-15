@@ -1,5 +1,6 @@
 use gimli::{
-    CfaRule, Encoding, Reader, Register, RegisterRule, UnwindContextStorage, UnwindTableRow, X86_64,
+    CfaRule, Encoding, EvaluationStorage, Reader, Register, RegisterRule, UnwindContextStorage,
+    UnwindTableRow, X86_64,
 };
 
 use crate::{
@@ -34,7 +35,7 @@ impl DwarfUnwinding for ArchX86_64 {
     where
         F: FnMut(u64) -> Result<u64, ()>,
         R: Reader,
-        S: UnwindContextStorage<R>,
+        S: UnwindContextStorage<R> + EvaluationStorage<R>,
     {
         let cfa_rule = unwind_info.cfa();
         let bp_rule = unwind_info.register(X86_64::RBP);
@@ -48,7 +49,7 @@ impl DwarfUnwinding for ArchX86_64 {
         }
 
         // println!("cfa rule: {:?}, regs: {:?}", cfa_rule, regs);
-        let cfa = match eval_cfa_rule(cfa_rule, encoding, regs) {
+        let cfa = match eval_cfa_rule::<R, _, S>(cfa_rule, encoding, regs) {
             Some(cfa) => cfa,
             None => {
                 // eprintln!("Could not recover CFA.");
@@ -59,14 +60,15 @@ impl DwarfUnwinding for ArchX86_64 {
         // eprintln!("cfa: {:x}", cfa);
 
         let bp = regs.bp();
-        let bp = eval_register_rule(bp_rule, cfa, encoding, bp, regs, read_mem).unwrap_or(bp);
+        let bp = eval_register_rule::<R, F, _, S>(bp_rule, cfa, encoding, bp, regs, read_mem)
+            .unwrap_or(bp);
 
-        let return_address = match eval_register_rule(ra_rule, cfa, encoding, pc, regs, read_mem) {
-            Some(ra) => ra,
-            None => {
-                read_mem(cfa - 8).map_err(|_| DwarfUnwinderError::CouldNotRecoverReturnAddress)?
-            }
-        };
+        let return_address =
+            match eval_register_rule::<R, F, _, S>(ra_rule, cfa, encoding, pc, regs, read_mem) {
+                Some(ra) => ra,
+                None => read_mem(cfa - 8)
+                    .map_err(|_| DwarfUnwinderError::CouldNotRecoverReturnAddress)?,
+            };
 
         if cfa == regs.sp() && return_address == regs.ip() {
             return Err(DwarfUnwinderError::DidNotAdvance);
@@ -88,7 +90,7 @@ impl DwarfUnwinding for ArchX86_64 {
     where
         F: FnMut(u64) -> Result<u64, ()>,
         R: Reader,
-        S: UnwindContextStorage<R>,
+        S: UnwindContextStorage<R> + EvaluationStorage<R>,
     {
         let cfa_rule = unwind_info.cfa();
         let bp_rule = unwind_info.register(X86_64::RBP);
@@ -102,7 +104,7 @@ impl DwarfUnwinding for ArchX86_64 {
         }
 
         // println!("cfa rule: {:?}, regs: {:?}", cfa_rule, regs);
-        let cfa = eval_cfa_rule(cfa_rule, encoding, regs)
+        let cfa = eval_cfa_rule::<R, _, S>(cfa_rule, encoding, regs)
             .ok_or(DwarfUnwinderError::CouldNotRecoverCfa)?;
         if cfa <= regs.sp() {
             return Err(DwarfUnwinderError::StackPointerMovedBackwards);
@@ -110,15 +112,23 @@ impl DwarfUnwinding for ArchX86_64 {
 
         // eprintln!("cfa: {:x}", cfa);
         // println!("rules: fp {:?}, lr {:?}", bp_rule, lr_rule);
-        let bp = eval_register_rule(bp_rule, cfa, encoding, regs.bp(), regs, read_mem)
-            .ok_or(DwarfUnwinderError::CouldNotRecoverFramePointer)?;
+        let bp =
+            eval_register_rule::<R, F, _, S>(bp_rule, cfa, encoding, regs.bp(), regs, read_mem)
+                .ok_or(DwarfUnwinderError::CouldNotRecoverFramePointer)?;
 
-        let return_address =
-            match eval_register_rule(ra_rule, cfa, encoding, regs.ip(), regs, read_mem) {
-                Some(ra) => ra,
-                None => read_mem(cfa - 8)
-                    .map_err(|_| DwarfUnwinderError::CouldNotRecoverReturnAddress)?,
-            };
+        let return_address = match eval_register_rule::<R, F, _, S>(
+            ra_rule,
+            cfa,
+            encoding,
+            regs.ip(),
+            regs,
+            read_mem,
+        ) {
+            Some(ra) => ra,
+            None => {
+                read_mem(cfa - 8).map_err(|_| DwarfUnwinderError::CouldNotRecoverReturnAddress)?
+            }
+        };
 
         regs.set_ip(return_address);
         regs.set_bp(bp);

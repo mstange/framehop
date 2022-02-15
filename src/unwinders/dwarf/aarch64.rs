@@ -1,6 +1,6 @@
 use gimli::{
-    AArch64, CfaRule, Encoding, Reader, Register, RegisterRule, UnwindContextStorage,
-    UnwindTableRow,
+    AArch64, CfaRule, Encoding, EvaluationStorage, Reader, Register, RegisterRule,
+    UnwindContextStorage, UnwindTableRow,
 };
 
 use crate::{
@@ -35,7 +35,7 @@ impl DwarfUnwinding for ArchAarch64 {
     where
         F: FnMut(u64) -> Result<u64, ()>,
         R: Reader,
-        S: UnwindContextStorage<R>,
+        S: UnwindContextStorage<R> + EvaluationStorage<R>,
     {
         let cfa_rule = unwind_info.cfa();
         let fp_rule = unwind_info.register(AArch64::X29);
@@ -49,7 +49,7 @@ impl DwarfUnwinding for ArchAarch64 {
         }
 
         // println!("cfa rule: {:?}, regs: {:?}", cfa_rule, regs);
-        let cfa = eval_cfa_rule(cfa_rule, encoding, regs)
+        let cfa = eval_cfa_rule::<R, _, S>(cfa_rule, encoding, regs)
             .ok_or(DwarfUnwinderError::CouldNotRecoverCfa)?;
 
         let lr = regs.lr();
@@ -58,8 +58,10 @@ impl DwarfUnwinding for ArchAarch64 {
 
         // println!("cfa: {:x}", cfa);
         // println!("rules: fp {:?}, lr {:?}", fp_rule, lr_rule);
-        let fp = eval_register_rule(fp_rule, cfa, encoding, fp, regs, read_mem).unwrap_or(fp);
-        let lr = eval_register_rule(lr_rule, cfa, encoding, lr, regs, read_mem).unwrap_or(lr);
+        let fp = eval_register_rule::<R, F, _, S>(fp_rule, cfa, encoding, fp, regs, read_mem)
+            .unwrap_or(fp);
+        let lr = eval_register_rule::<R, F, _, S>(lr_rule, cfa, encoding, lr, regs, read_mem)
+            .unwrap_or(lr);
 
         if cfa == sp && lr == pc {
             return Err(DwarfUnwinderError::DidNotAdvance);
@@ -81,7 +83,7 @@ impl DwarfUnwinding for ArchAarch64 {
     where
         F: FnMut(u64) -> Result<u64, ()>,
         R: Reader,
-        S: UnwindContextStorage<R>,
+        S: UnwindContextStorage<R> + EvaluationStorage<R>,
     {
         let cfa_rule = unwind_info.cfa();
         let fp_rule = unwind_info.register(AArch64::X29);
@@ -95,7 +97,7 @@ impl DwarfUnwinding for ArchAarch64 {
         }
 
         // println!("cfa rule: {:?}, regs: {:?}", cfa_rule, regs);
-        let cfa = eval_cfa_rule(cfa_rule, encoding, regs)
+        let cfa = eval_cfa_rule::<R, _, S>(cfa_rule, encoding, regs)
             .ok_or(DwarfUnwinderError::CouldNotRecoverCfa)?;
         if cfa <= regs.sp() {
             return Err(DwarfUnwinderError::StackPointerMovedBackwards);
@@ -103,10 +105,12 @@ impl DwarfUnwinding for ArchAarch64 {
 
         // println!("cfa: {:x}", cfa);
         // println!("rules: fp {:?}, lr {:?}", fp_rule, lr_rule);
-        let fp = eval_register_rule(fp_rule, cfa, encoding, regs.fp(), regs, read_mem)
-            .ok_or(DwarfUnwinderError::CouldNotRecoverFramePointer)?;
-        let lr = eval_register_rule(lr_rule, cfa, encoding, regs.lr(), regs, read_mem)
-            .ok_or(DwarfUnwinderError::CouldNotRecoverReturnAddress)?;
+        let fp =
+            eval_register_rule::<R, F, _, S>(fp_rule, cfa, encoding, regs.fp(), regs, read_mem)
+                .ok_or(DwarfUnwinderError::CouldNotRecoverFramePointer)?;
+        let lr =
+            eval_register_rule::<R, F, _, S>(lr_rule, cfa, encoding, regs.lr(), regs, read_mem)
+                .ok_or(DwarfUnwinderError::CouldNotRecoverReturnAddress)?;
         regs.set_fp(fp);
         regs.set_sp(cfa);
         regs.set_lr(lr);

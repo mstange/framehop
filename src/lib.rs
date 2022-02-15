@@ -12,20 +12,21 @@ mod unwinder;
 mod unwinders;
 pub mod unwindregs;
 
+pub use cache::{AllocationPolicy, MayAllocateDuringUnwind, MustNotAllocateDuringUnwind};
 pub use code_address::CodeAddress;
 pub use error::Error;
 pub use unwinder::{Module, ModuleSectionAddresses, ModuleUnwindData, UnwindIterator, Unwinder};
 
 #[cfg(target_arch = "aarch64")]
-pub type CacheNative<D> = archunwinders::CacheAarch64<D>;
+pub type CacheNative<D, P> = archunwinders::CacheAarch64<D, P>;
 #[cfg(target_arch = "aarch64")]
 pub type UnwindRegsNative = unwindregs::UnwindRegsAarch64;
 #[cfg(target_arch = "aarch64")]
-pub type UnwinderNative<D> = archunwinders::UnwinderAarch64<D>;
+pub type UnwinderNative<D, P> = archunwinders::UnwinderAarch64<D, P>;
 
 #[cfg(target_arch = "x86_64")]
-pub type CacheNative<D> = archunwinders::CacheX86_64<D>;
+pub type CacheNative<D, P> = archunwinders::CacheX86_64<D, P>;
 #[cfg(target_arch = "x86_64")]
 pub type UnwindRegsNative = unwindregs::UnwindRegsX86_64;
 #[cfg(target_arch = "x86_64")]
-pub type UnwinderNative<D> = archunwinders::UnwinderX86_64<D>;
+pub type UnwinderNative<D, P> = archunwinders::UnwinderX86_64<D, P>;

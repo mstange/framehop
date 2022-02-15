@@ -1,9 +1,9 @@
 use std::marker::PhantomData;
 
 use gimli::{
-    BaseAddresses, CfaRule, EhFrameHdr, Encoding, EvaluationResult, Expression, Location,
-    ParsedEhFrameHdr, Reader, ReaderOffset, Register, RegisterRule, UnwindContext,
-    UnwindContextStorage, UnwindSection, UnwindTableRow, Value,
+    BaseAddresses, CfaRule, EhFrameHdr, Encoding, Evaluation, EvaluationResult, EvaluationStorage,
+    Expression, Location, ParsedEhFrameHdr, Reader, ReaderOffset, Register, RegisterRule,
+    UnwindContext, UnwindContextStorage, UnwindSection, UnwindTableRow, Value,
 };
 
 use crate::{arch::Arch, unwind_result::UnwindResult, ModuleSectionAddresses};
@@ -21,7 +21,7 @@ pub trait DwarfUnwinding: Arch {
     where
         F: FnMut(u64) -> Result<u64, ()>,
         R: Reader,
-        S: UnwindContextStorage<R>;
+        S: UnwindContextStorage<R> + EvaluationStorage<R>;
 
     fn unwind_next<F, R, S>(
         unwind_info: &UnwindTableRow<R, S>,
@@ -32,22 +32,24 @@ pub trait DwarfUnwinding: Arch {
     where
         F: FnMut(u64) -> Result<u64, ()>,
         R: Reader,
-        S: UnwindContextStorage<R>;
+        S: UnwindContextStorage<R> + EvaluationStorage<R>;
 }
 
-pub struct DwarfUnwinder<'a, R: Reader, A: DwarfUnwinding + ?Sized> {
+pub struct DwarfUnwinder<'a, R: Reader, A: DwarfUnwinding + ?Sized, S: UnwindContextStorage<R>> {
     eh_frame_data: R,
     eh_frame_hdr: Option<ParsedEhFrameHdr<R>>,
-    unwind_context: &'a mut UnwindContext<R>,
+    unwind_context: &'a mut UnwindContext<R, S>,
     bases: BaseAddresses,
     _arch: PhantomData<A>,
 }
 
-impl<'a, R: Reader, A: DwarfUnwinding> DwarfUnwinder<'a, R, A> {
+impl<'a, R: Reader, A: DwarfUnwinding, S: UnwindContextStorage<R> + EvaluationStorage<R>>
+    DwarfUnwinder<'a, R, A, S>
+{
     pub fn new(
         eh_frame_data: R,
         eh_frame_hdr_data: Option<R>,
-        unwind_context: &'a mut UnwindContext<R>,
+        unwind_context: &'a mut UnwindContext<R, S>,
         sections: &ModuleSectionAddresses,
     ) -> Self {
         let bases = BaseAddresses::default()
@@ -112,7 +114,7 @@ impl<'a, R: Reader, A: DwarfUnwinding> DwarfUnwinder<'a, R, A> {
                     return Err(DwarfUnwinderError::UnwindInfoForAddressFailed(e));
                 }
             };
-        A::unwind_first(unwind_info, encoding, regs, pc, read_mem)
+        A::unwind_first::<F, R, S>(unwind_info, encoding, regs, pc, read_mem)
     }
 
     pub fn unwind_next_with_fde<F>(
@@ -159,7 +161,7 @@ pub trait DwarfUnwindRegs {
     fn get(&self, register: Register) -> Option<u64>;
 }
 
-pub fn eval_cfa_rule<R: gimli::Reader, UR: DwarfUnwindRegs>(
+pub fn eval_cfa_rule<R: gimli::Reader, UR: DwarfUnwindRegs, S: EvaluationStorage<R>>(
     rule: &CfaRule<R>,
     encoding: Encoding,
     regs: &UR,
@@ -169,16 +171,16 @@ pub fn eval_cfa_rule<R: gimli::Reader, UR: DwarfUnwindRegs>(
             let val = regs.get(*register)?;
             u64::try_from(i64::try_from(val).ok()?.checked_add(*offset)?).ok()
         }
-        CfaRule::Expression(expr) => eval_expr(expr.clone(), encoding, regs),
+        CfaRule::Expression(expr) => eval_expr::<R, UR, S>(expr.clone(), encoding, regs),
     }
 }
 
-fn eval_expr<R: gimli::Reader, UR: DwarfUnwindRegs>(
+fn eval_expr<R: gimli::Reader, UR: DwarfUnwindRegs, S: EvaluationStorage<R>>(
     expr: Expression<R>,
     encoding: Encoding,
     regs: &UR,
 ) -> Option<u64> {
-    let mut eval = expr.evaluation(encoding);
+    let mut eval = Evaluation::<R, S>::new_in(expr.0, encoding);
     let mut result = eval.evaluate().ok()?;
     loop {
         match result {
@@ -198,7 +200,7 @@ fn eval_expr<R: gimli::Reader, UR: DwarfUnwindRegs>(
     }
 }
 
-pub fn eval_register_rule<R, F, UR>(
+pub fn eval_register_rule<R, F, UR, S>(
     rule: RegisterRule<R>,
     cfa: u64,
     encoding: Encoding,
@@ -210,6 +212,7 @@ where
     R: gimli::Reader,
     F: FnMut(u64) -> Result<u64, ()>,
     UR: DwarfUnwindRegs,
+    S: EvaluationStorage<R>,
 {
     match rule {
         RegisterRule::Undefined => None,
@@ -227,7 +230,7 @@ where
             println!("Unimplemented RegisterRule::Expression");
             None
         }
-        RegisterRule::ValExpression(expr) => eval_expr(expr, encoding, regs),
+        RegisterRule::ValExpression(expr) => eval_expr::<R, UR, S>(expr, encoding, regs),
         RegisterRule::Architectural => {
             println!("Unimplemented RegisterRule::Architectural");
             None

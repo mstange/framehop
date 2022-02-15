@@ -3,7 +3,7 @@ use gimli::{EndianReader, LittleEndian};
 
 use crate::arcdata::ArcData;
 use crate::arch::Arch;
-use crate::cache::Cache;
+use crate::cache::{AllocationPolicy, Cache};
 use crate::error::{Error, UnwinderError};
 use crate::rule_cache::CacheResult;
 use crate::rules::UnwindRule;
@@ -135,30 +135,39 @@ impl<'u, 'c, 'r, U: Unwinder + ?Sized, F: FnMut(u64) -> Result<u64, ()>> Fallibl
 pub struct UnwinderInternal<
     D: Deref<Target = [u8]>,
     A: Arch + DwarfUnwinding + CompactUnwindInfoUnwinding,
+    P: AllocationPolicy<D>,
 > {
     /// sorted by address_range.start
     modules: Vec<Module<D>>,
     /// Incremented every time modules is changed.
     modules_generation: u16,
     _arch: PhantomData<A>,
+    _allocation_policy: PhantomData<P>,
 }
 
-impl<D: Deref<Target = [u8]>, A: Arch + DwarfUnwinding + CompactUnwindInfoUnwinding> Default
-    for UnwinderInternal<D, A>
+impl<
+        D: Deref<Target = [u8]>,
+        A: Arch + DwarfUnwinding + CompactUnwindInfoUnwinding,
+        P: AllocationPolicy<D>,
+    > Default for UnwinderInternal<D, A, P>
 {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<D: Deref<Target = [u8]>, A: Arch + DwarfUnwinding + CompactUnwindInfoUnwinding>
-    UnwinderInternal<D, A>
+impl<
+        D: Deref<Target = [u8]>,
+        A: Arch + DwarfUnwinding + CompactUnwindInfoUnwinding,
+        P: AllocationPolicy<D>,
+    > UnwinderInternal<D, A, P>
 {
     pub fn new() -> Self {
         Self {
             modules: Vec::new(),
             modules_generation: 0,
             _arch: PhantomData,
+            _allocation_policy: PhantomData,
         }
     }
 
@@ -219,7 +228,7 @@ impl<D: Deref<Target = [u8]>, A: Arch + DwarfUnwinding + CompactUnwindInfoUnwind
         &self,
         address: CodeAddress,
         regs: &mut A::UnwindRegs,
-        cache: &mut Cache<D, A::UnwindRule>,
+        cache: &mut Cache<D, A::UnwindRule, P>,
         read_mem: &mut F,
         callback: G,
     ) -> Result<Option<u64>, Error>
@@ -229,7 +238,7 @@ impl<D: Deref<Target = [u8]>, A: Arch + DwarfUnwinding + CompactUnwindInfoUnwind
             &Module<D>,
             u64,
             &mut A::UnwindRegs,
-            &mut Cache<D, A::UnwindRule>,
+            &mut Cache<D, A::UnwindRule, P>,
             &mut F,
         ) -> Result<UnwindResult<A::UnwindRule>, UnwinderError>,
     {
@@ -268,7 +277,7 @@ impl<D: Deref<Target = [u8]>, A: Arch + DwarfUnwinding + CompactUnwindInfoUnwind
         &self,
         pc: u64,
         regs: &mut A::UnwindRegs,
-        cache: &mut Cache<D, A::UnwindRule>,
+        cache: &mut Cache<D, A::UnwindRule, P>,
         read_mem: &mut F,
     ) -> Result<Option<u64>, Error>
     where
@@ -288,7 +297,7 @@ impl<D: Deref<Target = [u8]>, A: Arch + DwarfUnwinding + CompactUnwindInfoUnwind
         &self,
         return_address: u64,
         regs: &mut A::UnwindRegs,
-        cache: &mut Cache<D, A::UnwindRule>,
+        cache: &mut Cache<D, A::UnwindRule, P>,
         read_mem: &mut F,
     ) -> Result<Option<u64>, Error>
     where
@@ -308,7 +317,7 @@ impl<D: Deref<Target = [u8]>, A: Arch + DwarfUnwinding + CompactUnwindInfoUnwind
         module: &Module<D>,
         pc: u64,
         regs: &mut A::UnwindRegs,
-        cache: &mut Cache<D, A::UnwindRule>,
+        cache: &mut Cache<D, A::UnwindRule, P>,
         read_mem: &mut F,
     ) -> Result<UnwindResult<A::UnwindRule>, UnwinderError>
     where
@@ -330,7 +339,7 @@ impl<D: Deref<Target = [u8]>, A: Arch + DwarfUnwinding + CompactUnwindInfoUnwind
                             Some(data) => ArcData(data.clone()),
                             None => return Err(UnwinderError::NoDwarfData),
                         };
-                        let mut dwarf_unwinder = DwarfUnwinder::<_, A>::new(
+                        let mut dwarf_unwinder = DwarfUnwinder::<_, A, P::GimliStorage>::new(
                             EndianReader::new(eh_frame_data, LittleEndian),
                             None,
                             &mut cache.eh_frame_unwind_context,
@@ -344,7 +353,7 @@ impl<D: Deref<Target = [u8]>, A: Arch + DwarfUnwinding + CompactUnwindInfoUnwind
             ModuleUnwindData::EhFrameHdrAndEhFrame(eh_frame_hdr, eh_frame_data) => {
                 let eh_frame_hdr_data = ArcData(eh_frame_hdr.clone());
                 let eh_frame_data = ArcData(eh_frame_data.clone());
-                let mut dwarf_unwinder = DwarfUnwinder::<_, A>::new(
+                let mut dwarf_unwinder = DwarfUnwinder::<_, A, P::GimliStorage>::new(
                     EndianReader::new(eh_frame_data, LittleEndian),
                     Some(EndianReader::new(eh_frame_hdr_data, LittleEndian)),
                     &mut cache.eh_frame_unwind_context,
@@ -367,7 +376,7 @@ impl<D: Deref<Target = [u8]>, A: Arch + DwarfUnwinding + CompactUnwindInfoUnwind
         module: &Module<D>,
         return_address: u64,
         regs: &mut A::UnwindRegs,
-        cache: &mut Cache<D, A::UnwindRule>,
+        cache: &mut Cache<D, A::UnwindRule, P>,
         read_mem: &mut F,
     ) -> Result<UnwindResult<A::UnwindRule>, UnwinderError>
     where
@@ -393,7 +402,7 @@ impl<D: Deref<Target = [u8]>, A: Arch + DwarfUnwinding + CompactUnwindInfoUnwind
                             Some(data) => ArcData(data.clone()),
                             None => return Err(UnwinderError::NoDwarfData),
                         };
-                        let mut dwarf_unwinder = DwarfUnwinder::<_, A>::new(
+                        let mut dwarf_unwinder = DwarfUnwinder::<_, A, P::GimliStorage>::new(
                             EndianReader::new(eh_frame_data, LittleEndian),
                             None,
                             &mut cache.eh_frame_unwind_context,
@@ -412,7 +421,7 @@ impl<D: Deref<Target = [u8]>, A: Arch + DwarfUnwinding + CompactUnwindInfoUnwind
             ModuleUnwindData::EhFrameHdrAndEhFrame(eh_frame_hdr, eh_frame_data) => {
                 let eh_frame_hdr_data = ArcData(eh_frame_hdr.clone());
                 let eh_frame_data = ArcData(eh_frame_data.clone());
-                let mut dwarf_unwinder = DwarfUnwinder::<_, A>::new(
+                let mut dwarf_unwinder = DwarfUnwinder::<_, A, P::GimliStorage>::new(
                     EndianReader::new(eh_frame_data, LittleEndian),
                     Some(EndianReader::new(eh_frame_hdr_data, LittleEndian)),
                     &mut cache.eh_frame_unwind_context,
