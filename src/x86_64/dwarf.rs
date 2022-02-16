@@ -3,15 +3,12 @@ use gimli::{
     UnwindTableRow, X86_64,
 };
 
-use crate::{
-    arch::ArchX86_64, rules::UnwindRuleX86_64, unwind_result::UnwindResult,
-    unwindregs::UnwindRegsX86_64,
-};
-
-use super::{
+use super::{arch::ArchX86_64, unwind_rule::UnwindRuleX86_64, unwindregs::UnwindRegsX86_64};
+use crate::dwarf::{
     eval_cfa_rule, eval_register_rule, ConversionError, DwarfUnwindRegs, DwarfUnwinderError,
     DwarfUnwinding,
 };
+use crate::unwind_result::UnwindResult;
 
 impl DwarfUnwindRegs for UnwindRegsX86_64 {
     fn get(&self, register: Register) -> Option<u64> {

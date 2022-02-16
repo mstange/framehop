@@ -1,4 +1,4 @@
-use crate::{error::Error, rules::UnwindRule};
+use crate::{error::Error, unwind_rule::UnwindRule};
 
 pub struct RuleCache<R: UnwindRule> {
     entries: Box<[Option<CacheEntry<R>>; 509]>,

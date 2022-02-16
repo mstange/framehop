@@ -1,6 +1,7 @@
-use crate::{error::Error, unwindregs::UnwindRegsAarch64};
+use super::unwindregs::UnwindRegsAarch64;
+use crate::error::Error;
 
-use super::UnwindRule;
+use crate::unwind_rule::UnwindRule;
 
 #[derive(Clone, Copy, Debug)]
 pub enum UnwindRuleAarch64 {

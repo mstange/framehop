@@ -4,14 +4,12 @@ use gimli::{EndianReader, LittleEndian};
 use crate::arcdata::ArcData;
 use crate::arch::Arch;
 use crate::cache::{AllocationPolicy, Cache};
+use crate::dwarf::{DwarfUnwinder, DwarfUnwinding};
 use crate::error::{Error, UnwinderError};
+use crate::macho::{CompactUnwindInfoUnwinder, CompactUnwindInfoUnwinding, CuiUnwindResult};
 use crate::rule_cache::CacheResult;
-use crate::rules::UnwindRule;
 use crate::unwind_result::UnwindResult;
-use crate::unwinders::{
-    CompactUnwindInfoUnwinder, CompactUnwindInfoUnwinding, CuiUnwindResult, DwarfUnwinder,
-    DwarfUnwinding,
-};
+use crate::unwind_rule::UnwindRule;
 use crate::CodeAddress;
 
 use std::marker::PhantomData;

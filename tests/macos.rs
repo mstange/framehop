@@ -1,8 +1,7 @@
 use std::path::Path;
 
 use fallible_iterator::FallibleIterator;
-use framehop::archunwinders::*;
-use framehop::unwindregs::*;
+use framehop::aarch64::*;
 use framehop::Unwinder;
 
 mod common;

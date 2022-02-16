@@ -1,4 +1,5 @@
-use super::unwinders::{CompactUnwindInfoUnwinderError, DwarfUnwinderError};
+use crate::dwarf::DwarfUnwinderError;
+use crate::macho::CompactUnwindInfoUnwinderError;
 
 #[derive(thiserror::Error, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Error {

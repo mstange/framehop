@@ -3,12 +3,11 @@ use gimli::{
     UnwindContextStorage, UnwindTableRow,
 };
 
-use crate::{
-    arch::ArchAarch64, rules::UnwindRuleAarch64, unwind_result::UnwindResult,
-    unwindregs::UnwindRegsAarch64,
-};
+use super::{arch::ArchAarch64, unwind_rule::UnwindRuleAarch64, unwindregs::UnwindRegsAarch64};
 
-use super::{
+use crate::unwind_result::UnwindResult;
+
+use crate::dwarf::{
     eval_cfa_rule, eval_register_rule, ConversionError, DwarfUnwindRegs, DwarfUnwinderError,
     DwarfUnwinding,
 };

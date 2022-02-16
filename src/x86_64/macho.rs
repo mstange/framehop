@@ -1,9 +1,9 @@
-use super::{CompactUnwindInfoUnwinderError, CompactUnwindInfoUnwinding, CuiUnwindResult};
-use crate::arch::ArchX86_64;
-use crate::rules::UnwindRuleX86_64;
+use super::arch::ArchX86_64;
+use super::framepointer::FramepointerUnwinderX86_64;
+use super::unwind_rule::UnwindRuleX86_64;
+use super::unwindregs::UnwindRegsX86_64;
+use crate::macho::{CompactUnwindInfoUnwinderError, CompactUnwindInfoUnwinding, CuiUnwindResult};
 use crate::unwind_result::UnwindResult;
-use crate::unwinders::FramepointerUnwinderX86_64;
-use crate::unwindregs::UnwindRegsX86_64;
 use macho_unwind_info::opcodes::{OpcodeX86_64, RegisterNameX86_64};
 
 impl CompactUnwindInfoUnwinding for ArchX86_64 {
