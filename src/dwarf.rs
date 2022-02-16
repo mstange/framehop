@@ -266,13 +266,14 @@ where
             u64::try_from(i64::try_from(cfa).ok()?.checked_add(offset)?).ok()
         }
         RegisterRule::Register(register) => regs.get(register),
-        RegisterRule::Expression(_) => {
-            println!("Unimplemented RegisterRule::Expression");
-            None
+        RegisterRule::Expression(expr) => {
+            let val = eval_expr::<R, UR, S>(expr, encoding, regs)?;
+            read_mem(val).ok()
         }
         RegisterRule::ValExpression(expr) => eval_expr::<R, UR, S>(expr, encoding, regs),
         RegisterRule::Architectural => {
-            println!("Unimplemented RegisterRule::Architectural");
+            // Unimplemented
+            // TODO: Find out what the architectural rules for x86_64 and for aarch64 are, if any.
             None
         }
     }
