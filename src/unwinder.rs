@@ -85,13 +85,11 @@ impl<'u, 'c, 'r, U: Unwinder + ?Sized, F: FnMut(u64) -> Result<u64, ()>>
     }
 }
 
-impl<'u, 'c, 'r, U: Unwinder + ?Sized, F: FnMut(u64) -> Result<u64, ()>> FallibleIterator
-    for UnwindIterator<'u, 'c, 'r, U, F>
+impl<'u, 'c, 'r, U: Unwinder + ?Sized, F: FnMut(u64) -> Result<u64, ()>>
+    UnwindIterator<'u, 'c, 'r, U, F>
 {
-    type Item = CodeAddress;
-    type Error = Error;
-
-    fn next(&mut self) -> Result<Option<CodeAddress>, Error> {
+    #[allow(clippy::should_implement_trait)]
+    pub fn next(&mut self) -> Result<Option<CodeAddress>, Error> {
         let next = match self.state {
             UnwindIteratorState::Initial(pc) => {
                 self.state = UnwindIteratorState::Unwinding(CodeAddress::InstructionPointer(pc));
@@ -115,6 +113,17 @@ impl<'u, 'c, 'r, U: Unwinder + ?Sized, F: FnMut(u64) -> Result<u64, ()>> Fallibl
                 Ok(None)
             }
         }
+    }
+}
+
+impl<'u, 'c, 'r, U: Unwinder + ?Sized, F: FnMut(u64) -> Result<u64, ()>> FallibleIterator
+    for UnwindIterator<'u, 'c, 'r, U, F>
+{
+    type Item = CodeAddress;
+    type Error = Error;
+
+    fn next(&mut self) -> Result<Option<CodeAddress>, Error> {
+        self.next()
     }
 }
 
