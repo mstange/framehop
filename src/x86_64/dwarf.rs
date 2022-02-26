@@ -9,6 +9,7 @@ use crate::dwarf::{
     DwarfUnwinding,
 };
 use crate::unwind_result::UnwindResult;
+use crate::CodeAddress;
 
 impl DwarfUnwindRegs for UnwindRegsX86_64 {
     fn get(&self, register: Register) -> Option<u64> {
@@ -22,11 +23,11 @@ impl DwarfUnwindRegs for UnwindRegsX86_64 {
 }
 
 impl DwarfUnwinding for ArchX86_64 {
-    fn unwind_first<F, R, S>(
+    fn unwind_frame<F, R, S>(
         unwind_info: &UnwindTableRow<R, S>,
         encoding: Encoding,
         regs: &mut Self::UnwindRegs,
-        pc: u64,
+        address: CodeAddress,
         read_mem: &mut F,
     ) -> Result<UnwindResult<Self::UnwindRule>, DwarfUnwinderError>
     where
@@ -40,95 +41,37 @@ impl DwarfUnwinding for ArchX86_64 {
 
         match translate_into_unwind_rule(cfa_rule, &bp_rule, &ra_rule) {
             Ok(unwind_rule) => return Ok(UnwindResult::ExecRule(unwind_rule)),
-            Err(_err) => {
-                // eprintln!("Unwind rule translation failed: {:?}", err);
+            Err(err) => {
+                eprintln!("Unwind rule translation failed: {:?}", err);
             }
         }
 
-        // println!("cfa rule: {:?}, regs: {:?}", cfa_rule, regs);
-        let cfa = match eval_cfa_rule::<R, _, S>(cfa_rule, encoding, regs) {
-            Some(cfa) => cfa,
-            None => {
-                // eprintln!("Could not recover CFA.");
-                return Err(DwarfUnwinderError::CouldNotRecoverCfa);
-            }
-        };
+        let cfa = eval_cfa_rule::<R, _, S>(cfa_rule, encoding, regs)
+            .ok_or(DwarfUnwinderError::CouldNotRecoverCfa)?;
 
-        // eprintln!("cfa: {:x}", cfa);
-
+        let ip = regs.ip();
         let bp = regs.bp();
-        let bp = eval_register_rule::<R, F, _, S>(bp_rule, cfa, encoding, bp, regs, read_mem)
+        let sp = regs.sp();
+
+        let new_bp = eval_register_rule::<R, F, _, S>(bp_rule, cfa, encoding, bp, regs, read_mem)
             .unwrap_or(bp);
 
         let return_address =
-            match eval_register_rule::<R, F, _, S>(ra_rule, cfa, encoding, pc, regs, read_mem) {
+            match eval_register_rule::<R, F, _, S>(ra_rule, cfa, encoding, ip, regs, read_mem) {
                 Some(ra) => ra,
                 None => read_mem(cfa - 8)
                     .map_err(|_| DwarfUnwinderError::CouldNotRecoverReturnAddress)?,
             };
 
-        if cfa == regs.sp() && return_address == regs.ip() {
+        if cfa == sp && return_address == ip {
             return Err(DwarfUnwinderError::DidNotAdvance);
         }
-
-        regs.set_ip(return_address);
-        regs.set_bp(bp);
-        regs.set_sp(cfa);
-
-        Ok(UnwindResult::Uncacheable(return_address))
-    }
-
-    fn unwind_next<F, R, S>(
-        unwind_info: &UnwindTableRow<R, S>,
-        encoding: Encoding,
-        regs: &mut Self::UnwindRegs,
-        read_mem: &mut F,
-    ) -> Result<UnwindResult<Self::UnwindRule>, DwarfUnwinderError>
-    where
-        F: FnMut(u64) -> Result<u64, ()>,
-        R: Reader,
-        S: UnwindContextStorage<R> + EvaluationStorage<R>,
-    {
-        let cfa_rule = unwind_info.cfa();
-        let bp_rule = unwind_info.register(X86_64::RBP);
-        let ra_rule = unwind_info.register(X86_64::RA);
-
-        match translate_into_unwind_rule(cfa_rule, &bp_rule, &ra_rule) {
-            Ok(unwind_rule) => return Ok(UnwindResult::ExecRule(unwind_rule)),
-            Err(_err) => {
-                // eprintln!("Unwind rule translation failed: {:?}", err);
-            }
-        }
-
-        // println!("cfa rule: {:?}, regs: {:?}", cfa_rule, regs);
-        let cfa = eval_cfa_rule::<R, _, S>(cfa_rule, encoding, regs)
-            .ok_or(DwarfUnwinderError::CouldNotRecoverCfa)?;
-        if cfa <= regs.sp() {
+        if address.is_return_address() && cfa < regs.sp() {
             return Err(DwarfUnwinderError::StackPointerMovedBackwards);
         }
 
-        // eprintln!("cfa: {:x}", cfa);
-        // println!("rules: fp {:?}, lr {:?}", bp_rule, lr_rule);
-        let bp =
-            eval_register_rule::<R, F, _, S>(bp_rule, cfa, encoding, regs.bp(), regs, read_mem)
-                .ok_or(DwarfUnwinderError::CouldNotRecoverFramePointer)?;
-
-        let return_address = match eval_register_rule::<R, F, _, S>(
-            ra_rule,
-            cfa,
-            encoding,
-            regs.ip(),
-            regs,
-            read_mem,
-        ) {
-            Some(ra) => ra,
-            None => {
-                read_mem(cfa - 8).map_err(|_| DwarfUnwinderError::CouldNotRecoverReturnAddress)?
-            }
-        };
-
         regs.set_ip(return_address);
-        regs.set_bp(bp);
+        regs.set_bp(new_bp);
         regs.set_sp(cfa);
 
         Ok(UnwindResult::Uncacheable(return_address))

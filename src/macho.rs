@@ -41,25 +41,15 @@ pub enum CuiUnwindResult<R: UnwindRule> {
     ExecRule(R),
     Uncacheable(u64),
     NeedDwarf(u32),
-    Err(CompactUnwindInfoUnwinderError),
 }
 
 pub trait CompactUnwindInfoUnwinding: Arch {
-    fn unwind_first<F>(
-        opcode: u32,
-        regs: &mut Self::UnwindRegs,
-        pc: u64,
-        rel_pc: u32,
-        read_mem: &mut F,
-    ) -> CuiUnwindResult<Self::UnwindRule>
-    where
-        F: FnMut(u64) -> Result<u64, ()>;
-
-    fn unwind_next<F>(
+    fn unwind_frame<F>(
         opcode: u32,
         regs: &mut Self::UnwindRegs,
         read_mem: &mut F,
-    ) -> CuiUnwindResult<Self::UnwindRule>
+        is_first_frame: bool,
+    ) -> Result<CuiUnwindResult<Self::UnwindRule>, CompactUnwindInfoUnwinderError>
     where
         F: FnMut(u64) -> Result<u64, ()>;
 }
@@ -89,46 +79,39 @@ impl<'a, A: CompactUnwindInfoUnwinding> CompactUnwindInfoUnwinder<'a, A> {
         function.ok_or(CompactUnwindInfoUnwinderError::AddressOutsideRange(address))
     }
 
-    pub fn unwind_first<F>(
+    pub fn unwind_frame<F>(
         &mut self,
         regs: &mut A::UnwindRegs,
-        pc: u64,
-        rel_pc: u32,
+        rel_lookup_address: u32,
         read_mem: &mut F,
-    ) -> CuiUnwindResult<A::UnwindRule>
+        is_first_frame: bool,
+    ) -> Result<CuiUnwindResult<A::UnwindRule>, CompactUnwindInfoUnwinderError>
     where
         F: FnMut(u64) -> Result<u64, ()>,
     {
-        let function = match self.function_for_address(rel_pc) {
+        let function = match self.function_for_address(rel_lookup_address) {
             Ok(f) => f,
-            Err(CompactUnwindInfoUnwinderError::AddressOutsideRange(_)) => {
+            Err(CompactUnwindInfoUnwinderError::AddressOutsideRange(_)) if is_first_frame => {
                 // pc is falling into this module's address range, but it's not covered by __unwind_info.
                 // This could mean that we're inside a stub function, in the __stubs section.
                 // All stub functions are frameless.
                 // TODO: Obtain the actual __stubs address range and do better checking here.
-                return CuiUnwindResult::ExecRule(A::UnwindRule::rule_for_stub_functions());
+                return Ok(CuiUnwindResult::ExecRule(
+                    A::UnwindRule::rule_for_stub_functions(),
+                ));
             }
-            Err(err) => return CuiUnwindResult::Err(err),
+            Err(err) => return Err(err),
         };
-        if rel_pc == function.start_address {
-            return CuiUnwindResult::ExecRule(A::UnwindRule::rule_for_function_start());
+        if is_first_frame && rel_lookup_address == function.start_address {
+            return Ok(CuiUnwindResult::ExecRule(
+                A::UnwindRule::rule_for_function_start(),
+            ));
         }
-        <A as CompactUnwindInfoUnwinding>::unwind_first(function.opcode, regs, pc, rel_pc, read_mem)
-    }
-
-    pub fn unwind_next<F>(
-        &mut self,
-        regs: &mut A::UnwindRegs,
-        rel_ra: u32,
-        read_mem: &mut F,
-    ) -> CuiUnwindResult<A::UnwindRule>
-    where
-        F: FnMut(u64) -> Result<u64, ()>,
-    {
-        let function = match self.function_for_address(rel_ra - 1) {
-            Ok(f) => f,
-            Err(err) => return CuiUnwindResult::Err(err),
-        };
-        <A as CompactUnwindInfoUnwinding>::unwind_next(function.opcode, regs, read_mem)
+        <A as CompactUnwindInfoUnwinding>::unwind_frame(
+            function.opcode,
+            regs,
+            read_mem,
+            is_first_frame,
+        )
     }
 }

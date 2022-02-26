@@ -1,7 +1,8 @@
 use std::ops::Deref;
 
 use crate::{
-    unwinder::UnwinderInternal, AllocationPolicy, Error, MayAllocateDuringUnwind, Module, Unwinder,
+    unwinder::UnwinderInternal, AllocationPolicy, CodeAddress, Error, MayAllocateDuringUnwind,
+    Module, Unwinder,
 };
 
 use super::{ArchAarch64, CacheAarch64, UnwindRegsAarch64};
@@ -36,9 +37,9 @@ impl<D: Deref<Target = [u8]>, P: AllocationPolicy<D>> Unwinder for UnwinderAarch
         self.0.remove_module(module_address_range_start);
     }
 
-    fn unwind_first<F>(
+    fn unwind_frame<F>(
         &self,
-        pc: u64,
+        address: CodeAddress,
         regs: &mut UnwindRegsAarch64,
         cache: &mut CacheAarch64<D, P>,
         read_mem: &mut F,
@@ -46,20 +47,6 @@ impl<D: Deref<Target = [u8]>, P: AllocationPolicy<D>> Unwinder for UnwinderAarch
     where
         F: FnMut(u64) -> Result<u64, ()>,
     {
-        self.0.unwind_first(pc, regs, &mut cache.0, read_mem)
-    }
-
-    fn unwind_next<F>(
-        &self,
-        return_address: u64,
-        regs: &mut UnwindRegsAarch64,
-        cache: &mut CacheAarch64<D, P>,
-        read_mem: &mut F,
-    ) -> Result<Option<u64>, Error>
-    where
-        F: FnMut(u64) -> Result<u64, ()>,
-    {
-        self.0
-            .unwind_next(return_address, regs, &mut cache.0, read_mem)
+        self.0.unwind_frame(address, regs, &mut cache.0, read_mem)
     }
 }

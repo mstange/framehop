@@ -6,7 +6,7 @@ use gimli::{
     UnwindContext, UnwindContextStorage, UnwindSection, UnwindTableRow, Value,
 };
 
-use crate::{arch::Arch, unwind_result::UnwindResult, ModuleSectionAddresses};
+use crate::{arch::Arch, unwind_result::UnwindResult, CodeAddress, ModuleSectionAddresses};
 
 #[derive(thiserror::Error, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DwarfUnwinderError {
@@ -51,22 +51,11 @@ pub enum ConversionError {
 }
 
 pub trait DwarfUnwinding: Arch {
-    fn unwind_first<F, R, S>(
+    fn unwind_frame<F, R, S>(
         unwind_info: &UnwindTableRow<R, S>,
         encoding: Encoding,
         regs: &mut Self::UnwindRegs,
-        pc: u64,
-        read_mem: &mut F,
-    ) -> Result<UnwindResult<Self::UnwindRule>, DwarfUnwinderError>
-    where
-        F: FnMut(u64) -> Result<u64, ()>,
-        R: Reader,
-        S: UnwindContextStorage<R> + EvaluationStorage<R>;
-
-    fn unwind_next<F, R, S>(
-        unwind_info: &UnwindTableRow<R, S>,
-        encoding: Encoding,
-        regs: &mut Self::UnwindRegs,
+        address: CodeAddress,
         read_mem: &mut F,
     ) -> Result<UnwindResult<Self::UnwindRule>, DwarfUnwinderError>
     where
@@ -124,43 +113,10 @@ impl<'a, R: Reader, A: DwarfUnwinding, S: UnwindContextStorage<R> + EvaluationSt
         fde_offset.0.into_u64().try_into().ok()
     }
 
-    pub fn unwind_first_with_fde<F>(
+    pub fn unwind_frame_with_fde<F>(
         &mut self,
         regs: &mut A::UnwindRegs,
-        pc: u64,
-        fde_offset: u32,
-        read_mem: &mut F,
-    ) -> Result<UnwindResult<A::UnwindRule>, DwarfUnwinderError>
-    where
-        F: FnMut(u64) -> Result<u64, ()>,
-    {
-        let mut eh_frame = gimli::EhFrame::from(self.eh_frame_data.clone());
-        eh_frame.set_address_size(8);
-        let fde = eh_frame.fde_from_offset(
-            &self.bases,
-            gimli::EhFrameOffset::from(R::Offset::from_u32(fde_offset)),
-            gimli::EhFrame::cie_from_offset,
-        );
-        let fde = fde.map_err(DwarfUnwinderError::FdeFromOffsetFailed)?;
-        let encoding = fde.cie().encoding();
-        let unwind_info: &UnwindTableRow<_, _> =
-            match fde.unwind_info_for_address(&eh_frame, &self.bases, self.unwind_context, pc) {
-                Ok(unwind_info) => unwind_info,
-                Err(e) => {
-                    eprintln!(
-                    "unwind_info_for_address error at pc 0x{:x} using FDE at offset 0x{:x}: {:?}",
-                    pc, fde_offset, e
-                );
-                    return Err(DwarfUnwinderError::UnwindInfoForAddressFailed(e));
-                }
-            };
-        A::unwind_first::<F, R, S>(unwind_info, encoding, regs, pc, read_mem)
-    }
-
-    pub fn unwind_next_with_fde<F>(
-        &mut self,
-        regs: &mut A::UnwindRegs,
-        return_address: u64,
+        address: CodeAddress,
         fde_offset: u32,
         read_mem: &mut F,
     ) -> Result<UnwindResult<A::UnwindRule>, DwarfUnwinderError>
@@ -180,20 +136,14 @@ impl<'a, R: Reader, A: DwarfUnwinding, S: UnwindContextStorage<R> + EvaluationSt
             &eh_frame,
             &self.bases,
             self.unwind_context,
-            return_address - 1,
+            address.address_for_lookup(),
         ) {
             Ok(unwind_info) => unwind_info,
             Err(e) => {
-                eprintln!(
-                    "unwind_info_for_address error at pc 0x{:x} using FDE at offset 0x{:x}: {:?}",
-                    return_address - 1,
-                    fde_offset,
-                    e
-                );
                 return Err(DwarfUnwinderError::UnwindInfoForAddressFailed(e));
             }
         };
-        A::unwind_next(unwind_info, encoding, regs, read_mem)
+        A::unwind_frame::<F, R, S>(unwind_info, encoding, regs, address, read_mem)
     }
 }
 

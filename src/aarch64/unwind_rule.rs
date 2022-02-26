@@ -131,6 +131,7 @@ impl UnwindRule for UnwindRuleAarch64 {
                 regs.set_lr(new_lr);
             }
         }
+
         Ok(Some(regs.lr()))
     }
 }

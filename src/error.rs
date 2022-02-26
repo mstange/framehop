@@ -8,6 +8,9 @@ pub enum Error {
 
     #[error("Frame pointer unwinding moved backwards")]
     FramepointerUnwindingMovedBackwards,
+
+    #[error("Return address is null")]
+    ReturnAddressIsNull,
 }
 
 #[derive(thiserror::Error, Debug, Clone, Copy, PartialEq, Eq)]

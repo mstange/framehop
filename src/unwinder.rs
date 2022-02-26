@@ -27,19 +27,9 @@ pub trait Unwinder {
 
     fn remove_module(&mut self, module_address_range_start: u64);
 
-    fn unwind_first<F>(
+    fn unwind_frame<F>(
         &self,
-        pc: u64,
-        regs: &mut Self::UnwindRegs,
-        cache: &mut Self::Cache,
-        read_mem: &mut F,
-    ) -> Result<Option<u64>, Error>
-    where
-        F: FnMut(u64) -> Result<u64, ()>;
-
-    fn unwind_next<F>(
-        &self,
-        return_address: u64,
+        address: CodeAddress,
         regs: &mut Self::UnwindRegs,
         cache: &mut Self::Cache,
         read_mem: &mut F,
@@ -71,8 +61,7 @@ pub struct UnwindIterator<'u, 'c, 'r, U: Unwinder + ?Sized, F: FnMut(u64) -> Res
 
 enum UnwindIteratorState {
     Initial(u64),
-    ReadyForFirstUnwind(u64),
-    ReadyForNextUnwind(u64),
+    Unwinding(CodeAddress),
     Done,
 }
 
@@ -99,34 +88,33 @@ impl<'u, 'c, 'r, U: Unwinder + ?Sized, F: FnMut(u64) -> Result<u64, ()>>
 impl<'u, 'c, 'r, U: Unwinder + ?Sized, F: FnMut(u64) -> Result<u64, ()>> FallibleIterator
     for UnwindIterator<'u, 'c, 'r, U, F>
 {
-    type Item = u64;
+    type Item = CodeAddress;
     type Error = Error;
 
-    fn next(&mut self) -> Result<Option<u64>, Error> {
-        let next =
-            match self.state {
-                UnwindIteratorState::Initial(pc) => {
-                    self.state = UnwindIteratorState::ReadyForFirstUnwind(pc);
-                    return Ok(Some(pc));
-                }
-                UnwindIteratorState::ReadyForFirstUnwind(pc) => {
-                    self.unwinder
-                        .unwind_first(pc, &mut self.regs, self.cache, self.read_mem)?
-                }
-                UnwindIteratorState::ReadyForNextUnwind(return_address) => self
-                    .unwinder
-                    .unwind_next(return_address, &mut self.regs, self.cache, self.read_mem)?,
-                UnwindIteratorState::Done => return Ok(None),
-            };
+    fn next(&mut self) -> Result<Option<CodeAddress>, Error> {
+        let next = match self.state {
+            UnwindIteratorState::Initial(pc) => {
+                self.state = UnwindIteratorState::Unwinding(CodeAddress::InstructionPointer(pc));
+                return Ok(Some(CodeAddress::InstructionPointer(pc)));
+            }
+            UnwindIteratorState::Unwinding(address) => {
+                self.unwinder
+                    .unwind_frame(address, &mut self.regs, self.cache, self.read_mem)?
+            }
+            UnwindIteratorState::Done => return Ok(None),
+        };
         match next {
             Some(return_address) => {
-                self.state = UnwindIteratorState::ReadyForNextUnwind(return_address);
+                let return_address = CodeAddress::from_return_address(return_address)
+                    .ok_or(Error::ReturnAddressIsNull)?;
+                self.state = UnwindIteratorState::Unwinding(return_address);
+                Ok(Some(return_address))
             }
             None => {
                 self.state = UnwindIteratorState::Done;
+                Ok(None)
             }
         }
-        Ok(next)
     }
 }
 
@@ -234,7 +222,7 @@ impl<
         F: FnMut(u64) -> Result<u64, ()>,
         G: FnOnce(
             &Module<D>,
-            u64,
+            CodeAddress,
             &mut A::UnwindRegs,
             &mut Cache<D, A::UnwindRule, P>,
             &mut F,
@@ -255,7 +243,7 @@ impl<
             None => A::UnwindRule::fallback_rule(),
             Some(module_index) => {
                 let module = &self.modules[module_index];
-                match callback(module, address.address(), regs, cache, read_mem) {
+                match callback(module, address, regs, cache, read_mem) {
                     Ok(UnwindResult::ExecRule(rule)) => rule,
                     Ok(UnwindResult::Uncacheable(return_address)) => {
                         return Ok(Some(return_address))
@@ -271,9 +259,9 @@ impl<
         unwind_rule.exec(regs, read_mem)
     }
 
-    pub fn unwind_first<F>(
+    pub fn unwind_frame<F>(
         &self,
-        pc: u64,
+        address: CodeAddress,
         regs: &mut A::UnwindRegs,
         cache: &mut Cache<D, A::UnwindRule, P>,
         read_mem: &mut F,
@@ -281,39 +269,12 @@ impl<
     where
         F: FnMut(u64) -> Result<u64, ()>,
     {
-        // eprintln!("unwind_first for {:x}", pc);
-        self.with_cache(
-            CodeAddress::InstructionPointer(pc),
-            regs,
-            cache,
-            read_mem,
-            Self::unwind_first_impl,
-        )
+        self.with_cache(address, regs, cache, read_mem, Self::unwind_frame_impl)
     }
 
-    pub fn unwind_next<F>(
-        &self,
-        return_address: u64,
-        regs: &mut A::UnwindRegs,
-        cache: &mut Cache<D, A::UnwindRule, P>,
-        read_mem: &mut F,
-    ) -> Result<Option<u64>, Error>
-    where
-        F: FnMut(u64) -> Result<u64, ()>,
-    {
-        // eprintln!("unwind_next for {:x}", return_address);
-        self.with_cache(
-            CodeAddress::ReturnAddress(return_address),
-            regs,
-            cache,
-            read_mem,
-            Self::unwind_next_impl,
-        )
-    }
-
-    fn unwind_first_impl<F>(
+    fn unwind_frame_impl<F>(
         module: &Module<D>,
-        pc: u64,
+        address: CodeAddress,
         regs: &mut A::UnwindRegs,
         cache: &mut Cache<D, A::UnwindRule, P>,
         read_mem: &mut F,
@@ -321,13 +282,18 @@ impl<
     where
         F: FnMut(u64) -> Result<u64, ()>,
     {
-        let rel_pc = (pc - module.base_address) as u32;
-
         let unwind_result = match &module.unwind_data {
             ModuleUnwindData::CompactUnwindInfoAndEhFrame(unwind_data, eh_frame_data) => {
                 // eprintln!("unwinding with cui and eh_frame in module {}", module.name);
                 let mut unwinder = CompactUnwindInfoUnwinder::<A>::new(&unwind_data[..]);
-                match unwinder.unwind_first(regs, pc, rel_pc, read_mem) {
+                let rel_lookup_address =
+                    (address.address_for_lookup() - module.base_address) as u32;
+                match unwinder.unwind_frame(
+                    regs,
+                    rel_lookup_address,
+                    read_mem,
+                    !address.is_return_address(),
+                )? {
                     CuiUnwindResult::ExecRule(rule) => UnwindResult::ExecRule(rule),
                     CuiUnwindResult::Uncacheable(return_address) => {
                         UnwindResult::Uncacheable(return_address)
@@ -343,9 +309,8 @@ impl<
                             &mut cache.eh_frame_unwind_context,
                             &module.sections,
                         );
-                        dwarf_unwinder.unwind_first_with_fde(regs, pc, fde_offset, read_mem)?
+                        dwarf_unwinder.unwind_frame_with_fde(regs, address, fde_offset, read_mem)?
                     }
-                    CuiUnwindResult::Err(err) => return Err(err.into()),
                 }
             }
             ModuleUnwindData::EhFrameHdrAndEhFrame(eh_frame_hdr, eh_frame_data) => {
@@ -358,77 +323,9 @@ impl<
                     &module.sections,
                 );
                 let fde_offset = dwarf_unwinder
-                    .get_fde_offset_for_address(pc)
+                    .get_fde_offset_for_address(address.address_for_lookup())
                     .ok_or(UnwinderError::EhFrameHdrCouldNotFindAddress)?;
-                dwarf_unwinder.unwind_first_with_fde(regs, pc, fde_offset, read_mem)?
-            }
-            ModuleUnwindData::EhFrame(_) => {
-                return Err(UnwinderError::UnhandledModuleUnwindDataType)
-            }
-            ModuleUnwindData::None => return Err(UnwinderError::NoModuleUnwindData),
-        };
-        Ok(unwind_result)
-    }
-
-    fn unwind_next_impl<F>(
-        module: &Module<D>,
-        return_address: u64,
-        regs: &mut A::UnwindRegs,
-        cache: &mut Cache<D, A::UnwindRule, P>,
-        read_mem: &mut F,
-    ) -> Result<UnwindResult<A::UnwindRule>, UnwinderError>
-    where
-        F: FnMut(u64) -> Result<u64, ()>,
-    {
-        let rel_ra = (return_address - module.base_address) as u32;
-
-        // eprintln!(
-        //     "Unwinding at ra {} + 0x{:x} (= 0x{:x}) with regs {:?}",
-        //     self.name, rel_ra, return_address, regs
-        // );
-        let unwind_result = match &module.unwind_data {
-            ModuleUnwindData::CompactUnwindInfoAndEhFrame(unwind_data, eh_frame_data) => {
-                // eprintln!("unwinding with cui and eh_frame in module {}", module.name);
-                let mut unwinder = CompactUnwindInfoUnwinder::<A>::new(&unwind_data[..]);
-                match unwinder.unwind_next(regs, rel_ra, read_mem) {
-                    CuiUnwindResult::ExecRule(rule) => UnwindResult::ExecRule(rule),
-                    CuiUnwindResult::Uncacheable(return_address) => {
-                        UnwindResult::Uncacheable(return_address)
-                    }
-                    CuiUnwindResult::NeedDwarf(fde_offset) => {
-                        let eh_frame_data = match eh_frame_data {
-                            Some(data) => ArcData(data.clone()),
-                            None => return Err(UnwinderError::NoDwarfData),
-                        };
-                        let mut dwarf_unwinder = DwarfUnwinder::<_, A, P::GimliStorage>::new(
-                            EndianReader::new(eh_frame_data, LittleEndian),
-                            None,
-                            &mut cache.eh_frame_unwind_context,
-                            &module.sections,
-                        );
-                        dwarf_unwinder.unwind_next_with_fde(
-                            regs,
-                            return_address,
-                            fde_offset,
-                            read_mem,
-                        )?
-                    }
-                    CuiUnwindResult::Err(err) => return Err(err.into()),
-                }
-            }
-            ModuleUnwindData::EhFrameHdrAndEhFrame(eh_frame_hdr, eh_frame_data) => {
-                let eh_frame_hdr_data = ArcData(eh_frame_hdr.clone());
-                let eh_frame_data = ArcData(eh_frame_data.clone());
-                let mut dwarf_unwinder = DwarfUnwinder::<_, A, P::GimliStorage>::new(
-                    EndianReader::new(eh_frame_data, LittleEndian),
-                    Some(EndianReader::new(eh_frame_hdr_data, LittleEndian)),
-                    &mut cache.eh_frame_unwind_context,
-                    &module.sections,
-                );
-                let fde_offset = dwarf_unwinder
-                    .get_fde_offset_for_address(return_address - 1)
-                    .ok_or(UnwinderError::EhFrameHdrCouldNotFindAddress)?;
-                dwarf_unwinder.unwind_first_with_fde(regs, return_address, fde_offset, read_mem)?
+                dwarf_unwinder.unwind_frame_with_fde(regs, address, fde_offset, read_mem)?
             }
             ModuleUnwindData::EhFrame(_) => {
                 return Err(UnwinderError::UnhandledModuleUnwindDataType)
