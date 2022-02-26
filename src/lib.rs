@@ -15,7 +15,7 @@ pub mod aarch64;
 pub mod x86_64;
 
 pub use cache::{AllocationPolicy, MayAllocateDuringUnwind, MustNotAllocateDuringUnwind};
-pub use code_address::CodeAddress;
+pub use code_address::FrameAddress;
 pub use error::Error;
 pub use unwinder::{Module, ModuleSectionAddresses, ModuleUnwindData, UnwindIterator, Unwinder};
 

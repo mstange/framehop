@@ -6,7 +6,7 @@ use gimli::{
     UnwindContext, UnwindContextStorage, UnwindSection, UnwindTableRow, Value,
 };
 
-use crate::{arch::Arch, unwind_result::UnwindResult, CodeAddress, ModuleSectionAddresses};
+use crate::{arch::Arch, unwind_result::UnwindResult, FrameAddress, ModuleSectionAddresses};
 
 #[derive(thiserror::Error, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DwarfUnwinderError {
@@ -55,7 +55,7 @@ pub trait DwarfUnwinding: Arch {
         unwind_info: &UnwindTableRow<R, S>,
         encoding: Encoding,
         regs: &mut Self::UnwindRegs,
-        address: CodeAddress,
+        address: FrameAddress,
         read_mem: &mut F,
     ) -> Result<UnwindResult<Self::UnwindRule>, DwarfUnwinderError>
     where
@@ -116,7 +116,7 @@ impl<'a, R: Reader, A: DwarfUnwinding, S: UnwindContextStorage<R> + EvaluationSt
     pub fn unwind_frame_with_fde<F>(
         &mut self,
         regs: &mut A::UnwindRegs,
-        address: CodeAddress,
+        address: FrameAddress,
         fde_offset: u32,
         read_mem: &mut F,
     ) -> Result<UnwindResult<A::UnwindRule>, DwarfUnwinderError>

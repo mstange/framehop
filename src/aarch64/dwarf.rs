@@ -6,7 +6,7 @@ use gimli::{
 use super::{arch::ArchAarch64, unwind_rule::UnwindRuleAarch64, unwindregs::UnwindRegsAarch64};
 
 use crate::unwind_result::UnwindResult;
-use crate::CodeAddress;
+use crate::FrameAddress;
 
 use crate::dwarf::{
     eval_cfa_rule, eval_register_rule, ConversionError, DwarfUnwindRegs, DwarfUnwinderError,
@@ -29,7 +29,7 @@ impl DwarfUnwinding for ArchAarch64 {
         unwind_info: &UnwindTableRow<R, S>,
         encoding: Encoding,
         regs: &mut Self::UnwindRegs,
-        address: CodeAddress,
+        address: FrameAddress,
         read_mem: &mut F,
     ) -> Result<UnwindResult<Self::UnwindRule>, DwarfUnwinderError>
     where

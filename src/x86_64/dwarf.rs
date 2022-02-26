@@ -9,7 +9,7 @@ use crate::dwarf::{
     DwarfUnwinding,
 };
 use crate::unwind_result::UnwindResult;
-use crate::CodeAddress;
+use crate::FrameAddress;
 
 impl DwarfUnwindRegs for UnwindRegsX86_64 {
     fn get(&self, register: Register) -> Option<u64> {
@@ -27,7 +27,7 @@ impl DwarfUnwinding for ArchX86_64 {
         unwind_info: &UnwindTableRow<R, S>,
         encoding: Encoding,
         regs: &mut Self::UnwindRegs,
-        address: CodeAddress,
+        address: FrameAddress,
         read_mem: &mut F,
     ) -> Result<UnwindResult<Self::UnwindRule>, DwarfUnwinderError>
     where

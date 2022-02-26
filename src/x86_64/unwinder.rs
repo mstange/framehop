@@ -7,7 +7,7 @@ use crate::cache::{AllocationPolicy, MayAllocateDuringUnwind};
 use crate::error::Error;
 use crate::unwinder::UnwinderInternal;
 use crate::unwinder::{Module, Unwinder};
-use crate::CodeAddress;
+use crate::FrameAddress;
 
 pub struct UnwinderX86_64<D: Deref<Target = [u8]>, P: AllocationPolicy<D> = MayAllocateDuringUnwind>(
     UnwinderInternal<D, ArchX86_64, P>,
@@ -40,7 +40,7 @@ impl<D: Deref<Target = [u8]>, P: AllocationPolicy<D>> Unwinder for UnwinderX86_6
 
     fn unwind_frame<F>(
         &self,
-        address: CodeAddress,
+        address: FrameAddress,
         regs: &mut UnwindRegsX86_64,
         cache: &mut CacheX86_64<D, P>,
         read_mem: &mut F,

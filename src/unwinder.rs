@@ -10,7 +10,7 @@ use crate::macho::{CompactUnwindInfoUnwinder, CompactUnwindInfoUnwinding, CuiUnw
 use crate::rule_cache::CacheResult;
 use crate::unwind_result::UnwindResult;
 use crate::unwind_rule::UnwindRule;
-use crate::CodeAddress;
+use crate::FrameAddress;
 
 use std::marker::PhantomData;
 use std::{
@@ -29,7 +29,7 @@ pub trait Unwinder {
 
     fn unwind_frame<F>(
         &self,
-        address: CodeAddress,
+        address: FrameAddress,
         regs: &mut Self::UnwindRegs,
         cache: &mut Self::Cache,
         read_mem: &mut F,
@@ -61,7 +61,7 @@ pub struct UnwindIterator<'u, 'c, 'r, U: Unwinder + ?Sized, F: FnMut(u64) -> Res
 
 enum UnwindIteratorState {
     Initial(u64),
-    Unwinding(CodeAddress),
+    Unwinding(FrameAddress),
     Done,
 }
 
@@ -89,11 +89,11 @@ impl<'u, 'c, 'r, U: Unwinder + ?Sized, F: FnMut(u64) -> Result<u64, ()>>
     UnwindIterator<'u, 'c, 'r, U, F>
 {
     #[allow(clippy::should_implement_trait)]
-    pub fn next(&mut self) -> Result<Option<CodeAddress>, Error> {
+    pub fn next(&mut self) -> Result<Option<FrameAddress>, Error> {
         let next = match self.state {
             UnwindIteratorState::Initial(pc) => {
-                self.state = UnwindIteratorState::Unwinding(CodeAddress::InstructionPointer(pc));
-                return Ok(Some(CodeAddress::InstructionPointer(pc)));
+                self.state = UnwindIteratorState::Unwinding(FrameAddress::InstructionPointer(pc));
+                return Ok(Some(FrameAddress::InstructionPointer(pc)));
             }
             UnwindIteratorState::Unwinding(address) => {
                 self.unwinder
@@ -103,7 +103,7 @@ impl<'u, 'c, 'r, U: Unwinder + ?Sized, F: FnMut(u64) -> Result<u64, ()>>
         };
         match next {
             Some(return_address) => {
-                let return_address = CodeAddress::from_return_address(return_address)
+                let return_address = FrameAddress::from_return_address(return_address)
                     .ok_or(Error::ReturnAddressIsNull)?;
                 self.state = UnwindIteratorState::Unwinding(return_address);
                 Ok(Some(return_address))
@@ -119,10 +119,10 @@ impl<'u, 'c, 'r, U: Unwinder + ?Sized, F: FnMut(u64) -> Result<u64, ()>>
 impl<'u, 'c, 'r, U: Unwinder + ?Sized, F: FnMut(u64) -> Result<u64, ()>> FallibleIterator
     for UnwindIterator<'u, 'c, 'r, U, F>
 {
-    type Item = CodeAddress;
+    type Item = FrameAddress;
     type Error = Error;
 
-    fn next(&mut self) -> Result<Option<CodeAddress>, Error> {
+    fn next(&mut self) -> Result<Option<FrameAddress>, Error> {
         self.next()
     }
 }
@@ -221,7 +221,7 @@ impl<
 
     fn with_cache<F, G>(
         &self,
-        address: CodeAddress,
+        address: FrameAddress,
         regs: &mut A::UnwindRegs,
         cache: &mut Cache<D, A::UnwindRule, P>,
         read_mem: &mut F,
@@ -231,7 +231,7 @@ impl<
         F: FnMut(u64) -> Result<u64, ()>,
         G: FnOnce(
             &Module<D>,
-            CodeAddress,
+            FrameAddress,
             &mut A::UnwindRegs,
             &mut Cache<D, A::UnwindRule, P>,
             &mut F,
@@ -270,7 +270,7 @@ impl<
 
     pub fn unwind_frame<F>(
         &self,
-        address: CodeAddress,
+        address: FrameAddress,
         regs: &mut A::UnwindRegs,
         cache: &mut Cache<D, A::UnwindRule, P>,
         read_mem: &mut F,
@@ -283,7 +283,7 @@ impl<
 
     fn unwind_frame_impl<F>(
         module: &Module<D>,
-        address: CodeAddress,
+        address: FrameAddress,
         regs: &mut A::UnwindRegs,
         cache: &mut Cache<D, A::UnwindRule, P>,
         read_mem: &mut F,

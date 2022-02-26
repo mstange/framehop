@@ -2,7 +2,7 @@ use std::path::Path;
 
 use fallible_iterator::FallibleIterator;
 use framehop::aarch64::*;
-use framehop::CodeAddress;
+use framehop::FrameAddress;
 use framehop::Unwinder;
 
 mod common;
@@ -38,7 +38,7 @@ fn test_basic() {
     let mut regs = UnwindRegsAarch64::new(0x1003fc000 + 0xe4830, 0x10, 0x20);
     // There's a frameless function at e0d2c.
     let res = unwinder.unwind_frame(
-        CodeAddress::from_instruction_pointer(0x1003fc000 + 0x1292c0),
+        FrameAddress::from_instruction_pointer(0x1003fc000 + 0x1292c0),
         &mut regs,
         &mut cache,
         &mut read_mem,
@@ -46,7 +46,7 @@ fn test_basic() {
     assert_eq!(res, Ok(Some(0x1003fc000 + 0xe4830)));
     assert_eq!(regs.sp(), 0x10);
     let res = unwinder.unwind_frame(
-        CodeAddress::from_return_address(0x1003fc000 + 0xe4830).unwrap(),
+        FrameAddress::from_return_address(0x1003fc000 + 0xe4830).unwrap(),
         &mut regs,
         &mut cache,
         &mut read_mem,
@@ -55,7 +55,7 @@ fn test_basic() {
     assert_eq!(regs.sp(), 0x30);
     assert_eq!(regs.fp(), 0x40);
     let res = unwinder.unwind_frame(
-        CodeAddress::from_return_address(0x1003fc000 + 0x100dc4).unwrap(),
+        FrameAddress::from_return_address(0x1003fc000 + 0x100dc4).unwrap(),
         &mut regs,
         &mut cache,
         &mut read_mem,
@@ -64,7 +64,7 @@ fn test_basic() {
     assert_eq!(regs.sp(), 0x50);
     assert_eq!(regs.fp(), 0x70);
     let res = unwinder.unwind_frame(
-        CodeAddress::from_return_address(0x1003fc000 + 0x100dc4).unwrap(),
+        FrameAddress::from_return_address(0x1003fc000 + 0x100dc4).unwrap(),
         &mut regs,
         &mut cache,
         &mut read_mem,
@@ -111,10 +111,10 @@ fn test_basic_iterator() {
     assert_eq!(
         frames,
         Ok(vec![
-            CodeAddress::from_instruction_pointer(0x1003fc000 + 0x1292c0),
-            CodeAddress::from_return_address(0x1003fc000 + 0xe4830).unwrap(),
-            CodeAddress::from_return_address(0x1003fc000 + 0x100dc4).unwrap(),
-            CodeAddress::from_return_address(0x1003fc000 + 0x12ca28).unwrap()
+            FrameAddress::from_instruction_pointer(0x1003fc000 + 0x1292c0),
+            FrameAddress::from_return_address(0x1003fc000 + 0xe4830).unwrap(),
+            FrameAddress::from_return_address(0x1003fc000 + 0x100dc4).unwrap(),
+            FrameAddress::from_return_address(0x1003fc000 + 0x12ca28).unwrap()
         ])
     );
 }

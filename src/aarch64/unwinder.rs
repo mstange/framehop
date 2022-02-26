@@ -1,7 +1,7 @@
 use std::ops::Deref;
 
 use crate::{
-    unwinder::UnwinderInternal, AllocationPolicy, CodeAddress, Error, MayAllocateDuringUnwind,
+    unwinder::UnwinderInternal, AllocationPolicy, Error, FrameAddress, MayAllocateDuringUnwind,
     Module, Unwinder,
 };
 
@@ -39,7 +39,7 @@ impl<D: Deref<Target = [u8]>, P: AllocationPolicy<D>> Unwinder for UnwinderAarch
 
     fn unwind_frame<F>(
         &self,
-        address: CodeAddress,
+        address: FrameAddress,
         regs: &mut UnwindRegsAarch64,
         cache: &mut CacheAarch64<D, P>,
         read_mem: &mut F,

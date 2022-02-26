@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use framehop::x86_64::*;
-use framehop::CodeAddress;
+use framehop::FrameAddress;
 use framehop::Unwinder;
 
 mod common;
@@ -49,7 +49,7 @@ fn test_plt_cfa_expr() {
     {
         let mut regs = UnwindRegsX86_64::new(0x1000000 + rel_pc, *sp, 0x345);
         let res = unwinder.unwind_frame(
-            CodeAddress::from_instruction_pointer(0x1000000 + rel_pc),
+            FrameAddress::from_instruction_pointer(0x1000000 + rel_pc),
             &mut regs,
             &mut cache,
             &mut read_mem,
@@ -111,7 +111,7 @@ fn test_pthread_cfa_expr() {
     let mut regs = UnwindRegsX86_64::new(0x7f54b14fc000 + 0x9431, 0x10, 0x120);
 
     let res = unwinder.unwind_frame(
-        CodeAddress::from_instruction_pointer(0x7f54b14fc000 + 0x9431),
+        FrameAddress::from_instruction_pointer(0x7f54b14fc000 + 0x9431),
         &mut regs,
         &mut cache,
         &mut read_mem,
@@ -121,7 +121,7 @@ fn test_pthread_cfa_expr() {
     assert_eq!(regs.bp(), 0x120);
 
     let res = unwinder.unwind_frame(
-        CodeAddress::from_return_address(0x7f54b14fc000 + 0x9436).unwrap(),
+        FrameAddress::from_return_address(0x7f54b14fc000 + 0x9436).unwrap(),
         &mut regs,
         &mut cache,
         &mut read_mem,
@@ -133,7 +133,7 @@ fn test_pthread_cfa_expr() {
     // 0x88e8: CFA=reg7+8: reg3=[CFA-56], reg6=[CFA-16], reg12=[CFA-48], reg13=[CFA-40], reg14=[CFA-32], reg15=[CFA-24], reg16=[CFA-8]
     // This is a frame pointer unwind!
     let res = unwinder.unwind_frame(
-        CodeAddress::from_return_address(0x7f54b14fc000 + 0x8c2c).unwrap(),
+        FrameAddress::from_return_address(0x7f54b14fc000 + 0x8c2c).unwrap(),
         &mut regs,
         &mut cache,
         &mut read_mem,
