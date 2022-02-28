@@ -75,20 +75,8 @@ impl PrologueDetectorAarch64 {
             }
             let is_preindexed_writeback = writeback_bits == 0b11;
             let is_postindexed_writeback = writeback_bits == 0b01; // TODO: are there postindexed stores? What do they mean?
-            let imm7 = (((((word >> 15) & 0b1111111) as i16) << 9) >> 6) as i32;
-            // let pair_reg_1 = (word & 0b11111) as u16;
-            // if pair_reg_1 == 29 {
-            //     self.fp_offset_from_initial_sp = Some(self.sp_offset + imm7);
-            // } else if pair_reg_1 == 30 {
-            //     self.lr_offset_from_initial_sp = Some(self.sp_offset + imm7);
-            // }
-            // let pair_reg_2 = ((word >> 10) & 0b11111) as u16;
-            // if pair_reg_2 == 29 {
-            //     self.fp_offset_from_initial_sp = Some(self.sp_offset + imm7 + 8);
-            // } else if pair_reg_2 == 30 {
-            //     self.lr_offset_from_initial_sp = Some(self.sp_offset + imm7 + 8);
-            // }
             if is_preindexed_writeback || is_postindexed_writeback {
+                let imm7 = (((((word >> 15) & 0b1111111) as i16) << 9) >> 6) as i32;
                 self.sp_offset += imm7;
             }
             return PrologueStepResult::CanKeepGoing;
