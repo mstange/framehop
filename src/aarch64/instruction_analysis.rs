@@ -81,11 +81,9 @@ impl PrologueDetectorAarch64 {
             }
             return PrologueStepResult::CanKeepGoing;
         }
-        if (word >> 23) & 0b101111111 == 0b100100010 {
+        if (word >> 23) & 0b111111111 == 0b110100010 {
             // Section C3.4, Data processing - immediate
-            // add/sub imm
-            // unsigned
-            // size class X (8 bytes)
+            // unsigned sub imm, size class X (8 bytes)
             let result_reg = (word & 0b11111) as u16;
             let input_reg = ((word >> 5) & 0b11111) as u16;
             if result_reg != 31 || input_reg != 31 {
@@ -94,16 +92,11 @@ impl PrologueDetectorAarch64 {
                 );
             }
             let mut imm12 = ((word >> 10) & 0b111111111111) as i32;
-            let is_sub = ((word >> 30) & 0b1) == 0b1;
             let shift_immediate_by_12 = ((word >> 22) & 0b1) == 0b1;
             if shift_immediate_by_12 {
                 imm12 <<= 12
             }
-            if is_sub {
-                self.sp_offset -= imm12;
-            } else {
-                self.sp_offset += imm12;
-            }
+            self.sp_offset -= imm12;
             return PrologueStepResult::CanKeepGoing;
         }
         PrologueStepResult::ProbablyAlreadyInBody(UnexpectedInstructionType::Unknown)
