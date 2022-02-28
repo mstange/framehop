@@ -18,6 +18,9 @@ pub enum CompactUnwindInfoUnwinderError {
     #[error("No unwind info (null opcode) for this function in __unwind_info")]
     FunctionHasNoInfo,
 
+    #[error("rbp offset from the stack pointer divided by 8 does not fit into i16")]
+    BpOffsetDoesNotFit,
+
     #[error("Unrecognized __unwind_info opcode kind {0}")]
     BadOpcodeKind(u8),
 
@@ -29,29 +32,63 @@ pub enum CompactUnwindInfoUnwinderError {
 
     #[error("Encountered invalid unwind entry")]
     InvalidFramelessImmediate,
-
-    #[error("Could not read return address from stack")]
-    CouldNotReadReturnAddress,
-
-    #[error("Could not restore bp register from stack")]
-    CouldNotReadBp,
 }
 
-pub enum CuiUnwindResult<R: UnwindRule> {
+#[derive(Clone, Debug)]
+pub struct CuiUnwindResult<R: UnwindRule> {
+    pub result: CuiUnwindResult2<R>,
+    /// for prologue / epilogue analysis
+    /// Only non-empty for the first frame
+    pub function_info: Option<FunctionInfo>,
+}
+
+impl<R: UnwindRule> CuiUnwindResult<R> {
+    pub fn exec_rule(rule: R) -> Self {
+        Self {
+            result: CuiUnwindResult2::ExecRule(rule),
+            function_info: None,
+        }
+    }
+
+    pub fn use_dwarf(eh_frame_fde: u32) -> Self {
+        Self {
+            result: CuiUnwindResult2::NeedDwarf(eh_frame_fde),
+            function_info: None,
+        }
+    }
+    pub fn analyze_leaf_and_exec_rule(function_info: FunctionInfo, rule: R) -> Self {
+        Self {
+            result: CuiUnwindResult2::ExecRule(rule),
+            function_info: Some(function_info),
+        }
+    }
+
+    pub fn analyze_leaf_and_use_dwarf(function_info: FunctionInfo, eh_frame_fde: u32) -> Self {
+        Self {
+            result: CuiUnwindResult2::NeedDwarf(eh_frame_fde),
+            function_info: Some(function_info),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum CuiUnwindResult2<R: UnwindRule> {
     ExecRule(R),
-    Uncacheable(u64),
     NeedDwarf(u32),
 }
 
+#[derive(Clone, Debug)]
+pub struct FunctionInfo {
+    pub function_start: u32,
+    pub function_end: u32,
+    pub prologue_size_upper_bound: u32,
+}
+
 pub trait CompactUnwindInfoUnwinding: Arch {
-    fn unwind_frame<F>(
-        opcode: u32,
-        regs: &mut Self::UnwindRegs,
-        read_mem: &mut F,
+    fn unwind_frame(
+        function: macho_unwind_info::Function,
         is_first_frame: bool,
-    ) -> Result<CuiUnwindResult<Self::UnwindRule>, CompactUnwindInfoUnwinderError>
-    where
-        F: FnMut(u64) -> Result<u64, ()>;
+    ) -> Result<CuiUnwindResult<Self::UnwindRule>, CompactUnwindInfoUnwinderError>;
 }
 
 pub struct CompactUnwindInfoUnwinder<'a, A: CompactUnwindInfoUnwinding> {
@@ -67,7 +104,7 @@ impl<'a, A: CompactUnwindInfoUnwinding> CompactUnwindInfoUnwinder<'a, A> {
         }
     }
 
-    fn function_for_address(
+    pub fn function_for_address(
         &self,
         address: u32,
     ) -> Result<macho_unwind_info::Function, CompactUnwindInfoUnwinderError> {
@@ -79,16 +116,11 @@ impl<'a, A: CompactUnwindInfoUnwinding> CompactUnwindInfoUnwinder<'a, A> {
         function.ok_or(CompactUnwindInfoUnwinderError::AddressOutsideRange(address))
     }
 
-    pub fn unwind_frame<F>(
+    pub fn unwind_frame(
         &mut self,
-        regs: &mut A::UnwindRegs,
         rel_lookup_address: u32,
-        read_mem: &mut F,
         is_first_frame: bool,
-    ) -> Result<CuiUnwindResult<A::UnwindRule>, CompactUnwindInfoUnwinderError>
-    where
-        F: FnMut(u64) -> Result<u64, ()>,
-    {
+    ) -> Result<CuiUnwindResult<A::UnwindRule>, CompactUnwindInfoUnwinderError> {
         let function = match self.function_for_address(rel_lookup_address) {
             Ok(f) => f,
             Err(CompactUnwindInfoUnwinderError::AddressOutsideRange(_)) if is_first_frame => {
@@ -96,22 +128,17 @@ impl<'a, A: CompactUnwindInfoUnwinding> CompactUnwindInfoUnwinder<'a, A> {
                 // This could mean that we're inside a stub function, in the __stubs section.
                 // All stub functions are frameless.
                 // TODO: Obtain the actual __stubs address range and do better checking here.
-                return Ok(CuiUnwindResult::ExecRule(
+                return Ok(CuiUnwindResult::exec_rule(
                     A::UnwindRule::rule_for_stub_functions(),
                 ));
             }
             Err(err) => return Err(err),
         };
         if is_first_frame && rel_lookup_address == function.start_address {
-            return Ok(CuiUnwindResult::ExecRule(
+            return Ok(CuiUnwindResult::exec_rule(
                 A::UnwindRule::rule_for_function_start(),
             ));
         }
-        <A as CompactUnwindInfoUnwinding>::unwind_frame(
-            function.opcode,
-            regs,
-            read_mem,
-            is_first_frame,
-        )
+        <A as CompactUnwindInfoUnwinding>::unwind_frame(function, is_first_frame)
     }
 }

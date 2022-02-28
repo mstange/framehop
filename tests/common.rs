@@ -54,18 +54,33 @@ where
         (None, None, _) => framehop::ModuleUnwindData::None,
     };
 
+    let text_data = text.as_ref().and_then(section_data);
+
     let module = framehop::Module::new(
         objpath.file_name().unwrap().to_string_lossy().to_string(),
         base_address..(base_address + buf.len() as u64),
         base_address,
         0,
         ModuleSectionAddresses {
-            text: base_address + text.map_or(0, |s| s.address()),
-            eh_frame: base_address + eh_frame.map_or(0, |s| s.address()),
-            eh_frame_hdr: base_address + eh_frame_hdr.map_or(0, |s| s.address()),
-            got: base_address + got.map_or(0, |s| s.address()),
+            text: base_address
+                + text
+                    .and_then(|s| s.file_range())
+                    .map_or(0, |(start, _end)| start),
+            eh_frame: base_address
+                + eh_frame
+                    .and_then(|s| s.file_range())
+                    .map_or(0, |(start, _end)| start),
+            eh_frame_hdr: base_address
+                + eh_frame_hdr
+                    .and_then(|s| s.file_range())
+                    .map_or(0, |(start, _end)| start),
+            got: base_address
+                + got
+                    .and_then(|s| s.file_range())
+                    .map_or(0, |(start, _end)| start),
         },
         unwind_data,
+        text_data,
     );
     unwinder.add_module(module);
 }

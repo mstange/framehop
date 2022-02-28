@@ -5,6 +5,7 @@ mod code_address;
 mod display_utils;
 mod dwarf;
 mod error;
+mod instruction_analysis;
 mod macho;
 mod rule_cache;
 mod unwind_result;

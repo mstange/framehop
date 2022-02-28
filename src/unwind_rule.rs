@@ -1,6 +1,6 @@
 use crate::error::Error;
 
-pub trait UnwindRule: Copy {
+pub trait UnwindRule: Copy + std::fmt::Debug {
     type UnwindRegs;
 
     fn exec<F>(self, regs: &mut Self::UnwindRegs, read_mem: &mut F) -> Result<Option<u64>, Error>

@@ -6,7 +6,10 @@ use crate::arch::Arch;
 use crate::cache::{AllocationPolicy, Cache};
 use crate::dwarf::{DwarfUnwinder, DwarfUnwinding};
 use crate::error::{Error, UnwinderError};
-use crate::macho::{CompactUnwindInfoUnwinder, CompactUnwindInfoUnwinding, CuiUnwindResult};
+use crate::instruction_analysis::InstructionAnalysis;
+use crate::macho::{
+    CompactUnwindInfoUnwinder, CompactUnwindInfoUnwinding, CuiUnwindResult2, FunctionInfo,
+};
 use crate::rule_cache::CacheResult;
 use crate::unwind_result::UnwindResult;
 use crate::unwind_rule::UnwindRule;
@@ -129,7 +132,7 @@ impl<'u, 'c, 'r, U: Unwinder + ?Sized, F: FnMut(u64) -> Result<u64, ()>> Fallibl
 
 pub struct UnwinderInternal<
     D: Deref<Target = [u8]>,
-    A: Arch + DwarfUnwinding + CompactUnwindInfoUnwinding,
+    A: Arch + DwarfUnwinding + CompactUnwindInfoUnwinding + InstructionAnalysis,
     P: AllocationPolicy<D>,
 > {
     /// sorted by address_range.start
@@ -142,7 +145,7 @@ pub struct UnwinderInternal<
 
 impl<
         D: Deref<Target = [u8]>,
-        A: Arch + DwarfUnwinding + CompactUnwindInfoUnwinding,
+        A: Arch + DwarfUnwinding + CompactUnwindInfoUnwinding + InstructionAnalysis,
         P: AllocationPolicy<D>,
     > Default for UnwinderInternal<D, A, P>
 {
@@ -153,7 +156,7 @@ impl<
 
 impl<
         D: Deref<Target = [u8]>,
-        A: Arch + DwarfUnwinding + CompactUnwindInfoUnwinding,
+        A: Arch + DwarfUnwinding + CompactUnwindInfoUnwinding + InstructionAnalysis,
         P: AllocationPolicy<D>,
     > UnwinderInternal<D, A, P>
 {
@@ -297,17 +300,46 @@ impl<
                 let mut unwinder = CompactUnwindInfoUnwinder::<A>::new(&unwind_data[..]);
                 let rel_lookup_address =
                     (address.address_for_lookup() - module.base_address) as u32;
-                match unwinder.unwind_frame(
-                    regs,
-                    rel_lookup_address,
-                    read_mem,
-                    !address.is_return_address(),
-                )? {
-                    CuiUnwindResult::ExecRule(rule) => UnwindResult::ExecRule(rule),
-                    CuiUnwindResult::Uncacheable(return_address) => {
-                        UnwindResult::Uncacheable(return_address)
+                let is_first_frame = !address.is_return_address();
+
+                let unwind_result = unwinder.unwind_frame(rel_lookup_address, is_first_frame)?;
+                if let (
+                    Some(FunctionInfo {
+                        function_start,
+                        function_end,
+                        prologue_size_upper_bound,
+                    }),
+                    Some(text_data),
+                ) = (unwind_result.function_info, module.text_data.as_ref())
+                {
+                    // Detect prologues and epilogues.
+                    let absolute_function_start = module.base_address + u64::from(function_start);
+                    let function_relative_address =
+                        (address.address() - absolute_function_start) as u32;
+                    let function_size = function_end - function_start;
+                    let text_bytes = &text_data[..];
+                    let function_start_relative_to_text =
+                        absolute_function_start - module.sections.text;
+                    let function_text = &text_bytes[function_start_relative_to_text as usize..]
+                        [..function_size as usize];
+                    let (slice_from_start, slice_to_end) =
+                        function_text.split_at(function_relative_address as usize);
+                    if dbg!(slice_from_start.len()) < dbg!(prologue_size_upper_bound as usize) {
+                        if let Some(rule) = <A as InstructionAnalysis>::rule_from_prologue_analysis(
+                            slice_from_start,
+                        ) {
+                            return Ok(UnwindResult::ExecRule(rule));
+                        }
                     }
-                    CuiUnwindResult::NeedDwarf(fde_offset) => {
+                    if let Some(rule) =
+                        <A as InstructionAnalysis>::rule_from_epilogue_analysis(slice_to_end)
+                    {
+                        return Ok(UnwindResult::ExecRule(rule));
+                    }
+                }
+                match unwind_result.result {
+                    CuiUnwindResult2::ExecRule(rule) => UnwindResult::ExecRule(rule),
+                    CuiUnwindResult2::NeedDwarf(fde_offset) => {
                         let eh_frame_data = match eh_frame_data {
                             Some(data) => ArcData(data.clone()),
                             None => return Err(UnwinderError::NoDwarfData),
@@ -361,6 +393,7 @@ pub struct Module<D: Deref<Target = [u8]>> {
     vm_addr_at_base_addr: u64,
     sections: ModuleSectionAddresses,
     unwind_data: ModuleUnwindData<D>,
+    text_data: Option<D>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -388,6 +421,7 @@ impl<D: Deref<Target = [u8]>> Module<D> {
         vm_addr_at_base_addr: u64,
         sections: ModuleSectionAddresses,
         unwind_data: ModuleUnwindData<D>,
+        text_data: Option<D>,
     ) -> Self {
         Self {
             name,
@@ -396,6 +430,7 @@ impl<D: Deref<Target = [u8]>> Module<D> {
             vm_addr_at_base_addr,
             sections,
             unwind_data,
+            text_data,
         }
     }
 }

@@ -121,7 +121,7 @@ fn translate_into_unwind_rule<R: gimli::Reader>(
                     None => Ok(UnwindRuleX86_64::OffsetSp { sp_offset_by_8 }),
                     Some(bp_cfa_offset) => {
                         let bp_storage_offset_from_sp_by_8 =
-                            i8::try_from((offset + bp_cfa_offset) / 8)
+                            i16::try_from((offset + bp_cfa_offset) / 8)
                                 .map_err(|_| ConversionError::FpStorageOffsetDoesNotFit)?;
                         Ok(UnwindRuleX86_64::OffsetSpAndRestoreBp {
                             sp_offset_by_8,

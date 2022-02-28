@@ -3,7 +3,7 @@ use crate::error::Error;
 use crate::unwind_rule::UnwindRule;
 
 /// For all of these: return address is *(new_sp - 8)
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UnwindRuleX86_64 {
     /// (sp, bp) = (sp + 8, bp)
     JustReturn,
@@ -12,7 +12,7 @@ pub enum UnwindRuleX86_64 {
     /// (sp, bp) = (sp + 8x, *(sp + 8y))
     OffsetSpAndRestoreBp {
         sp_offset_by_8: u16,
-        bp_storage_offset_from_sp_by_8: i8,
+        bp_storage_offset_from_sp_by_8: i16,
     },
     /// (sp, bp) = (bp + 16, *bp)
     UseFramePointer,
@@ -57,6 +57,45 @@ impl UnwindRule for UnwindRuleX86_64 {
                 (new_sp, new_bp)
             }
             UnwindRuleX86_64::UseFramePointer => {
+                // Do a frame pointer stack walk. Code that is compiled with frame pointers
+                // has the following function prologues and epilogues:
+                //
+                // Function prologue:
+                // pushq  %rbp
+                // movq   %rsp, %rbp
+                //
+                // Function epilogue:
+                // popq   %rbp
+                // ret
+                //
+                // Functions are called with callq; callq pushes the return address onto the stack.
+                // When a function reaches its end, ret pops the return address from the stack and jumps to it.
+                // So when a function is called, we have the following stack layout:
+                //
+                //                                                                     [... rest of the stack]
+                //                                                                     ^ rsp           ^ rbp
+                //     callq some_function
+                //                                                   [return address]  [... rest of the stack]
+                //                                                   ^ rsp                             ^ rbp
+                //     pushq %rbp
+                //                         [caller's frame pointer]  [return address]  [... rest of the stack]
+                //                         ^ rsp                                                       ^ rbp
+                //     movq %rsp, %rbp
+                //                         [caller's frame pointer]  [return address]  [... rest of the stack]
+                //                         ^ rsp, rbp
+                //     <other instructions>
+                //       [... more stack]  [caller's frame pointer]  [return address]  [... rest of the stack]
+                //       ^ rsp             ^ rbp
+                //
+                // So: *rbp is the caller's frame pointer, and *(rbp + 8) is the return address.
+                //
+                // Or, in other words, the following linked list is built up on the stack:
+                // #[repr(C)]
+                // struct CallFrameInfo {
+                //     previous: *const CallFrameInfo,
+                //     return_address: *const c_void,
+                // }
+                // and rbp is a *const CallFrameInfo.
                 let sp = regs.sp();
                 let bp = regs.bp();
                 let new_sp = bp + 16;
