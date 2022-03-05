@@ -249,6 +249,7 @@ enum EpilogueStepResult {
     NeedMore,
     FoundBodyInstruction(UnexpectedInstructionType),
     FoundReturn,
+    FoundTailCall,
     CouldBeAuthTailCall,
 }
 
@@ -273,6 +274,7 @@ enum UnexpectedInstructionType {
     NoNextInstruction,
     NoStackPointerSubBeforeStore,
     AutibspNotFollowedByExpectedTailCall,
+    BranchWithUnadjustedStackPointer,
     Unknown,
 }
 
@@ -294,7 +296,7 @@ impl EpilogueDetectorAarch64 {
                 EpilogueStepResult::FoundBodyInstruction(uit) => {
                     return EpilogueResult::ProbablyStillInBody(uit);
                 }
-                EpilogueStepResult::FoundReturn => {}
+                EpilogueStepResult::FoundReturn | EpilogueStepResult::FoundTailCall => {}
                 EpilogueStepResult::CouldBeAuthTailCall => {
                     if !Self::is_auth_tail_call(bytes) {
                         return EpilogueResult::ProbablyStillInBody(
@@ -388,6 +390,20 @@ impl EpilogueDetectorAarch64 {
         // Detect autibsp
         if word == 0xd50323ff {
             return EpilogueStepResult::CouldBeAuthTailCall;
+        }
+        // Detect b
+        if (word >> 26) == 0b000101 {
+            // This could be a branch with a target inside this function, or
+            // a tail call outside of this function.
+            // Let's use the following heuristic: If this instruction is followed
+            // by valid epilogue instructions which adjusted the stack pointer, then
+            // we treat it as a tail call.
+            if self.sp_offset != 0 {
+                return EpilogueStepResult::FoundTailCall;
+            }
+            return EpilogueStepResult::FoundBodyInstruction(
+                UnexpectedInstructionType::BranchWithUnadjustedStackPointer,
+            );
         }
         if (word >> 25) & 0b1011111 == 0b1010100 {
             // Section C3.3, Loads and stores.
@@ -852,6 +868,20 @@ mod test {
         );
         assert_eq!(unwind_rule_from_detected_epilogue(&bytes[12..]), None);
         assert_eq!(unwind_rule_from_detected_epilogue(&bytes[16..]), None);
+    }
+
+    #[test]
+    fn test_epilogue_with_regular_tail_call() {
+        // (in rustup) __ZN126_$LT$$LT$toml..value..Value$u20$as$u20$serde..de..Deserialize$GT$..deserialize..ValueVisitor$u20$as$u20$serde..de..Visitor$GT$9visit_map17h0afd4b269ef00eebE
+        // ...
+        // 1002566b4 fc 6f c6 a8     ldp        x28, x27, [sp], #0x60
+        // 1002566b8 bc ba ff 17     b          __ZN4core3ptr41drop_in_place$LT$toml..de..MapVisitor$GT$17hd4556de1a4edab42E
+        // ...
+        let bytes = &[0xfc, 0x6f, 0xc6, 0xa8, 0xbc, 0xba, 0xff, 0x17];
+        assert_eq!(
+            unwind_rule_from_detected_epilogue(bytes),
+            Some(UnwindRuleAarch64::OffsetSp { sp_offset_by_16: 6 })
+        );
     }
 
     #[test]
