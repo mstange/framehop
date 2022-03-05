@@ -247,14 +247,16 @@ struct EpilogueDetectorAarch64 {
 
 enum EpilogueStepResult {
     NeedMore,
-    Done(EpilogueResult),
+    FoundBodyInstruction(UnexpectedInstructionType),
+    FoundReturn,
+    CouldBeAuthTailCall,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum EpilogueResult {
     ProbablyStillInBody(UnexpectedInstructionType),
     ReachedFunctionEndWithoutReturn,
-    FoundReturn {
+    FoundReturnOrTailCall {
         sp_offset: i32,
         fp_offset_from_initial_sp: Option<i32>,
         lr_offset_from_initial_sp: Option<i32>,
@@ -270,6 +272,7 @@ enum UnexpectedInstructionType {
     AddSubNotOperatingOnSp,
     NoNextInstruction,
     NoStackPointerSubBeforeStore,
+    AutibspNotFollowedByExpectedTailCall,
     Unknown,
 }
 
@@ -286,21 +289,105 @@ impl EpilogueDetectorAarch64 {
         while bytes.len() >= 4 {
             let word = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
             bytes = &bytes[4..];
-            if let EpilogueStepResult::Done(result) = self.step_instruction(word) {
-                return result;
+            match self.step_instruction(word) {
+                EpilogueStepResult::NeedMore => continue,
+                EpilogueStepResult::FoundBodyInstruction(uit) => {
+                    return EpilogueResult::ProbablyStillInBody(uit);
+                }
+                EpilogueStepResult::FoundReturn => {}
+                EpilogueStepResult::CouldBeAuthTailCall => {
+                    if !Self::is_auth_tail_call(bytes) {
+                        return EpilogueResult::ProbablyStillInBody(
+                            UnexpectedInstructionType::AutibspNotFollowedByExpectedTailCall,
+                        );
+                    }
+                }
             }
+            return EpilogueResult::FoundReturnOrTailCall {
+                sp_offset: self.sp_offset,
+                fp_offset_from_initial_sp: self.fp_offset_from_initial_sp,
+                lr_offset_from_initial_sp: self.lr_offset_from_initial_sp,
+            };
         }
         EpilogueResult::ReachedFunctionEndWithoutReturn
+    }
+
+    fn is_auth_tail_call(bytes_after_autibsp: &[u8]) -> bool {
+        // libsystem_malloc contains hundreds of these.
+        // At the end of the function, after restoring the registers from the stack,
+        // there's an autibsp instruction, followed by some check (not sure what it
+        // does), and then a tail call. These instructions should all be counted as
+        // part of the epilogue; returning at this point is just "follow lr" instead
+        // of "use the frame pointer".
+        //
+        // 180139058 ff 23 03 d5      autibsp
+        //
+        // 18013905c d0 07 1e ca      eor        x16, lr, lr, lsl #1
+        // 180139060 50 00 f0 b6      tbz        x16, 0x3e, $+0x8
+        // 180139064 20 8e 38 d4      brk        #0xc471              ; "breakpoint trap"
+        //
+        // and then a tail call, of one of these forms:
+        //
+        // 180139068 13 00 00 14      b          some_outside_function
+        //
+        // 18013a364 f0 36 88 d2      mov        x16, #0xXXXX
+        // 18013a368 70 08 1f d7      braa       xX, x16
+        //
+
+        if bytes_after_autibsp.len() < 16 {
+            return false;
+        }
+        let eor_tbz_brk = &bytes_after_autibsp[..12];
+        if eor_tbz_brk
+            != [
+                0xd0, 0x07, 0x1e, 0xca, 0x50, 0x00, 0xf0, 0xb6, 0x20, 0x8e, 0x38, 0xd4,
+            ]
+        {
+            return false;
+        }
+
+        let first_tail_call_instruction_opcode = u32::from_le_bytes([
+            bytes_after_autibsp[12],
+            bytes_after_autibsp[13],
+            bytes_after_autibsp[14],
+            bytes_after_autibsp[15],
+        ]);
+        let bits_26_to_32 = first_tail_call_instruction_opcode >> 26;
+        if bits_26_to_32 == 0b000101 {
+            // This is a `b` instruction. We've found the tail call.
+            return true;
+        }
+
+        // If we get here, it's either not a recognized instruction sequence,
+        // or the tail call is of the form `mov x16, #0xXXXX`, `braa x3, x16`.
+        if bytes_after_autibsp.len() < 20 {
+            return false;
+        }
+
+        let bits_23_to_32 = first_tail_call_instruction_opcode >> 23;
+        let is_64_mov = (bits_23_to_32 & 0b111000111) == 0b110000101;
+        let result_reg = first_tail_call_instruction_opcode & 0b11111;
+        if !is_64_mov || result_reg != 16 {
+            return false;
+        }
+
+        let braa_opcode = u32::from_le_bytes([
+            bytes_after_autibsp[16],
+            bytes_after_autibsp[17],
+            bytes_after_autibsp[18],
+            bytes_after_autibsp[19],
+        ]);
+        (braa_opcode & 0xff_ff_fc_00) == 0xd7_1f_08_00 && (braa_opcode & 0b11111) == 16
     }
 
     pub fn step_instruction(&mut self, word: u32) -> EpilogueStepResult {
         // Detect ret and retab
         if word == 0xd65f03c0 || word == 0xd65f0fff {
-            return EpilogueStepResult::Done(EpilogueResult::FoundReturn {
-                sp_offset: self.sp_offset,
-                fp_offset_from_initial_sp: self.fp_offset_from_initial_sp,
-                lr_offset_from_initial_sp: self.lr_offset_from_initial_sp,
-            });
+            return EpilogueStepResult::FoundReturn;
+        }
+        // Detect autibsp
+        if word == 0xd50323ff {
+            return EpilogueStepResult::CouldBeAuthTailCall;
         }
         if (word >> 25) & 0b1011111 == 0b1010100 {
             // Section C3.3, Loads and stores.
@@ -308,21 +395,19 @@ impl EpilogueDetectorAarch64 {
             let writeback_bits = (word >> 23) & 0b11;
             if writeback_bits == 0b00 {
                 // Not 64-bit load/store.
-                return EpilogueStepResult::Done(EpilogueResult::ProbablyStillInBody(
+                return EpilogueStepResult::FoundBodyInstruction(
                     UnexpectedInstructionType::LoadStoreOfWrongSize,
-                ));
+                );
             }
             let is_load = ((word >> 22) & 1) != 0;
             if !is_load {
-                return EpilogueStepResult::Done(EpilogueResult::ProbablyStillInBody(
-                    UnexpectedInstructionType::Store,
-                ));
+                return EpilogueStepResult::FoundBodyInstruction(UnexpectedInstructionType::Store);
             }
             let reference_reg = ((word >> 5) & 0b11111) as u16;
             if reference_reg != 31 {
-                return EpilogueStepResult::Done(EpilogueResult::ProbablyStillInBody(
+                return EpilogueStepResult::FoundBodyInstruction(
                     UnexpectedInstructionType::LoadStoreReferenceRegisterNotSp,
-                ));
+                );
             }
             let is_preindexed_writeback = writeback_bits == 0b11; // TODO: are there preindexed loads? What do they mean?
             let is_postindexed_writeback = writeback_bits == 0b01;
@@ -355,9 +440,9 @@ impl EpilogueDetectorAarch64 {
             let result_reg = (word & 0b11111) as u16;
             let input_reg = ((word >> 5) & 0b11111) as u16;
             if result_reg != 31 || input_reg != 31 {
-                return EpilogueStepResult::Done(EpilogueResult::ProbablyStillInBody(
+                return EpilogueStepResult::FoundBodyInstruction(
                     UnexpectedInstructionType::AddSubNotOperatingOnSp,
-                ));
+                );
             }
             let mut imm12 = ((word >> 10) & 0b111111111111) as i32;
             let shift_immediate_by_12 = ((word >> 22) & 0b1) == 0b1;
@@ -367,9 +452,7 @@ impl EpilogueDetectorAarch64 {
             self.sp_offset += imm12;
             return EpilogueStepResult::NeedMore;
         }
-        EpilogueStepResult::Done(EpilogueResult::ProbablyStillInBody(
-            UnexpectedInstructionType::Unknown,
-        ))
+        EpilogueStepResult::FoundBodyInstruction(UnexpectedInstructionType::Unknown)
     }
 }
 
@@ -382,7 +465,7 @@ fn unwind_rule_from_detected_epilogue(bytes: &[u8]) -> Option<UnwindRuleAarch64>
     match analyze_epilogue_aarch64(bytes) {
         EpilogueResult::ProbablyStillInBody(_)
         | EpilogueResult::ReachedFunctionEndWithoutReturn => None,
-        EpilogueResult::FoundReturn {
+        EpilogueResult::FoundReturnOrTailCall {
             sp_offset,
             fp_offset_from_initial_sp,
             lr_offset_from_initial_sp,
@@ -438,7 +521,7 @@ mod test {
         ];
         assert_eq!(
             analyze_epilogue_aarch64(bytes),
-            EpilogueResult::FoundReturn {
+            EpilogueResult::FoundReturnOrTailCall {
                 sp_offset: 0x50,
                 fp_offset_from_initial_sp: Some(0x40),
                 lr_offset_from_initial_sp: Some(0x48),
@@ -446,7 +529,7 @@ mod test {
         );
         assert_eq!(
             analyze_epilogue_aarch64(&bytes[4..]),
-            EpilogueResult::FoundReturn {
+            EpilogueResult::FoundReturnOrTailCall {
                 sp_offset: 0x50,
                 fp_offset_from_initial_sp: None,
                 lr_offset_from_initial_sp: None,
@@ -454,7 +537,7 @@ mod test {
         );
         assert_eq!(
             analyze_epilogue_aarch64(&bytes[8..]),
-            EpilogueResult::FoundReturn {
+            EpilogueResult::FoundReturnOrTailCall {
                 sp_offset: 0x50,
                 fp_offset_from_initial_sp: None,
                 lr_offset_from_initial_sp: None,
@@ -462,7 +545,7 @@ mod test {
         );
         assert_eq!(
             analyze_epilogue_aarch64(&bytes[12..]),
-            EpilogueResult::FoundReturn {
+            EpilogueResult::FoundReturnOrTailCall {
                 sp_offset: 0x50,
                 fp_offset_from_initial_sp: None,
                 lr_offset_from_initial_sp: None,
@@ -470,7 +553,7 @@ mod test {
         );
         assert_eq!(
             analyze_epilogue_aarch64(&bytes[16..]),
-            EpilogueResult::FoundReturn {
+            EpilogueResult::FoundReturnOrTailCall {
                 sp_offset: 0x0,
                 fp_offset_from_initial_sp: None,
                 lr_offset_from_initial_sp: None,
@@ -769,5 +852,119 @@ mod test {
         );
         assert_eq!(unwind_rule_from_detected_epilogue(&bytes[12..]), None);
         assert_eq!(unwind_rule_from_detected_epilogue(&bytes[16..]), None);
+    }
+
+    #[test]
+    fn test_epilogue_with_auth_tail_call() {
+        // _nanov2_free_definite_size
+        // ...
+        // 180139048 e1 03 13 aa      mov        x1, x19
+        // 18013904c fd 7b 42 a9      ldp        fp, lr, [sp, #0x20]
+        // 180139050 f4 4f 41 a9      ldp        x20, x19, [sp, #0x10]
+        // 180139054 f6 57 c3 a8      ldp        x22, x21, [sp], #0x30
+        // 180139058 ff 23 03 d5      autibsp
+        // 18013905c d0 07 1e ca      eor        x16, lr, lr, lsl #1
+        // 180139060 50 00 f0 b6      tbz        x16, 0x3e, loc_180139068
+        // 180139064 20 8e 38 d4      brk        #0xc471
+        //                       loc_180139068:
+        // 180139068 13 00 00 14      b          _nanov2_free_to_block
+        //                       loc_18013906c:
+        // 18013906c a0 16 78 f9      ldr        x0, [x21, #0x7028]
+        // 180139070 03 3c 40 f9      ldr        x3, [x0, #0x78]
+        // ...
+        let bytes = &[
+            0xe1, 0x03, 0x13, 0xaa, 0xfd, 0x7b, 0x42, 0xa9, 0xf4, 0x4f, 0x41, 0xa9, 0xf6, 0x57,
+            0xc3, 0xa8, 0xff, 0x23, 0x03, 0xd5, 0xd0, 0x07, 0x1e, 0xca, 0x50, 0x00, 0xf0, 0xb6,
+            0x20, 0x8e, 0x38, 0xd4, 0x13, 0x00, 0x00, 0x14, 0xa0, 0x16, 0x78, 0xf9, 0x03, 0x3c,
+            0x40, 0xf9,
+        ];
+        assert_eq!(unwind_rule_from_detected_epilogue(bytes), None);
+        assert_eq!(
+            unwind_rule_from_detected_epilogue(&bytes[4..]),
+            Some(UnwindRuleAarch64::OffsetSpAndRestoreFpAndLr {
+                sp_offset_by_16: 3,
+                fp_storage_offset_from_sp_by_8: 4,
+                lr_storage_offset_from_sp_by_8: 5
+            })
+        );
+        assert_eq!(
+            unwind_rule_from_detected_epilogue(&bytes[8..]),
+            Some(UnwindRuleAarch64::OffsetSp { sp_offset_by_16: 3 })
+        );
+        assert_eq!(
+            unwind_rule_from_detected_epilogue(&bytes[12..]),
+            Some(UnwindRuleAarch64::OffsetSp { sp_offset_by_16: 3 })
+        );
+        assert_eq!(
+            unwind_rule_from_detected_epilogue(&bytes[16..]),
+            Some(UnwindRuleAarch64::NoOp)
+        );
+        // assert_eq!(
+        //     unwind_rule_from_detected_epilogue(&bytes[20..]),
+        //     Some(UnwindRuleAarch64::NoOp)
+        // );
+        // assert_eq!(
+        //     unwind_rule_from_detected_epilogue(&bytes[24..]),
+        //     Some(UnwindRuleAarch64::NoOp)
+        // );
+        // assert_eq!(
+        //     unwind_rule_from_detected_epilogue(&bytes[28..]),
+        //     Some(UnwindRuleAarch64::NoOp)
+        // );
+    }
+
+    #[test]
+    fn test_epilogue_with_auth_tail_call_2() {
+        // _malloc_zone_claimed_addres
+        // ...
+        // 1801457ac e1 03 13 aa     mov        x1, x19
+        // 1801457b0 fd 7b 41 a9     ldp        fp, lr, [sp, #0x10]
+        // 1801457b4 f4 4f c2 a8     ldp        x20, x19, [sp], #0x20
+        // 1801457b8 ff 23 03 d5     autibsp
+        // 1801457bc d0 07 1e ca     eor        x16, lr, lr, lsl #1
+        // 1801457c0 50 00 f0 b6     tbz        x16, 0x3e, loc_1801457c8
+        // 1801457c4 20 8e 38 d4     brk        #0xc471
+        //                       loc_1801457c8:
+        // 1801457c8 f0 77 9c d2     mov        x16, #0xe3bf
+        // 1801457cc 50 08 1f d7     braa       x2, x16
+        // ...
+        let bytes = &[
+            0xe1, 0x03, 0x13, 0xaa, 0xfd, 0x7b, 0x41, 0xa9, 0xf4, 0x4f, 0xc2, 0xa8, 0xff, 0x23,
+            0x03, 0xd5, 0xd0, 0x07, 0x1e, 0xca, 0x50, 0x00, 0xf0, 0xb6, 0x20, 0x8e, 0x38, 0xd4,
+            0xf0, 0x77, 0x9c, 0xd2, 0x50, 0x08, 0x1f, 0xd7,
+        ];
+        assert_eq!(unwind_rule_from_detected_epilogue(bytes), None);
+        assert_eq!(
+            unwind_rule_from_detected_epilogue(&bytes[4..]),
+            Some(UnwindRuleAarch64::OffsetSpAndRestoreFpAndLr {
+                sp_offset_by_16: 2,
+                fp_storage_offset_from_sp_by_8: 2,
+                lr_storage_offset_from_sp_by_8: 3
+            })
+        );
+        assert_eq!(
+            unwind_rule_from_detected_epilogue(&bytes[8..]),
+            Some(UnwindRuleAarch64::OffsetSp { sp_offset_by_16: 2 })
+        );
+        assert_eq!(
+            unwind_rule_from_detected_epilogue(&bytes[12..]),
+            Some(UnwindRuleAarch64::NoOp)
+        );
+        // assert_eq!(
+        //     unwind_rule_from_detected_epilogue(&bytes[16..]),
+        //     Some(UnwindRuleAarch64::NoOp)
+        // );
+        // assert_eq!(
+        //     unwind_rule_from_detected_epilogue(&bytes[20..]),
+        //     Some(UnwindRuleAarch64::NoOp)
+        // );
+        // assert_eq!(
+        //     unwind_rule_from_detected_epilogue(&bytes[24..]),
+        //     Some(UnwindRuleAarch64::NoOp)
+        // );
+        // assert_eq!(
+        //     unwind_rule_from_detected_epilogue(&bytes[28..]),
+        //     Some(UnwindRuleAarch64::NoOp)
+        // );
     }
 }
