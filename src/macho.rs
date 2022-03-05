@@ -81,7 +81,6 @@ pub enum CuiUnwindResult2<R: UnwindRule> {
 pub struct FunctionInfo {
     pub function_start: u32,
     pub function_end: u32,
-    pub prologue_size_upper_bound: u32,
 }
 
 pub trait CompactUnwindInfoUnwinding: Arch {

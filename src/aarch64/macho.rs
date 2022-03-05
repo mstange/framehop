@@ -31,7 +31,6 @@ impl CompactUnwindInfoUnwinding for ArchAarch64 {
                             FunctionInfo {
                                 function_start: function.start_address,
                                 function_end: function.end_address,
-                                prologue_size_upper_bound: 8,
                             },
                             UnwindRuleAarch64::OffsetSp {
                                 sp_offset_by_16: stack_size_in_bytes / 16,
@@ -48,15 +47,10 @@ impl CompactUnwindInfoUnwinding for ArchAarch64 {
             }
             OpcodeArm64::Dwarf { eh_frame_fde } => {
                 if is_first_frame {
-                    // Estimate 10 instructions for adjusting the stack pointer and pushing various register pairs
-                    // TODO: compute actual upper bound based on the number of callee-save registers of the aarch64 ABI
-                    let prologue_size_upper_bound = 4 * 10;
-
                     CuiUnwindResult::analyze_leaf_and_use_dwarf(
                         FunctionInfo {
                             function_start: function.start_address,
                             function_end: function.end_address,
-                            prologue_size_upper_bound,
                         },
                         eh_frame_fde,
                     )
@@ -73,10 +67,6 @@ impl CompactUnwindInfoUnwinding for ArchAarch64 {
                         FunctionInfo {
                             function_start: function.start_address,
                             function_end: function.end_address,
-                            prologue_size_upper_bound: 4 + // potentially a "sub" instruction at the start
-                                saved_reg_pair_count as u32 * 4 + // 4 bytes per pair
-                                4 + // save fp and lr
-                                4, // set fp to the new value
                         },
                         UnwindRuleAarch64::UseFramePointer,
                     )

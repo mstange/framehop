@@ -307,7 +307,7 @@ impl<
                     Some(FunctionInfo {
                         function_start,
                         function_end,
-                        prologue_size_upper_bound,
+                        ..
                     }),
                     Some(text_data),
                 ) = (unwind_result.function_info, module.text_data.as_ref())
@@ -324,12 +324,11 @@ impl<
                         [..function_size as usize];
                     let (slice_from_start, slice_to_end) =
                         function_text.split_at(function_relative_address as usize);
-                    if dbg!(slice_from_start.len()) < dbg!(prologue_size_upper_bound as usize) {
-                        if let Some(rule) = <A as InstructionAnalysis>::rule_from_prologue_analysis(
-                            slice_from_start,
-                        ) {
-                            return Ok(UnwindResult::ExecRule(rule));
-                        }
+                    if let Some(rule) = <A as InstructionAnalysis>::rule_from_prologue_analysis(
+                        slice_from_start,
+                        slice_to_end,
+                    ) {
+                        return Ok(UnwindResult::ExecRule(rule));
                     }
                     if let Some(rule) =
                         <A as InstructionAnalysis>::rule_from_epilogue_analysis(slice_to_end)

@@ -32,7 +32,6 @@ impl CompactUnwindInfoUnwinding for ArchX86_64 {
                         Some(FunctionInfo {
                             function_start: function.start_address,
                             function_end: function.end_address,
-                            prologue_size_upper_bound: 10,
                         })
                     } else {
                         None
@@ -78,7 +77,6 @@ impl CompactUnwindInfoUnwinding for ArchX86_64 {
                         FunctionInfo {
                             function_start: function.start_address,
                             function_end: function.end_address,
-                            prologue_size_upper_bound: 10,
                         },
                         eh_frame_fde,
                     )
@@ -92,7 +90,6 @@ impl CompactUnwindInfoUnwinding for ArchX86_64 {
                         FunctionInfo {
                             function_start: function.start_address,
                             function_end: function.end_address,
-                            prologue_size_upper_bound: 10,
                         },
                         UnwindRuleX86_64::UseFramePointer,
                     )

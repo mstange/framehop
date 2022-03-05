@@ -312,9 +312,10 @@ fn make_stack(size_in_bytes: usize) -> Vec<u64> {
     (0..ptr_count).map(|i| 0xf000 + i as u64 * 8).collect()
 }
 
-// This test fails.
+// This test checks that we can detect prologues even if we don't know
+// at which address the function starts.
 //
-// In this test we need to do prologue analysis for a function which starts at cb130.
+// We need to do prologue analysis for a function which starts at cb130.
 // However, there is no entry in the __unwind_info at cb130. Instead, we have one entry
 // which spans all the way from ca858 to cb580:
 //   0x000ca858: CFA=reg29+16: reg29=[CFA-16], reg30=[CFA-8], reg19=[CFA-32], reg20=[CFA-40]
@@ -344,9 +345,9 @@ fn make_stack(size_in_bytes: usize) -> Vec<u64> {
 // 00000001000cb4dc t __ZN5alloc7raw_vec19RawVec$LT$T$C$A$GT$16reserve_for_push17hf6c61180373a7270E
 // 00000001000cb580 t __ZN77_$LT$alloc..raw_vec..RawVec$LT$T$C$A$GT$$u20$as$u20$core..ops..drop..Drop$GT$4drop17h0eed06c0f045ac6cE
 //
-// But if we don't know that our function starts at cb130, then we can't do prologue analysis on it.
-// We probably need to find a different (but cheap!) way to get the list of function start addresses.
-#[ignore]
+// So we can't use the unwind info entry's address as the function start address.
+// Instead, we need to detect the beginning of the prologue based on which
+// instructions we encounter.
 #[test]
 fn test_prologue_fp() {
     let mut cache = CacheAarch64::<_>::new();
@@ -356,9 +357,11 @@ fn test_prologue_fp() {
         &Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/macos/arm64/fp/query-api"),
         0,
     );
-    let mut s = make_stack(0x100);
+    // ...
+    // 00000001000cb128  ldr  x0, [sp, #0x330 + var_320]
+    // 00000001000cb12c  bl  __ZN5alloc5alloc18handle_alloc_error17h8501b3266a472769E
     //
-    // __ZN5alloc7raw_vec19RawVec$LT$T$C$A$GT$16reserve_for_push17h873f2ca1234a16a6E:        // alloc::raw_vec::RawVec$LT$T$C$A$GT$::reserve_for_push::h873f2ca1234a16a6
+    // __ZN5alloc7raw_vec19RawVec$LT$T$C$A$GT$16reserve_for_push17h873f2ca1234a16a6E:
     // 00000001000cb130  sub  sp, sp, #0x40
     // 00000001000cb134  stp  x20, x19, [sp, #0x20]
     // 00000001000cb138  stp  fp, lr, [sp, #0x30]
@@ -379,6 +382,7 @@ fn test_prologue_fp() {
     };
     // Start at the function start and then step towards the function body.
     // At every address, the unwinding post state should be the same.
+    let mut s = make_stack(0x140);
     let mut pc = 0xcb130;
     do_check(pc, UnwindRegsAarch64::new(0x10030, 0x140, 0x10029), &s);
     pc += 4; // step over 00000001000cb130  sub  sp, sp, #0x40
