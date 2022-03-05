@@ -884,6 +884,27 @@ mod test {
         );
     }
 
+    // This test fails at the moment.
+    #[test]
+    #[ignore]
+    fn test_epilogue_with_register_tail_call() {
+        // This test requires lookbehind in the epilogue detection.
+        // We want to detect the `br` as a tail call. We should do this
+        // based on the fact that the previous instruction adjusted the
+        // stack pointer.
+        //
+        // (in rustup) __ZN4core3fmt9Formatter3pad17h3f40041e7f99f180E
+        // ...
+        // 1000500bc fa 67 c5 a8     ldp        x26, x25, [sp], #0x50
+        // 1000500c0 60 00 1f d6     br         x3
+        // ...
+        let bytes = &[0xfa, 0x67, 0xc5, 0xa8, 0x60, 0x00, 0x1f, 0xd6];
+        assert_eq!(
+            unwind_rule_from_detected_epilogue(&bytes[4..]),
+            Some(UnwindRuleAarch64::NoOp)
+        );
+    }
+
     #[test]
     fn test_epilogue_with_auth_tail_call() {
         // _nanov2_free_definite_size
