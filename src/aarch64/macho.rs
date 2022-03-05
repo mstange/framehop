@@ -58,10 +58,7 @@ impl CompactUnwindInfoUnwinding for ArchAarch64 {
                     CuiUnwindResult::use_dwarf(eh_frame_fde)
                 }
             }
-            OpcodeArm64::FrameBased {
-                saved_reg_pair_count,
-                ..
-            } => {
+            OpcodeArm64::FrameBased { .. } => {
                 if is_first_frame {
                     CuiUnwindResult::analyze_leaf_and_exec_rule(
                         FunctionInfo {
