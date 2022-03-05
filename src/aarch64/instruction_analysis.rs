@@ -327,20 +327,24 @@ impl EpilogueDetectorAarch64 {
             let is_preindexed_writeback = writeback_bits == 0b11; // TODO: are there preindexed loads? What do they mean?
             let is_postindexed_writeback = writeback_bits == 0b01;
             let imm7 = (((((word >> 15) & 0b1111111) as i16) << 9) >> 6) as i32;
+            let reg_loc = if is_postindexed_writeback {
+                self.sp_offset
+            } else {
+                self.sp_offset + imm7
+            };
             let pair_reg_1 = (word & 0b11111) as u16;
             if pair_reg_1 == 29 {
-                self.fp_offset_from_initial_sp = Some(self.sp_offset + imm7);
+                self.fp_offset_from_initial_sp = Some(reg_loc);
             } else if pair_reg_1 == 30 {
-                self.lr_offset_from_initial_sp = Some(self.sp_offset + imm7);
+                self.lr_offset_from_initial_sp = Some(reg_loc);
             }
             let pair_reg_2 = ((word >> 10) & 0b11111) as u16;
             if pair_reg_2 == 29 {
-                self.fp_offset_from_initial_sp = Some(self.sp_offset + imm7 + 8);
+                self.fp_offset_from_initial_sp = Some(reg_loc + 8);
             } else if pair_reg_2 == 30 {
-                self.lr_offset_from_initial_sp = Some(self.sp_offset + imm7 + 8);
+                self.lr_offset_from_initial_sp = Some(reg_loc + 8);
             }
             if is_preindexed_writeback || is_postindexed_writeback {
-                // TODO: check ordering here and whether we need to stop adding the immediate in the offset calculations above
                 self.sp_offset += imm7;
             }
             return EpilogueStepResult::NeedMore;
@@ -733,5 +737,37 @@ mod test {
             Some(UnwindRuleAarch64::NoOp)
         );
         assert_eq!(unwind_rule_from_detected_epilogue(&bytes[24..]), None);
+    }
+
+    #[test]
+    fn test_epilogue_with_retab_2() {
+        // _tiny_free_list_add_ptr:
+        // ...
+        // 18013e114 28 01 00 79     strh       w8, [x9]
+        // 18013e118 fd 7b c1 a8     ldp        fp, lr, [sp], #0x10
+        // 18013e11c ff 0f 5f d6     retab
+        // 18013e120 e2 03 08 aa     mov        x2, x8
+        // 18013e124 38 76 00 94     bl         _free_list_checksum_botch
+        // ...
+
+        let bytes = &[
+            0x28, 0x01, 0x00, 0x79, 0xfd, 0x7b, 0xc1, 0xa8, 0xff, 0x0f, 0x5f, 0xd6, 0xe2, 0x03,
+            0x08, 0xaa, 0x38, 0x76, 0x00, 0x94,
+        ];
+        assert_eq!(unwind_rule_from_detected_epilogue(bytes), None);
+        assert_eq!(
+            unwind_rule_from_detected_epilogue(&bytes[4..]),
+            Some(UnwindRuleAarch64::OffsetSpAndRestoreFpAndLr {
+                sp_offset_by_16: 1,
+                fp_storage_offset_from_sp_by_8: 0,
+                lr_storage_offset_from_sp_by_8: 1
+            })
+        );
+        assert_eq!(
+            unwind_rule_from_detected_epilogue(&bytes[8..]),
+            Some(UnwindRuleAarch64::NoOp)
+        );
+        assert_eq!(unwind_rule_from_detected_epilogue(&bytes[12..]), None);
+        assert_eq!(unwind_rule_from_detected_epilogue(&bytes[16..]), None);
     }
 }
