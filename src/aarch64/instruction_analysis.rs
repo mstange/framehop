@@ -36,6 +36,13 @@ enum PrologueResult {
     FoundFunctionStart { sp_offset: i32 },
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum PrologueInstructionType {
+    NotExpectedInPrologue,
+    CouldBePartOfPrologueIfThereIsAlsoAStackPointerSub,
+    VeryLikelyPartOfPrologue,
+}
+
 impl PrologueDetectorAarch64 {
     pub fn new() -> Self {
         Self { sp_offset: 0 }
@@ -78,7 +85,8 @@ impl PrologueDetectorAarch64 {
             slice_to_end[2],
             slice_to_end[3],
         ]);
-        if !Self::is_valid_prologue_instruction(next_instruction) {
+        let next_instruction_type = Self::analyze_prologue_instruction_type(next_instruction);
+        if next_instruction_type == PrologueInstructionType::NotExpectedInPrologue {
             return PrologueResult::ProbablyAlreadyInBody(UnexpectedInstructionType::Unknown);
         }
         let instructions = slice_from_start
@@ -92,16 +100,24 @@ impl PrologueDetectorAarch64 {
                 break;
             }
         }
+        if next_instruction_type
+            == PrologueInstructionType::CouldBePartOfPrologueIfThereIsAlsoAStackPointerSub
+            && self.sp_offset == 0
+        {
+            return PrologueResult::ProbablyAlreadyInBody(
+                UnexpectedInstructionType::NoStackPointerSubBeforeStore,
+            );
+        }
         PrologueResult::FoundFunctionStart {
             sp_offset: self.sp_offset,
         }
     }
 
     /// Check if the instruction indicates that we're likely in a prologue.
-    pub fn is_valid_prologue_instruction(word: u32) -> bool {
+    pub fn analyze_prologue_instruction_type(word: u32) -> PrologueInstructionType {
         // Detect pacibsp (verify stack pointer authentication) and `mov x29, sp`.
         if word == 0xd503237f || word == 0x910003fd {
-            return true;
+            return PrologueInstructionType::VeryLikelyPartOfPrologue;
         }
 
         let bits_22_to_32 = word >> 22;
@@ -112,7 +128,17 @@ impl PrologueDetectorAarch64 {
             // Only stores that are commonly seen in prologues (bits 22, 29 and 31 are set)
             let writeback_bits = bits_22_to_32 & 0b110;
             let reference_reg = ((word >> 5) & 0b11111) as u16;
-            return writeback_bits != 0b000 && reference_reg == 31;
+            if writeback_bits == 0b000 || reference_reg != 31 {
+                return PrologueInstructionType::NotExpectedInPrologue;
+            }
+            // We are storing a register pair to the stack. This is something that
+            // can happen in a prologue but it can also happen in the body of a
+            // function.
+            if writeback_bits == 0b100 {
+                // No writeback.
+                return PrologueInstructionType::CouldBePartOfPrologueIfThereIsAlsoAStackPointerSub;
+            }
+            return PrologueInstructionType::VeryLikelyPartOfPrologue;
         }
         // Detect sub instructions operating on the stack pointer.
         // Detect `add fp, sp, #0xXX` instructions
@@ -123,9 +149,12 @@ impl PrologueDetectorAarch64 {
             let input_reg = ((word >> 5) & 0b11111) as u16;
             let is_sub = ((word >> 30) & 0b1) == 0b1;
             let expected_result_reg = if is_sub { 31 } else { 29 };
-            return input_reg == 31 && result_reg == expected_result_reg;
+            if input_reg != 31 || result_reg != expected_result_reg {
+                return PrologueInstructionType::NotExpectedInPrologue;
+            }
+            return PrologueInstructionType::VeryLikelyPartOfPrologue;
         }
-        false
+        PrologueInstructionType::NotExpectedInPrologue
     }
 
     /// Step backwards over one (already executed) instruction.
@@ -240,6 +269,7 @@ enum UnexpectedInstructionType {
     LoadStoreReferenceRegisterNotSp,
     AddSubNotOperatingOnSp,
     NoNextInstruction,
+    NoStackPointerSubBeforeStore,
     Unknown,
 }
 
@@ -619,6 +649,43 @@ mod test {
         );
         assert_eq!(
             unwind_rule_from_detected_prologue(&bytes[..12], &bytes[12..]),
+            None
+        );
+    }
+
+    #[test]
+    fn test_no_prologue_despite_stack_store() {
+        // We're in the middle of a function and are storing something to the stack.
+        // But this is not a prologue, so it shouldn't be detected as one.
+        //
+        // 1004073d0 e8 17 00 f9     str        x8,[sp, #0x28]
+        // 1004073d4 03 00 00 14     b          LAB_1004073e0
+        // 1004073d8 ff ff 01 a9     stp        xzr,xzr,[sp, #0x18] ; <-- stores the pair xzr, xzr on the stack
+        // 1004073dc ff 17 00 f9     str        xzr,[sp, #0x28]
+        // 1004073e0 e0 03 00 91     mov        x0,sp
+
+        let bytes = &[
+            0xe8, 0x17, 0x00, 0xf9, 0x03, 0x00, 0x00, 0x14, 0xff, 0xff, 0x01, 0xa9, 0xff, 0x17,
+            0x00, 0xf9, 0xe0, 0x03, 0x00, 0x91,
+        ];
+        assert_eq!(
+            unwind_rule_from_detected_prologue(&bytes[..0], &bytes[0..]),
+            None
+        );
+        assert_eq!(
+            unwind_rule_from_detected_prologue(&bytes[..4], &bytes[4..]),
+            None
+        );
+        assert_eq!(
+            unwind_rule_from_detected_prologue(&bytes[..8], &bytes[8..]),
+            None
+        );
+        assert_eq!(
+            unwind_rule_from_detected_prologue(&bytes[..12], &bytes[12..]),
+            None
+        );
+        assert_eq!(
+            unwind_rule_from_detected_prologue(&bytes[..16], &bytes[16..]),
             None
         );
     }
