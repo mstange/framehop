@@ -85,7 +85,7 @@ impl PrologueDetectorAarch64 {
             .rev();
         for instruction in instructions {
             if let PrologueStepResult::UnexpectedInstruction(_) =
-                self.step_instruction_backwards(instruction)
+                self.reverse_step_instruction(instruction)
             {
                 break;
             }
@@ -148,7 +148,7 @@ impl PrologueDetectorAarch64 {
     }
 
     /// Step backwards over one (already executed) instruction.
-    pub fn step_instruction_backwards(&mut self, word: u32) -> PrologueStepResult {
+    pub fn reverse_step_instruction(&mut self, word: u32) -> PrologueStepResult {
         // Detect pacibsp (verify stack pointer authentication)
         if word == 0xd503237f {
             return PrologueStepResult::ValidPrologueInstruction;
