@@ -35,6 +35,22 @@ enum UnexpectedInstructionType {
     Unknown,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum EpilogueInstructionType {
+    NotExpectedInEpilogue,
+    CouldBeTailCall {
+        /// If auth tail call, the offset in bytes where the autibsp would be.
+        /// If regular tail call, we just check if the previous instruction
+        /// adjusts the stack pointer.
+        offset_of_expected_autibsp: u8,
+    },
+    CouldBePartOfAuthTailCall {
+        /// In bytes
+        offset_of_expected_autibsp: u8,
+    },
+    VeryLikelyPartOfEpilogue,
+}
+
 impl EpilogueDetectorAarch64 {
     pub fn new() -> Self {
         Self {
@@ -44,13 +60,78 @@ impl EpilogueDetectorAarch64 {
         }
     }
 
-    pub fn analyze_slice(&mut self, mut bytes: &[u8], pc_offset: usize) -> EpilogueResult {
-        bytes = &bytes[pc_offset..];
-        while bytes.len() >= 4 {
-            let word = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
-            bytes = &bytes[4..];
+    pub fn analyze_slice(&mut self, function_bytes: &[u8], pc_offset: usize) -> EpilogueResult {
+        let mut bytes = &function_bytes[pc_offset..];
+        if bytes.len() < 4 {
+            return EpilogueResult::ReachedFunctionEndWithoutReturn;
+        }
+        let mut word = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+        bytes = &bytes[4..];
+        match Self::analyze_instruction(word) {
+            EpilogueInstructionType::NotExpectedInEpilogue => {
+                return EpilogueResult::ProbablyStillInBody(UnexpectedInstructionType::Unknown)
+            }
+            EpilogueInstructionType::CouldBeTailCall {
+                offset_of_expected_autibsp,
+            } => {
+                if pc_offset >= offset_of_expected_autibsp as usize {
+                    let auth_tail_call_bytes =
+                        &function_bytes[pc_offset - offset_of_expected_autibsp as usize..];
+                    if auth_tail_call_bytes[0..4] == [0xff, 0x23, 0x03, 0xd5]
+                        && Self::is_auth_tail_call(&auth_tail_call_bytes[4..])
+                    {
+                        return EpilogueResult::FoundReturnOrTailCall {
+                            sp_offset: 0,
+                            fp_offset_from_initial_sp: None,
+                            lr_offset_from_initial_sp: None,
+                        };
+                    }
+                }
+                if pc_offset >= 4 {
+                    let prev_b = &function_bytes[pc_offset - 4..pc_offset];
+                    let prev_word =
+                        u32::from_le_bytes([prev_b[0], prev_b[1], prev_b[2], prev_b[3]]);
+                    if Self::instruction_adjusts_stack_pointer(prev_word) {
+                        return EpilogueResult::FoundReturnOrTailCall {
+                            sp_offset: 0,
+                            fp_offset_from_initial_sp: None,
+                            lr_offset_from_initial_sp: None,
+                        };
+                    }
+                }
+                return EpilogueResult::ProbablyStillInBody(UnexpectedInstructionType::Unknown);
+            }
+            EpilogueInstructionType::CouldBePartOfAuthTailCall {
+                offset_of_expected_autibsp,
+            } => {
+                if pc_offset >= offset_of_expected_autibsp as usize {
+                    let auth_tail_call_bytes =
+                        &function_bytes[pc_offset - offset_of_expected_autibsp as usize..];
+                    if auth_tail_call_bytes[0..4] == [0xff, 0x23, 0x03, 0xd5]
+                        && Self::is_auth_tail_call(&auth_tail_call_bytes[4..])
+                    {
+                        return EpilogueResult::FoundReturnOrTailCall {
+                            sp_offset: 0,
+                            fp_offset_from_initial_sp: None,
+                            lr_offset_from_initial_sp: None,
+                        };
+                    }
+                }
+                return EpilogueResult::ProbablyStillInBody(UnexpectedInstructionType::Unknown);
+            }
+            EpilogueInstructionType::VeryLikelyPartOfEpilogue => {}
+        }
+
+        loop {
             match self.step_instruction(word) {
-                EpilogueStepResult::NeedMore => continue,
+                EpilogueStepResult::NeedMore => {
+                    if bytes.len() < 4 {
+                        return EpilogueResult::ReachedFunctionEndWithoutReturn;
+                    }
+                    word = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+                    bytes = &bytes[4..];
+                    continue;
+                }
                 EpilogueStepResult::FoundBodyInstruction(uit) => {
                     return EpilogueResult::ProbablyStillInBody(uit);
                 }
@@ -69,7 +150,21 @@ impl EpilogueDetectorAarch64 {
                 lr_offset_from_initial_sp: self.lr_offset_from_initial_sp,
             };
         }
-        EpilogueResult::ReachedFunctionEndWithoutReturn
+    }
+
+    fn instruction_adjusts_stack_pointer(word: u32) -> bool {
+        // Detect load from sp-relative offset with writeback.
+        if (word >> 22) & 0b1011111011 == 0b1010100011 && (word >> 5) & 0b11111 == 31 {
+            return true;
+        }
+        // Detect sub sp, sp, 0xXXXX
+        if (word >> 23) & 0b111111111 == 0b100100010
+            && word & 0b11111 == 31
+            && (word >> 5) & 0b11111 == 31
+        {
+            return true;
+        }
+        false
     }
 
     fn is_auth_tail_call(bytes_after_autibsp: &[u8]) -> bool {
@@ -119,7 +214,7 @@ impl EpilogueDetectorAarch64 {
         }
 
         // If we get here, it's either not a recognized instruction sequence,
-        // or the tail call is of the form `mov x16, #0xXXXX`, `braa x3, x16`.
+        // or the tail call is of the form `mov x16, #0xXXXX`, `braa xX, x16`.
         if bytes_after_autibsp.len() < 20 {
             return false;
         }
@@ -138,6 +233,82 @@ impl EpilogueDetectorAarch64 {
             bytes_after_autibsp[19],
         ]);
         (braa_opcode & 0xff_ff_fc_00) == 0xd7_1f_08_00 && (braa_opcode & 0b11111) == 16
+    }
+
+    pub fn analyze_instruction(word: u32) -> EpilogueInstructionType {
+        // Detect ret and retab
+        if word == 0xd65f03c0 || word == 0xd65f0fff {
+            return EpilogueInstructionType::VeryLikelyPartOfEpilogue;
+        }
+        // Detect autibsp
+        if word == 0xd50323ff {
+            return EpilogueInstructionType::CouldBePartOfAuthTailCall {
+                offset_of_expected_autibsp: 0,
+            };
+        }
+        // Detect `eor x16, lr, lr, lsl #1`
+        if word == 0xca1e07d0 {
+            return EpilogueInstructionType::CouldBePartOfAuthTailCall {
+                offset_of_expected_autibsp: 4,
+            };
+        }
+        // Detect `tbz x16, 0x3e, $+0x8`
+        if word == 0xb6f00050 {
+            return EpilogueInstructionType::CouldBePartOfAuthTailCall {
+                offset_of_expected_autibsp: 8,
+            };
+        }
+        // Detect `brk #0xc471`
+        if word == 0xd4388e20 {
+            return EpilogueInstructionType::CouldBePartOfAuthTailCall {
+                offset_of_expected_autibsp: 12,
+            };
+        }
+        // Detect b
+        if (word >> 26) == 0b000101 {
+            // This could be a branch with a target inside this function, or
+            // a tail call outside of this function.
+            return EpilogueInstructionType::CouldBeTailCall {
+                offset_of_expected_autibsp: 16,
+            };
+        }
+        // Detect `mov x16, #0xXXXX`
+        if (word >> 23) & 0b111000111 == 0b110000101 && word & 0b11111 == 16 {
+            return EpilogueInstructionType::CouldBePartOfAuthTailCall {
+                offset_of_expected_autibsp: 16,
+            };
+        }
+        // Detect `braa xX, x16`
+        if word & 0xff_ff_fc_00 == 0xd7_1f_08_00 && word & 0b11111 == 16 {
+            return EpilogueInstructionType::CouldBePartOfAuthTailCall {
+                offset_of_expected_autibsp: 20,
+            };
+        }
+        if (word >> 22) & 0b1011111001 == 0b1010100001 {
+            // Section C3.3, Loads and stores.
+            // but only loads that are commonly seen in prologues / epilogues (bits 29 and 31 are set)
+            let writeback_bits = (word >> 23) & 0b11;
+            if writeback_bits == 0b00 {
+                // Not 64-bit load.
+                return EpilogueInstructionType::NotExpectedInEpilogue;
+            }
+            let reference_reg = ((word >> 5) & 0b11111) as u16;
+            if reference_reg != 31 {
+                return EpilogueInstructionType::NotExpectedInEpilogue;
+            }
+            return EpilogueInstructionType::VeryLikelyPartOfEpilogue;
+        }
+        if (word >> 23) & 0b111111111 == 0b100100010 {
+            // Section C3.4, Data processing - immediate
+            // unsigned add imm, size class X (8 bytes)
+            let result_reg = (word & 0b11111) as u16;
+            let input_reg = ((word >> 5) & 0b11111) as u16;
+            if result_reg != 31 || input_reg != 31 {
+                return EpilogueInstructionType::NotExpectedInEpilogue;
+            }
+            return EpilogueInstructionType::VeryLikelyPartOfEpilogue;
+        }
+        EpilogueInstructionType::NotExpectedInEpilogue
     }
 
     pub fn step_instruction(&mut self, word: u32) -> EpilogueStepResult {
@@ -461,18 +632,18 @@ mod test {
             unwind_rule_from_detected_epilogue(bytes, 16),
             Some(UnwindRuleAarch64::NoOp)
         );
-        // assert_eq!(
-        //     unwind_rule_from_detected_epilogue(bytes, 20),
-        //     Some(UnwindRuleAarch64::NoOp)
-        // );
-        // assert_eq!(
-        //     unwind_rule_from_detected_epilogue(bytes, 24),
-        //     Some(UnwindRuleAarch64::NoOp)
-        // );
-        // assert_eq!(
-        //     unwind_rule_from_detected_epilogue(bytes, 28),
-        //     Some(UnwindRuleAarch64::NoOp)
-        // );
+        assert_eq!(
+            unwind_rule_from_detected_epilogue(bytes, 20),
+            Some(UnwindRuleAarch64::NoOp)
+        );
+        assert_eq!(
+            unwind_rule_from_detected_epilogue(bytes, 24),
+            Some(UnwindRuleAarch64::NoOp)
+        );
+        assert_eq!(
+            unwind_rule_from_detected_epilogue(bytes, 28),
+            Some(UnwindRuleAarch64::NoOp)
+        );
     }
 
     #[test]
@@ -512,21 +683,21 @@ mod test {
             unwind_rule_from_detected_epilogue(bytes, 12),
             Some(UnwindRuleAarch64::NoOp)
         );
-        // assert_eq!(
-        //     unwind_rule_from_detected_epilogue(bytes, 16),
-        //     Some(UnwindRuleAarch64::NoOp)
-        // );
-        // assert_eq!(
-        //     unwind_rule_from_detected_epilogue(bytes, 20),
-        //     Some(UnwindRuleAarch64::NoOp)
-        // );
-        // assert_eq!(
-        //     unwind_rule_from_detected_epilogue(bytes, 24),
-        //     Some(UnwindRuleAarch64::NoOp)
-        // );
-        // assert_eq!(
-        //     unwind_rule_from_detected_epilogue(bytes, 28),
-        //     Some(UnwindRuleAarch64::NoOp)
-        // );
+        assert_eq!(
+            unwind_rule_from_detected_epilogue(bytes, 16),
+            Some(UnwindRuleAarch64::NoOp)
+        );
+        assert_eq!(
+            unwind_rule_from_detected_epilogue(bytes, 20),
+            Some(UnwindRuleAarch64::NoOp)
+        );
+        assert_eq!(
+            unwind_rule_from_detected_epilogue(bytes, 24),
+            Some(UnwindRuleAarch64::NoOp)
+        );
+        assert_eq!(
+            unwind_rule_from_detected_epilogue(bytes, 28),
+            Some(UnwindRuleAarch64::NoOp)
+        );
     }
 }
