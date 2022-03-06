@@ -264,8 +264,8 @@ impl EpilogueDetectorAarch64 {
                 offset_of_expected_autibsp: 12,
             };
         }
-        // Detect b
-        if (word >> 26) == 0b000101 {
+        // Detect `b` and `br xX`
+        if (word >> 26) == 0b000101 || word & 0xff_ff_fc_1f == 0xd6_1f_00_00 {
             // This could be a branch with a target inside this function, or
             // a tail call outside of this function.
             return EpilogueInstructionType::CouldBeTailCall {
@@ -568,7 +568,6 @@ mod test {
 
     // This test fails at the moment.
     #[test]
-    #[ignore]
     fn test_epilogue_with_register_tail_call() {
         // This test requires lookbehind in the epilogue detection.
         // We want to detect the `br` as a tail call. We should do this
