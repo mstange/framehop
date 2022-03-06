@@ -154,6 +154,10 @@ impl<
     }
 }
 
+enum InstructionAnalysisError {
+    NoModuleTextBytes,
+}
+
 impl<
         D: Deref<Target = [u8]>,
         A: Arch + DwarfUnwinding + CompactUnwindInfoUnwinding + InstructionAnalysis,
@@ -284,6 +288,38 @@ impl<
         self.with_cache(address, regs, cache, read_mem, Self::unwind_frame_impl)
     }
 
+    /// Detect prologues and epilogues.
+    fn rule_from_instruction_analysis(
+        function_info: &FunctionInfo,
+        pc: u64,
+        module: &Module<D>,
+    ) -> Result<Option<A::UnwindRule>, InstructionAnalysisError> {
+        let text_data = module
+            .text_data
+            .as_deref()
+            .ok_or(InstructionAnalysisError::NoModuleTextBytes)?;
+        // TODO: use checked addition / subtraction / casts
+        let absolute_function_start = module.base_address + u64::from(function_info.function_start);
+        let function_start_relative_to_text = absolute_function_start - module.sections.text;
+        let function_size = function_info.function_end - function_info.function_start;
+        let function_text =
+            &text_data[function_start_relative_to_text as usize..][..function_size as usize];
+        let function_relative_address = (pc - absolute_function_start) as usize;
+        if let Some(rule) = <A as InstructionAnalysis>::rule_from_prologue_analysis(
+            function_text,
+            function_relative_address,
+        ) {
+            return Ok(Some(rule));
+        }
+        if let Some(rule) = <A as InstructionAnalysis>::rule_from_epilogue_analysis(
+            function_text,
+            function_relative_address,
+        ) {
+            return Ok(Some(rule));
+        }
+        Ok(None)
+    }
+
     fn unwind_frame_impl<F>(
         module: &Module<D>,
         address: FrameAddress,
@@ -303,36 +339,12 @@ impl<
                 let is_first_frame = !address.is_return_address();
 
                 let unwind_result = unwinder.unwind_frame(rel_lookup_address, is_first_frame)?;
-                if let (
-                    Some(FunctionInfo {
-                        function_start,
-                        function_end,
-                        ..
-                    }),
-                    Some(text_data),
-                ) = (unwind_result.function_info, module.text_data.as_ref())
-                {
-                    // Detect prologues and epilogues.
-                    let absolute_function_start = module.base_address + u64::from(function_start);
-                    let function_relative_address =
-                        (address.address() - absolute_function_start) as u32;
-                    let function_size = function_end - function_start;
-                    let text_bytes = &text_data[..];
-                    let function_start_relative_to_text =
-                        absolute_function_start - module.sections.text;
-                    let function_text = &text_bytes[function_start_relative_to_text as usize..]
-                        [..function_size as usize];
-                    let (slice_from_start, slice_to_end) =
-                        function_text.split_at(function_relative_address as usize);
-                    if let Some(rule) = <A as InstructionAnalysis>::rule_from_prologue_analysis(
-                        slice_from_start,
-                        slice_to_end,
+                if let Some(function_info) = unwind_result.function_info {
+                    if let Ok(Some(rule)) = Self::rule_from_instruction_analysis(
+                        &function_info,
+                        address.address(),
+                        module,
                     ) {
-                        return Ok(UnwindResult::ExecRule(rule));
-                    }
-                    if let Some(rule) =
-                        <A as InstructionAnalysis>::rule_from_epilogue_analysis(slice_to_end)
-                    {
                         return Ok(UnwindResult::ExecRule(rule));
                     }
                 }

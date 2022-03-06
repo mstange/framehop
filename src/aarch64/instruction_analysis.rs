@@ -4,19 +4,19 @@ use crate::instruction_analysis::InstructionAnalysis;
 
 impl InstructionAnalysis for ArchAarch64 {
     fn rule_from_prologue_analysis(
-        text_bytes_from_function_start: &[u8],
-        text_bytes_until_function_end: &[u8],
+        text_bytes: &[u8],
+        pc_offset: usize,
     ) -> Option<Self::UnwindRule> {
-        unwind_rule_from_detected_prologue(
-            text_bytes_from_function_start,
-            text_bytes_until_function_end,
-        )
+        let (slice_from_start, slice_to_end) = text_bytes.split_at(pc_offset);
+        unwind_rule_from_detected_prologue(slice_from_start, slice_to_end)
     }
 
     fn rule_from_epilogue_analysis(
-        text_bytes_until_function_end: &[u8],
+        text_bytes: &[u8],
+        pc_offset: usize,
     ) -> Option<Self::UnwindRule> {
-        unwind_rule_from_detected_epilogue(text_bytes_until_function_end)
+        let (_slice_from_start, slice_to_end) = text_bytes.split_at(pc_offset);
+        unwind_rule_from_detected_epilogue(slice_to_end)
     }
 }
 
@@ -315,7 +315,7 @@ impl EpilogueDetectorAarch64 {
     }
 
     fn is_auth_tail_call(bytes_after_autibsp: &[u8]) -> bool {
-        // libsystem_malloc contains hundreds of these.
+        // libsystem_malloc.dylib contains over a hundred of these.
         // At the end of the function, after restoring the registers from the stack,
         // there's an autibsp instruction, followed by some check (not sure what it
         // does), and then a tail call. These instructions should all be counted as
