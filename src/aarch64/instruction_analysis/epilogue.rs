@@ -44,7 +44,8 @@ impl EpilogueDetectorAarch64 {
         }
     }
 
-    pub fn analyze_slice(&mut self, mut bytes: &[u8]) -> EpilogueResult {
+    pub fn analyze_slice(&mut self, mut bytes: &[u8], pc_offset: usize) -> EpilogueResult {
+        bytes = &bytes[pc_offset..];
         while bytes.len() >= 4 {
             let word = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
             bytes = &bytes[4..];
@@ -225,9 +226,12 @@ impl EpilogueDetectorAarch64 {
     }
 }
 
-pub fn unwind_rule_from_detected_epilogue(bytes: &[u8]) -> Option<UnwindRuleAarch64> {
+pub fn unwind_rule_from_detected_epilogue(
+    bytes: &[u8],
+    pc_offset: usize,
+) -> Option<UnwindRuleAarch64> {
     let mut detector = EpilogueDetectorAarch64::new();
-    match detector.analyze_slice(bytes) {
+    match detector.analyze_slice(bytes, pc_offset) {
         EpilogueResult::ProbablyStillInBody(_)
         | EpilogueResult::ReachedFunctionEndWithoutReturn => None,
         EpilogueResult::FoundReturnOrTailCall {
@@ -274,7 +278,7 @@ mod test {
             0x01, 0x91, 0xc0, 0x03, 0x5f, 0xd6,
         ];
         assert_eq!(
-            unwind_rule_from_detected_epilogue(bytes),
+            unwind_rule_from_detected_epilogue(bytes, 0),
             Some(UnwindRuleAarch64::OffsetSpAndRestoreFpAndLr {
                 sp_offset_by_16: 5,
                 fp_storage_offset_from_sp_by_8: 8,
@@ -282,22 +286,22 @@ mod test {
             })
         );
         assert_eq!(
-            unwind_rule_from_detected_epilogue(&bytes[4..]),
+            unwind_rule_from_detected_epilogue(bytes, 4),
             Some(UnwindRuleAarch64::OffsetSp { sp_offset_by_16: 5 })
         );
         assert_eq!(
-            unwind_rule_from_detected_epilogue(&bytes[8..]),
+            unwind_rule_from_detected_epilogue(bytes, 8),
             Some(UnwindRuleAarch64::OffsetSp { sp_offset_by_16: 5 })
         );
         assert_eq!(
-            unwind_rule_from_detected_epilogue(&bytes[12..]),
+            unwind_rule_from_detected_epilogue(bytes, 12),
             Some(UnwindRuleAarch64::OffsetSp { sp_offset_by_16: 5 })
         );
         assert_eq!(
-            unwind_rule_from_detected_epilogue(&bytes[16..]),
+            unwind_rule_from_detected_epilogue(bytes, 16),
             Some(UnwindRuleAarch64::NoOp)
         );
-        assert_eq!(unwind_rule_from_detected_epilogue(&bytes[20..]), None);
+        assert_eq!(unwind_rule_from_detected_epilogue(bytes, 20), None);
     }
 
     #[test]
@@ -317,9 +321,9 @@ mod test {
             0x41, 0xa9, 0xf8, 0x5f, 0xc4, 0xa8, 0xff, 0x0f, 0x5f, 0xd6, 0xa0, 0x01, 0x80, 0x52,
             0x20, 0x60, 0xa6, 0x72,
         ];
-        assert_eq!(unwind_rule_from_detected_epilogue(bytes), None);
+        assert_eq!(unwind_rule_from_detected_epilogue(bytes, 0), None);
         assert_eq!(
-            unwind_rule_from_detected_epilogue(&bytes[4..]),
+            unwind_rule_from_detected_epilogue(bytes, 4),
             Some(UnwindRuleAarch64::OffsetSpAndRestoreFpAndLr {
                 sp_offset_by_16: 4,
                 fp_storage_offset_from_sp_by_8: 6,
@@ -327,22 +331,22 @@ mod test {
             })
         );
         assert_eq!(
-            unwind_rule_from_detected_epilogue(&bytes[8..]),
+            unwind_rule_from_detected_epilogue(bytes, 8),
             Some(UnwindRuleAarch64::OffsetSp { sp_offset_by_16: 4 })
         );
         assert_eq!(
-            unwind_rule_from_detected_epilogue(&bytes[12..]),
+            unwind_rule_from_detected_epilogue(bytes, 12),
             Some(UnwindRuleAarch64::OffsetSp { sp_offset_by_16: 4 })
         );
         assert_eq!(
-            unwind_rule_from_detected_epilogue(&bytes[16..]),
+            unwind_rule_from_detected_epilogue(bytes, 16),
             Some(UnwindRuleAarch64::OffsetSp { sp_offset_by_16: 4 })
         );
         assert_eq!(
-            unwind_rule_from_detected_epilogue(&bytes[20..]),
+            unwind_rule_from_detected_epilogue(bytes, 20),
             Some(UnwindRuleAarch64::NoOp)
         );
-        assert_eq!(unwind_rule_from_detected_epilogue(&bytes[24..]), None);
+        assert_eq!(unwind_rule_from_detected_epilogue(bytes, 24), None);
     }
 
     #[test]
@@ -360,9 +364,9 @@ mod test {
             0x28, 0x01, 0x00, 0x79, 0xfd, 0x7b, 0xc1, 0xa8, 0xff, 0x0f, 0x5f, 0xd6, 0xe2, 0x03,
             0x08, 0xaa, 0x38, 0x76, 0x00, 0x94,
         ];
-        assert_eq!(unwind_rule_from_detected_epilogue(bytes), None);
+        assert_eq!(unwind_rule_from_detected_epilogue(bytes, 0), None);
         assert_eq!(
-            unwind_rule_from_detected_epilogue(&bytes[4..]),
+            unwind_rule_from_detected_epilogue(bytes, 4),
             Some(UnwindRuleAarch64::OffsetSpAndRestoreFpAndLr {
                 sp_offset_by_16: 1,
                 fp_storage_offset_from_sp_by_8: 0,
@@ -370,11 +374,11 @@ mod test {
             })
         );
         assert_eq!(
-            unwind_rule_from_detected_epilogue(&bytes[8..]),
+            unwind_rule_from_detected_epilogue(bytes, 8),
             Some(UnwindRuleAarch64::NoOp)
         );
-        assert_eq!(unwind_rule_from_detected_epilogue(&bytes[12..]), None);
-        assert_eq!(unwind_rule_from_detected_epilogue(&bytes[16..]), None);
+        assert_eq!(unwind_rule_from_detected_epilogue(bytes, 12), None);
+        assert_eq!(unwind_rule_from_detected_epilogue(bytes, 16), None);
     }
 
     #[test]
@@ -386,7 +390,7 @@ mod test {
         // ...
         let bytes = &[0xfc, 0x6f, 0xc6, 0xa8, 0xbc, 0xba, 0xff, 0x17];
         assert_eq!(
-            unwind_rule_from_detected_epilogue(bytes),
+            unwind_rule_from_detected_epilogue(bytes, 0),
             Some(UnwindRuleAarch64::OffsetSp { sp_offset_by_16: 6 })
         );
     }
@@ -407,7 +411,7 @@ mod test {
         // ...
         let bytes = &[0xfa, 0x67, 0xc5, 0xa8, 0x60, 0x00, 0x1f, 0xd6];
         assert_eq!(
-            unwind_rule_from_detected_epilogue(&bytes[4..]),
+            unwind_rule_from_detected_epilogue(bytes, 4),
             Some(UnwindRuleAarch64::NoOp)
         );
     }
@@ -436,9 +440,9 @@ mod test {
             0x20, 0x8e, 0x38, 0xd4, 0x13, 0x00, 0x00, 0x14, 0xa0, 0x16, 0x78, 0xf9, 0x03, 0x3c,
             0x40, 0xf9,
         ];
-        assert_eq!(unwind_rule_from_detected_epilogue(bytes), None);
+        assert_eq!(unwind_rule_from_detected_epilogue(bytes, 0), None);
         assert_eq!(
-            unwind_rule_from_detected_epilogue(&bytes[4..]),
+            unwind_rule_from_detected_epilogue(bytes, 4),
             Some(UnwindRuleAarch64::OffsetSpAndRestoreFpAndLr {
                 sp_offset_by_16: 3,
                 fp_storage_offset_from_sp_by_8: 4,
@@ -446,27 +450,27 @@ mod test {
             })
         );
         assert_eq!(
-            unwind_rule_from_detected_epilogue(&bytes[8..]),
+            unwind_rule_from_detected_epilogue(bytes, 8),
             Some(UnwindRuleAarch64::OffsetSp { sp_offset_by_16: 3 })
         );
         assert_eq!(
-            unwind_rule_from_detected_epilogue(&bytes[12..]),
+            unwind_rule_from_detected_epilogue(bytes, 12),
             Some(UnwindRuleAarch64::OffsetSp { sp_offset_by_16: 3 })
         );
         assert_eq!(
-            unwind_rule_from_detected_epilogue(&bytes[16..]),
+            unwind_rule_from_detected_epilogue(bytes, 16),
             Some(UnwindRuleAarch64::NoOp)
         );
         // assert_eq!(
-        //     unwind_rule_from_detected_epilogue(&bytes[20..]),
+        //     unwind_rule_from_detected_epilogue(bytes, 20),
         //     Some(UnwindRuleAarch64::NoOp)
         // );
         // assert_eq!(
-        //     unwind_rule_from_detected_epilogue(&bytes[24..]),
+        //     unwind_rule_from_detected_epilogue(bytes, 24),
         //     Some(UnwindRuleAarch64::NoOp)
         // );
         // assert_eq!(
-        //     unwind_rule_from_detected_epilogue(&bytes[28..]),
+        //     unwind_rule_from_detected_epilogue(bytes, 28),
         //     Some(UnwindRuleAarch64::NoOp)
         // );
     }
@@ -491,9 +495,9 @@ mod test {
             0x03, 0xd5, 0xd0, 0x07, 0x1e, 0xca, 0x50, 0x00, 0xf0, 0xb6, 0x20, 0x8e, 0x38, 0xd4,
             0xf0, 0x77, 0x9c, 0xd2, 0x50, 0x08, 0x1f, 0xd7,
         ];
-        assert_eq!(unwind_rule_from_detected_epilogue(bytes), None);
+        assert_eq!(unwind_rule_from_detected_epilogue(bytes, 0), None);
         assert_eq!(
-            unwind_rule_from_detected_epilogue(&bytes[4..]),
+            unwind_rule_from_detected_epilogue(bytes, 4),
             Some(UnwindRuleAarch64::OffsetSpAndRestoreFpAndLr {
                 sp_offset_by_16: 2,
                 fp_storage_offset_from_sp_by_8: 2,
@@ -501,27 +505,27 @@ mod test {
             })
         );
         assert_eq!(
-            unwind_rule_from_detected_epilogue(&bytes[8..]),
+            unwind_rule_from_detected_epilogue(bytes, 8),
             Some(UnwindRuleAarch64::OffsetSp { sp_offset_by_16: 2 })
         );
         assert_eq!(
-            unwind_rule_from_detected_epilogue(&bytes[12..]),
+            unwind_rule_from_detected_epilogue(bytes, 12),
             Some(UnwindRuleAarch64::NoOp)
         );
         // assert_eq!(
-        //     unwind_rule_from_detected_epilogue(&bytes[16..]),
+        //     unwind_rule_from_detected_epilogue(bytes, 16),
         //     Some(UnwindRuleAarch64::NoOp)
         // );
         // assert_eq!(
-        //     unwind_rule_from_detected_epilogue(&bytes[20..]),
+        //     unwind_rule_from_detected_epilogue(bytes, 20),
         //     Some(UnwindRuleAarch64::NoOp)
         // );
         // assert_eq!(
-        //     unwind_rule_from_detected_epilogue(&bytes[24..]),
+        //     unwind_rule_from_detected_epilogue(bytes, 24),
         //     Some(UnwindRuleAarch64::NoOp)
         // );
         // assert_eq!(
-        //     unwind_rule_from_detected_epilogue(&bytes[28..]),
+        //     unwind_rule_from_detected_epilogue(bytes, 28),
         //     Some(UnwindRuleAarch64::NoOp)
         // );
     }
