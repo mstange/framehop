@@ -5,7 +5,7 @@ use framehop::aarch64::*;
 use framehop::FrameAddress;
 use framehop::Unwinder;
 
-mod common;
+use super::common;
 
 #[test]
 fn test_basic() {

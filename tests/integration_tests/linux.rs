@@ -4,7 +4,7 @@ use framehop::x86_64::*;
 use framehop::FrameAddress;
 use framehop::Unwinder;
 
-mod common;
+use super::common;
 
 #[test]
 fn test_plt_cfa_expr() {
