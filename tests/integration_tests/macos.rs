@@ -427,8 +427,6 @@ fn test_prologue_fp_2() {
     assert_eq!(regs.fp(), 0x10029);
 }
 
-// This test fails at the moment.
-#[ignore]
 #[test]
 fn test_prologue_epilogue_x86_64_fp() {
     let mut cache = CacheX86_64::<_>::new();
@@ -506,7 +504,7 @@ fn test_prologue_epilogue_x86_64_fp() {
     pc = 0x6e669; // step over 6e666  mov  r14, rdi
     do_check(pc, UnwindRegsX86_64::new(pc, 0x100, 0x130), &s);
 
-    // We are now in the body of the function.
+    // We are now firmly inside the body of the function.
 
     // Skip ahead, close to an epilogue.
     pc = 0x6e6c8;
@@ -528,14 +526,13 @@ fn test_prologue_epilogue_x86_64_fp() {
     pc = 0x6e6dd; // step over 6e6dc  pop  rbp
     do_check(pc, UnwindRegsX86_64::new(pc, 0x138, 0x160), &s);
     pc = 0x6e6de; // step over 6e6dd  ret
+
     // Now we are in a different basic block, back in the body of the function.
     do_check(pc, UnwindRegsX86_64::new(pc, 0x100, 0x130), &s);
     pc = 0x6e6e2; // step over 6e6de  mov  rsi, qword [rbp+var_20]
     do_check(pc, UnwindRegsX86_64::new(pc, 0x100, 0x130), &s);
 }
 
-// This test fails at the moment.
-#[ignore]
 #[test]
 fn test_prologue_epilogue_tail_call_x86_64_nofp() {
     let mut cache = CacheX86_64::<_>::new();
@@ -626,4 +623,121 @@ fn test_prologue_epilogue_tail_call_x86_64_nofp() {
     pc = 0x1a53; // step over 1a51  pop  r14
     do_check(pc, UnwindRegsX86_64::new(pc, 0xf8, 0x120), &s);
     // 1a53  jmp  sub_2af90+16
+}
+
+#[test]
+fn test_prologue_epilogue_rbp_x86_64_nofp() {
+    let mut cache = CacheX86_64::<_>::new();
+    let mut unwinder = UnwinderX86_64::new();
+    common::add_object(
+        &mut unwinder,
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/macos/x86_64/nofp/libmozglue.dylib"),
+        0,
+    );
+
+    // sub_e030:
+    // e030  push  rbp
+    // e031  push  r15
+    // e033  push  r14
+    // e035  push  rbx
+    // e036  sub  rsp, 0x18
+    // e03a  mov  rax, qword [___stack_chk_guard_76060]
+    // e041  mov  rax, qword [rax]
+    // e044  mov  qword [rsp+0x38+var_28], rax
+    // e049  mov  eax, dword [dword_772d0]
+    // e04f  mov  bl, 0x1
+    // e051  test  eax, eax
+    // e053  je  loc_e078
+    // e055  mov  rax, qword [___stack_chk_guard_76060]
+    // e05c  mov  rax, qword [rax]
+    // e05f  cmp  rax, qword [rsp+0x38+var_28]
+    // e064  jne  loc_e073
+    // e066  mov  eax, ebx
+    // e068  add  rsp, 0x18
+    // e06c  pop  rbx
+    // e06d  pop  r14
+    // e06f  pop  r15
+    // e071  pop  rbp
+    // e072  ret
+    // e073  call  imp___stubs____stack_chk_fail
+    // e078  lea  rdi, qword [byte_772b0+8]
+    // ...
+
+    let mut do_check = |pc, mut regs, stack: &[u64]| {
+        let res = unwinder.unwind_frame(
+            FrameAddress::from_instruction_pointer(pc),
+            &mut regs,
+            &mut cache,
+            &mut |addr| stack.get((addr / 8) as usize).cloned().ok_or(()),
+        );
+        // The result after unwinding should always be the same.
+        assert_eq!(res, Ok(Some(0x12345)));
+        assert_eq!(regs.sp(), 0x100);
+        assert_eq!(regs.bp(), 0x120);
+    };
+
+    // Start at the function start and then step towards the function body.
+    // At every address, the unwinding post state should be the same.
+    let mut s = make_stack(0x160);
+    s[0xf8 / 8] = 0x12345; // put return address on the stack
+    let mut pc = 0x1a20;
+    do_check(pc, UnwindRegsX86_64::new(pc, 0xf8, 0x120), &s);
+    pc = 0xe031; // step over e030  push  rbp
+    s[0xf0 / 8] = 0x120;
+    do_check(pc, UnwindRegsX86_64::new(pc, 0xf0, 0x120), &s);
+    pc = 0xe033; // step over e031  push  r15
+    do_check(pc, UnwindRegsX86_64::new(pc, 0xe8, 0x120), &s);
+    pc = 0xe035; // step over e033  push  r14
+    do_check(pc, UnwindRegsX86_64::new(pc, 0xe0, 0x120), &s);
+    pc = 0xe036; // step over e035  push  rbx
+    do_check(pc, UnwindRegsX86_64::new(pc, 0xd8, 0x120), &s);
+    pc = 0xe03a; // step over e036  sub  rsp, 0x18
+    do_check(pc, UnwindRegsX86_64::new(pc, 0xc0, 0x120), &s);
+    pc = 0xe041; // step over e03a  mov  rax, qword [___stack_chk_guard_76060]
+    do_check(pc, UnwindRegsX86_64::new(pc, 0xc0, 0x120), &s);
+    pc = 0xe044; // step over e041  mov  rax, qword [rax]
+    do_check(pc, UnwindRegsX86_64::new(pc, 0xc0, 0x120), &s);
+    pc = 0xe049; // step over e044  mov  qword [rsp+0x38+var_28], rax
+    do_check(pc, UnwindRegsX86_64::new(pc, 0xc0, 0x120), &s);
+    pc = 0xe04f; // step over e049  mov  eax, dword [dword_772d0]
+    do_check(pc, UnwindRegsX86_64::new(pc, 0xc0, 0x120), &s);
+    pc = 0xe051; // step over e04f  mov  bl, 0x1
+    do_check(pc, UnwindRegsX86_64::new(pc, 0xc0, 0x120), &s);
+    pc = 0xe053; // step over e051  test  eax, eax
+    do_check(pc, UnwindRegsX86_64::new(pc, 0xc0, 0x120), &s);
+    pc = 0xe055; // step over e053  je  loc_e078
+
+    // 0xe055 is also a jump target from somewhere inside the rest of the function.
+    // The rbp register may have been modified. Use a different value to test that
+    // we are restoring it properly.
+    do_check(pc, UnwindRegsX86_64::new(pc, 0xc0, 0x999), &s);
+    pc = 0xe05c; // step over e055  mov  rax, qword [___stack_chk_guard_76060]
+    do_check(pc, UnwindRegsX86_64::new(pc, 0xc0, 0x999), &s);
+    pc = 0xe05f; // step over e05c  mov  rax, qword [rax]
+    do_check(pc, UnwindRegsX86_64::new(pc, 0xc0, 0x999), &s);
+    pc = 0xe064; // step over e05f  cmp  rax, qword [rsp+0x38+var_28]
+    do_check(pc, UnwindRegsX86_64::new(pc, 0xc0, 0x999), &s);
+    pc = 0xe066; // step over e064  jne  loc_e073
+    do_check(pc, UnwindRegsX86_64::new(pc, 0xc0, 0x999), &s);
+    pc = 0xe068; // step over e066  mov  eax, ebx
+    do_check(pc, UnwindRegsX86_64::new(pc, 0xc0, 0x999), &s);
+    pc = 0xe06c; // step over e068  add  rsp, 0x18
+    do_check(pc, UnwindRegsX86_64::new(pc, 0xd8, 0x999), &s);
+    pc = 0xe06d; // step over e06c  pop  rbx
+    do_check(pc, UnwindRegsX86_64::new(pc, 0xe0, 0x999), &s);
+    pc = 0xe06f; // step over e06d  pop  r14
+    do_check(pc, UnwindRegsX86_64::new(pc, 0xe8, 0x999), &s);
+    pc = 0xe071; // step over e06f  pop  r15
+    do_check(pc, UnwindRegsX86_64::new(pc, 0xf0, 0x999), &s);
+    pc = 0xe072; // step over e071  pop  rbp
+                 // Bp has been restored.
+    do_check(pc, UnwindRegsX86_64::new(pc, 0xf8, 0x120), &s);
+    pc = 0xe073; // step over e072  ret
+
+    // We are now in a different basic block, which is part of the body
+    // of the function.
+    do_check(pc, UnwindRegsX86_64::new(pc, 0xc0, 0x999), &s);
+    pc = 0xe078; // step over e073  call  imp___stubs____stack_chk_fail
+    do_check(pc, UnwindRegsX86_64::new(pc, 0xc0, 0x999), &s);
+    // e078  lea  rdi, qword [byte_772b0+8]
 }
