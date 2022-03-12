@@ -35,7 +35,7 @@ pub trait Unwinder {
         address: FrameAddress,
         regs: &mut Self::UnwindRegs,
         cache: &mut Self::Cache,
-        read_mem: &mut F,
+        read_stack: &mut F,
     ) -> Result<Option<u64>, Error>
     where
         F: FnMut(u64) -> Result<u64, ()>;
@@ -45,12 +45,12 @@ pub trait Unwinder {
         pc: u64,
         regs: Self::UnwindRegs,
         cache: &'c mut Self::Cache,
-        read_mem: &'r mut F,
+        read_stack: &'r mut F,
     ) -> UnwindIterator<'u, 'c, 'r, Self, F>
     where
         F: FnMut(u64) -> Result<u64, ()>,
     {
-        UnwindIterator::new(self, pc, regs, cache, read_mem)
+        UnwindIterator::new(self, pc, regs, cache, read_stack)
     }
 }
 
@@ -59,7 +59,7 @@ pub struct UnwindIterator<'u, 'c, 'r, U: Unwinder + ?Sized, F: FnMut(u64) -> Res
     state: UnwindIteratorState,
     regs: U::UnwindRegs,
     cache: &'c mut U::Cache,
-    read_mem: &'r mut F,
+    read_stack: &'r mut F,
 }
 
 enum UnwindIteratorState {
@@ -76,14 +76,14 @@ impl<'u, 'c, 'r, U: Unwinder + ?Sized, F: FnMut(u64) -> Result<u64, ()>>
         pc: u64,
         regs: U::UnwindRegs,
         cache: &'c mut U::Cache,
-        read_mem: &'r mut F,
+        read_stack: &'r mut F,
     ) -> Self {
         Self {
             unwinder,
             state: UnwindIteratorState::Initial(pc),
             regs,
             cache,
-            read_mem,
+            read_stack,
         }
     }
 }
@@ -100,7 +100,7 @@ impl<'u, 'c, 'r, U: Unwinder + ?Sized, F: FnMut(u64) -> Result<u64, ()>>
             }
             UnwindIteratorState::Unwinding(address) => {
                 self.unwinder
-                    .unwind_frame(address, &mut self.regs, self.cache, self.read_mem)?
+                    .unwind_frame(address, &mut self.regs, self.cache, self.read_stack)?
             }
             UnwindIteratorState::Done => return Ok(None),
         };
@@ -231,7 +231,7 @@ impl<
         address: FrameAddress,
         regs: &mut A::UnwindRegs,
         cache: &mut Cache<D, A::UnwindRule, P>,
-        read_mem: &mut F,
+        read_stack: &mut F,
         callback: G,
     ) -> Result<Option<u64>, Error>
     where
@@ -249,7 +249,7 @@ impl<
             lookup_address,
             self.modules_generation,
             regs,
-            read_mem,
+            read_stack,
         ) {
             CacheResult::Hit(result) => return result,
             CacheResult::Miss(handle) => handle,
@@ -259,7 +259,7 @@ impl<
             None => A::UnwindRule::fallback_rule(),
             Some(module_index) => {
                 let module = &self.modules[module_index];
-                match callback(module, address, regs, cache, read_mem) {
+                match callback(module, address, regs, cache, read_stack) {
                     Ok(UnwindResult::ExecRule(rule)) => rule,
                     Ok(UnwindResult::Uncacheable(return_address)) => {
                         return Ok(Some(return_address))
@@ -272,7 +272,7 @@ impl<
             }
         };
         cache.rule_cache.insert(cache_handle, unwind_rule);
-        unwind_rule.exec(regs, read_mem)
+        unwind_rule.exec(regs, read_stack)
     }
 
     pub fn unwind_frame<F>(
@@ -280,12 +280,12 @@ impl<
         address: FrameAddress,
         regs: &mut A::UnwindRegs,
         cache: &mut Cache<D, A::UnwindRule, P>,
-        read_mem: &mut F,
+        read_stack: &mut F,
     ) -> Result<Option<u64>, Error>
     where
         F: FnMut(u64) -> Result<u64, ()>,
     {
-        self.with_cache(address, regs, cache, read_mem, Self::unwind_frame_impl)
+        self.with_cache(address, regs, cache, read_stack, Self::unwind_frame_impl)
     }
 
     /// Detect prologues and epilogues.
@@ -325,7 +325,7 @@ impl<
         address: FrameAddress,
         regs: &mut A::UnwindRegs,
         cache: &mut Cache<D, A::UnwindRule, P>,
-        read_mem: &mut F,
+        read_stack: &mut F,
     ) -> Result<UnwindResult<A::UnwindRule>, UnwinderError>
     where
         F: FnMut(u64) -> Result<u64, ()>,
@@ -361,7 +361,8 @@ impl<
                             &mut cache.eh_frame_unwind_context,
                             &module.sections,
                         );
-                        dwarf_unwinder.unwind_frame_with_fde(regs, address, fde_offset, read_mem)?
+                        dwarf_unwinder
+                            .unwind_frame_with_fde(regs, address, fde_offset, read_stack)?
                     }
                 }
             }
@@ -377,7 +378,7 @@ impl<
                 let fde_offset = dwarf_unwinder
                     .get_fde_offset_for_address(address.address_for_lookup())
                     .ok_or(UnwinderError::EhFrameHdrCouldNotFindAddress)?;
-                dwarf_unwinder.unwind_frame_with_fde(regs, address, fde_offset, read_mem)?
+                dwarf_unwinder.unwind_frame_with_fde(regs, address, fde_offset, read_stack)?
             }
             ModuleUnwindData::EhFrame(_) => {
                 return Err(UnwinderError::UnhandledModuleUnwindDataType)

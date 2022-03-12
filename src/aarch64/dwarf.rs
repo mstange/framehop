@@ -30,7 +30,7 @@ impl DwarfUnwinding for ArchAarch64 {
         encoding: Encoding,
         regs: &mut Self::UnwindRegs,
         address: FrameAddress,
-        read_mem: &mut F,
+        read_stack: &mut F,
     ) -> Result<UnwindResult<Self::UnwindRule>, DwarfUnwinderError>
     where
         F: FnMut(u64) -> Result<u64, ()>,
@@ -59,20 +59,32 @@ impl DwarfUnwinding for ArchAarch64 {
             if cfa <= sp {
                 return Err(DwarfUnwinderError::StackPointerMovedBackwards);
             }
-            let fp =
-                eval_register_rule::<R, F, _, S>(fp_rule, cfa, encoding, regs.fp(), regs, read_mem)
-                    .ok_or(DwarfUnwinderError::CouldNotRecoverFramePointer)?;
-            let lr =
-                eval_register_rule::<R, F, _, S>(lr_rule, cfa, encoding, regs.lr(), regs, read_mem)
-                    .ok_or(DwarfUnwinderError::CouldNotRecoverReturnAddress)?;
+            let fp = eval_register_rule::<R, F, _, S>(
+                fp_rule,
+                cfa,
+                encoding,
+                regs.fp(),
+                regs,
+                read_stack,
+            )
+            .ok_or(DwarfUnwinderError::CouldNotRecoverFramePointer)?;
+            let lr = eval_register_rule::<R, F, _, S>(
+                lr_rule,
+                cfa,
+                encoding,
+                regs.lr(),
+                regs,
+                read_stack,
+            )
+            .ok_or(DwarfUnwinderError::CouldNotRecoverReturnAddress)?;
             (fp, lr)
         } else {
             // For the first frame, be more lenient when encountering errors.
             // TODO: Find evidence of what this gives us. I think on macOS the prologue often has Unknown register rules
             // and we only encounter prologues for the first frame.
-            let fp = eval_register_rule::<R, F, _, S>(fp_rule, cfa, encoding, fp, regs, read_mem)
+            let fp = eval_register_rule::<R, F, _, S>(fp_rule, cfa, encoding, fp, regs, read_stack)
                 .unwrap_or(fp);
-            let lr = eval_register_rule::<R, F, _, S>(lr_rule, cfa, encoding, lr, regs, read_mem)
+            let lr = eval_register_rule::<R, F, _, S>(lr_rule, cfa, encoding, lr, regs, read_stack)
                 .unwrap_or(lr);
             if cfa == sp && lr == address.address() {
                 return Err(DwarfUnwinderError::DidNotAdvance);

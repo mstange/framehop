@@ -16,7 +16,7 @@ impl<R: UnwindRule> RuleCache<R> {
         address: u64,
         modules_generation: u16,
         regs: &mut R::UnwindRegs,
-        read_mem: &mut F,
+        read_stack: &mut F,
     ) -> CacheResult
     where
         F: FnMut(u64) -> Result<u64, ()>,
@@ -24,7 +24,7 @@ impl<R: UnwindRule> RuleCache<R> {
         let slot = (address % 509) as u16;
         if let Some(entry) = &self.entries[slot as usize] {
             if entry.modules_generation == modules_generation && entry.address == address {
-                return CacheResult::Hit(entry.unwind_rule.exec(regs, read_mem));
+                return CacheResult::Hit(entry.unwind_rule.exec(regs, read_stack));
             }
         }
         CacheResult::Miss(CacheHandle {

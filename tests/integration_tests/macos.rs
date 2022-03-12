@@ -35,14 +35,14 @@ fn test_basic() {
         /* 0x70: */ 0x0, // sentinel fp
         /* 0x78: */ 0x0, // sentinel lr
     ];
-    let mut read_mem = |addr| stack.get((addr / 8) as usize).cloned().ok_or(());
+    let mut read_stack = |addr| stack.get((addr / 8) as usize).cloned().ok_or(());
     let mut regs = UnwindRegsAarch64::new(0x1003fc000 + 0xe4830, 0x10, 0x20);
     // There's a frameless function at e0d2c.
     let res = unwinder.unwind_frame(
         FrameAddress::from_instruction_pointer(0x1003fc000 + 0x1292c0),
         &mut regs,
         &mut cache,
-        &mut read_mem,
+        &mut read_stack,
     );
     assert_eq!(res, Ok(Some(0x1003fc000 + 0xe4830)));
     assert_eq!(regs.sp(), 0x10);
@@ -50,7 +50,7 @@ fn test_basic() {
         FrameAddress::from_return_address(0x1003fc000 + 0xe4830).unwrap(),
         &mut regs,
         &mut cache,
-        &mut read_mem,
+        &mut read_stack,
     );
     assert_eq!(res, Ok(Some(0x1003fc000 + 0x100dc4)));
     assert_eq!(regs.sp(), 0x30);
@@ -59,7 +59,7 @@ fn test_basic() {
         FrameAddress::from_return_address(0x1003fc000 + 0x100dc4).unwrap(),
         &mut regs,
         &mut cache,
-        &mut read_mem,
+        &mut read_stack,
     );
     assert_eq!(res, Ok(Some(0x1003fc000 + 0x12ca28)));
     assert_eq!(regs.sp(), 0x50);
@@ -68,7 +68,7 @@ fn test_basic() {
         FrameAddress::from_return_address(0x1003fc000 + 0x100dc4).unwrap(),
         &mut regs,
         &mut cache,
-        &mut read_mem,
+        &mut read_stack,
     );
     assert_eq!(res, Ok(None));
 }
@@ -100,13 +100,13 @@ fn test_basic_iterator() {
         /* 0x70: */ 0x0, // sentinel fp
         /* 0x78: */ 0x0, // sentinel lr
     ];
-    let mut read_mem = |addr| stack.get((addr / 8) as usize).cloned().ok_or(());
+    let mut read_stack = |addr| stack.get((addr / 8) as usize).cloned().ok_or(());
     let frames = unwinder
         .iter_frames(
             0x1003fc000 + 0x1292c0,
             UnwindRegsAarch64::new(0x1003fc000 + 0xe4830, 0x10, 0x20),
             &mut cache,
-            &mut read_mem,
+            &mut read_stack,
         )
         .collect();
     assert_eq!(
@@ -172,13 +172,13 @@ fn test_epilogue() {
     // 00000001000e0d20         ldp        x22, x21, [sp, #0x20]
     // 00000001000e0d24         add        sp, sp, #0x50
     // 00000001000e0d28         ret
-    let mut read_mem = |addr| stack.get((addr / 8) as usize).cloned().ok_or(());
+    let mut read_stack = |addr| stack.get((addr / 8) as usize).cloned().ok_or(());
     let mut do_check = |pc, mut regs| {
         let res = unwinder.unwind_frame(
             FrameAddress::from_instruction_pointer(pc),
             &mut regs,
             &mut cache,
-            &mut read_mem,
+            &mut read_stack,
         );
         // The result after unwinding should always be the same.
         assert_eq!(res, Ok(Some(0x1003fc000 + 0xe4830)));

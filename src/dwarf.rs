@@ -56,7 +56,7 @@ pub trait DwarfUnwinding: Arch {
         encoding: Encoding,
         regs: &mut Self::UnwindRegs,
         address: FrameAddress,
-        read_mem: &mut F,
+        read_stack: &mut F,
     ) -> Result<UnwindResult<Self::UnwindRule>, DwarfUnwinderError>
     where
         F: FnMut(u64) -> Result<u64, ()>,
@@ -118,7 +118,7 @@ impl<'a, R: Reader, A: DwarfUnwinding, S: UnwindContextStorage<R> + EvaluationSt
         regs: &mut A::UnwindRegs,
         address: FrameAddress,
         fde_offset: u32,
-        read_mem: &mut F,
+        read_stack: &mut F,
     ) -> Result<UnwindResult<A::UnwindRule>, DwarfUnwinderError>
     where
         F: FnMut(u64) -> Result<u64, ()>,
@@ -143,7 +143,7 @@ impl<'a, R: Reader, A: DwarfUnwinding, S: UnwindContextStorage<R> + EvaluationSt
                 return Err(DwarfUnwinderError::UnwindInfoForAddressFailed(e));
             }
         };
-        A::unwind_frame::<F, R, S>(unwind_info, encoding, regs, address, read_mem)
+        A::unwind_frame::<F, R, S>(unwind_info, encoding, regs, address, read_stack)
     }
 }
 
@@ -196,7 +196,7 @@ pub fn eval_register_rule<R, F, UR, S>(
     encoding: Encoding,
     val: u64,
     regs: &UR,
-    read_mem: &mut F,
+    read_stack: &mut F,
 ) -> Option<u64>
 where
     R: gimli::Reader,
@@ -210,7 +210,7 @@ where
         RegisterRule::Offset(offset) => {
             let cfa_plus_offset =
                 u64::try_from(i64::try_from(cfa).ok()?.checked_add(offset)?).ok()?;
-            read_mem(cfa_plus_offset).ok()
+            read_stack(cfa_plus_offset).ok()
         }
         RegisterRule::ValOffset(offset) => {
             u64::try_from(i64::try_from(cfa).ok()?.checked_add(offset)?).ok()
@@ -218,7 +218,7 @@ where
         RegisterRule::Register(register) => regs.get(register),
         RegisterRule::Expression(expr) => {
             let val = eval_expr::<R, UR, S>(expr, encoding, regs)?;
-            read_mem(val).ok()
+            read_stack(val).ok()
         }
         RegisterRule::ValExpression(expr) => eval_expr::<R, UR, S>(expr, encoding, regs),
         RegisterRule::Architectural => {

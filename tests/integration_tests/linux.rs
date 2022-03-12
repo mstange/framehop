@@ -37,7 +37,7 @@ fn test_plt_cfa_expr() {
 
     // return address 0x123456 is at stack location 0x30.
     let stack = [1, 2, 3, 4, 5, 0xa, 0x123456, 6, 7, 8, 9];
-    let mut read_mem = |addr| stack.get((addr / 8) as usize).cloned().ok_or(());
+    let mut read_stack = |addr| stack.get((addr / 8) as usize).cloned().ok_or(());
 
     for (sp, rel_pc) in [
         (0x28, 0xc0db),
@@ -52,7 +52,7 @@ fn test_plt_cfa_expr() {
             FrameAddress::from_instruction_pointer(0x1000000 + rel_pc),
             &mut regs,
             &mut cache,
-            &mut read_mem,
+            &mut read_stack,
         );
         assert_eq!(res, Ok(Some(0x123456)));
         assert_eq!(regs.sp(), 0x38);
@@ -107,14 +107,14 @@ fn test_pthread_cfa_expr() {
     let mut stack = vec![0u64; 0x200 / 8];
     stack[0x120 / 8] = 0x1234;
     stack[0x128 / 8] = 0xbe7042;
-    let mut read_mem = |addr| stack.get((addr / 8) as usize).cloned().ok_or(());
+    let mut read_stack = |addr| stack.get((addr / 8) as usize).cloned().ok_or(());
     let mut regs = UnwindRegsX86_64::new(0x7f54b14fc000 + 0x9431, 0x10, 0x120);
 
     let res = unwinder.unwind_frame(
         FrameAddress::from_instruction_pointer(0x7f54b14fc000 + 0x9431),
         &mut regs,
         &mut cache,
-        &mut read_mem,
+        &mut read_stack,
     );
     assert_eq!(res, Ok(Some(0x7f54b14fc000 + 0x9436)));
     assert_eq!(regs.sp(), 0x10);
@@ -124,7 +124,7 @@ fn test_pthread_cfa_expr() {
         FrameAddress::from_return_address(0x7f54b14fc000 + 0x9436).unwrap(),
         &mut regs,
         &mut cache,
-        &mut read_mem,
+        &mut read_stack,
     );
     assert_eq!(res, Ok(Some(0x7f54b14fc000 + 0x8c2c)));
     assert_eq!(regs.sp(), 0x90);
@@ -136,7 +136,7 @@ fn test_pthread_cfa_expr() {
         FrameAddress::from_return_address(0x7f54b14fc000 + 0x8c2c).unwrap(),
         &mut regs,
         &mut cache,
-        &mut read_mem,
+        &mut read_stack,
     );
     assert_eq!(res, Ok(Some(0xbe7042)));
     assert_eq!(regs.sp(), 0x130);

@@ -28,7 +28,7 @@ impl DwarfUnwinding for ArchX86_64 {
         encoding: Encoding,
         regs: &mut Self::UnwindRegs,
         address: FrameAddress,
-        read_mem: &mut F,
+        read_stack: &mut F,
     ) -> Result<UnwindResult<Self::UnwindRule>, DwarfUnwinderError>
     where
         F: FnMut(u64) -> Result<u64, ()>,
@@ -53,13 +53,13 @@ impl DwarfUnwinding for ArchX86_64 {
         let bp = regs.bp();
         let sp = regs.sp();
 
-        let new_bp = eval_register_rule::<R, F, _, S>(bp_rule, cfa, encoding, bp, regs, read_mem)
+        let new_bp = eval_register_rule::<R, F, _, S>(bp_rule, cfa, encoding, bp, regs, read_stack)
             .unwrap_or(bp);
 
         let return_address =
-            match eval_register_rule::<R, F, _, S>(ra_rule, cfa, encoding, ip, regs, read_mem) {
+            match eval_register_rule::<R, F, _, S>(ra_rule, cfa, encoding, ip, regs, read_stack) {
                 Some(ra) => ra,
-                None => read_mem(cfa - 8)
+                None => read_stack(cfa - 8)
                     .map_err(|_| DwarfUnwinderError::CouldNotRecoverReturnAddress)?,
             };
 

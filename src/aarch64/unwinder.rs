@@ -42,11 +42,11 @@ impl<D: Deref<Target = [u8]>, P: AllocationPolicy<D>> Unwinder for UnwinderAarch
         address: FrameAddress,
         regs: &mut UnwindRegsAarch64,
         cache: &mut CacheAarch64<D, P>,
-        read_mem: &mut F,
+        read_stack: &mut F,
     ) -> Result<Option<u64>, Error>
     where
         F: FnMut(u64) -> Result<u64, ()>,
     {
-        self.0.unwind_frame(address, regs, &mut cache.0, read_mem)
+        self.0.unwind_frame(address, regs, &mut cache.0, read_stack)
     }
 }
