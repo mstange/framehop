@@ -2,10 +2,9 @@
 
 This is a library for stack frame unwinding. It is intended to be used in sampling profilers.
 
-It is very much a work in progress. At the moment, it can only unwind on macOS arm64, using __unwind_info and __eh_frame.
-I also intend to add support for macOS x86_64 and ELF x86 / x86_64 soon.
+It is very much a work in progress. At the moment, it can unwind on aarch64 and x86_64 on macOS / Linux / Android, using __unwind_info and DWARF CFI (from the eh_frame section).
 
-It would be nice if this library could be used inside the Gecko profiler at some point. For that we'll also want to add EHABI / EXIDX support (for Android 32 bit) and Windows support.
+It would be nice if this library could be used inside the Gecko profiler at some point. For that we'll also want to add x86 support (for 32 bit Linux), EHABI / EXIDX support (for 32 bit Android), and Windows support.
 
 ## License
 
