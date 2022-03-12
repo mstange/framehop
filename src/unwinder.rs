@@ -412,14 +412,6 @@ pub struct ModuleSectionAddresses {
     pub got: u64,
 }
 
-impl<D: Deref<Target = [u8]>> Debug for Module<D> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Module")
-            .field("address_range", &self.address_range)
-            .finish()
-    }
-}
-
 impl<D: Deref<Target = [u8]>> Module<D> {
     pub fn new(
         address_range: std::ops::Range<u64>,
