@@ -35,14 +35,11 @@ where
         eh_frame.as_ref().and_then(section_data),
         eh_frame_hdr.as_ref().and_then(section_data),
     ) {
-        (Some(unwind_info), Some(eh_frame), _) => {
+        (Some(unwind_info), eh_frame, _) => {
             framehop::ModuleUnwindData::CompactUnwindInfoAndEhFrame(
                 unwind_info,
-                Some(Arc::new(eh_frame)),
+                eh_frame.map(Arc::new),
             )
-        }
-        (Some(unwind_info), None, _) => {
-            framehop::ModuleUnwindData::CompactUnwindInfoAndEhFrame(unwind_info, None)
         }
         (None, Some(eh_frame), Some(eh_frame_hdr)) => {
             framehop::ModuleUnwindData::EhFrameHdrAndEhFrame(
