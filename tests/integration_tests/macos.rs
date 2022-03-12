@@ -2,6 +2,7 @@ use std::path::Path;
 
 use fallible_iterator::FallibleIterator;
 use framehop::aarch64::*;
+use framehop::x86_64::*;
 use framehop::FrameAddress;
 use framehop::Unwinder;
 
@@ -424,4 +425,205 @@ fn test_prologue_fp_2() {
     assert_eq!(res, Ok(Some(0x10030)));
     assert_eq!(regs.sp(), 0x80);
     assert_eq!(regs.fp(), 0x10029);
+}
+
+// This test fails at the moment.
+#[ignore]
+#[test]
+fn test_prologue_epilogue_x86_64_fp() {
+    let mut cache = CacheX86_64::<_>::new();
+    let mut unwinder = UnwinderX86_64::new();
+    common::add_object(
+        &mut unwinder,
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/macos/x86_64/fp/query-api"),
+        0,
+    );
+    // ...
+    // 6e63d  mov  rdi, qword [rbp+var_28]
+    // 6e641  call  __ZN5alloc5alloc18handle_alloc_error17hb4f515095d9ee4afE
+    // 6e646  nop  word [cs:rax+rax]
+    //
+    // __ZN5alloc7raw_vec19RawVec$LT$T$C$A$GT$16reserve_for_push17h20f84d285b129f0dE:
+    // 6e650  push  rbp
+    // 6e651  mov  rbp, rsp
+    // 6e654  push  r15
+    // 6e656  push  r14
+    // 6e658  push  rbx
+    // 6e659  sub  rsp, 0x18
+    // 6e65d  inc  rsi
+    // 6e660  je  loc_10006e6e7
+    // 6e666  mov  r14, rdi
+    // 6e669  mov  rcx, qword [rdi+8]
+    // ...
+    // 6e6c8  mov  rax, qword [rbp+var_28]
+    // 6e6cc  mov  qword [r14], rax
+    // 6e6cf  mov  qword [r14+8], r15
+    // 6e6d3  add  rsp, 0x18
+    // 6e6d7  pop  rbx
+    // 6e6d8  pop  r14
+    // 6e6da  pop  r15
+    // 6e6dc  pop  rbp
+    // 6e6dd  ret
+    // 6e6de  mov  rsi, qword [rbp+var_20]
+    // 6e6e2  test  rsi, rsi
+    // ...
+
+    let mut do_check = |pc, mut regs, stack: &[u64]| {
+        let res = unwinder.unwind_frame(
+            FrameAddress::from_instruction_pointer(pc),
+            &mut regs,
+            &mut cache,
+            &mut |addr| stack.get((addr / 8) as usize).cloned().ok_or(()),
+        );
+        // The result after unwinding should always be the same.
+        assert_eq!(res, Ok(Some(0x12345)));
+        assert_eq!(regs.sp(), 0x140);
+        assert_eq!(regs.bp(), 0x160);
+    };
+    // Start at the function start and then step towards the function body.
+    // At every address, the unwinding post state should be the same.
+    let mut s = make_stack(0x160);
+    s[0x138 / 8] = 0x12345; // put return address on the stack
+    let mut pc = 0x6e650;
+    do_check(pc, UnwindRegsX86_64::new(pc, 0x138, 0x160), &s);
+    pc = 0x6e651; // step over 6e650  push  rbp
+    s[0x130 / 8] = 0x160;
+    do_check(pc, UnwindRegsX86_64::new(pc, 0x130, 0x160), &s);
+    pc = 0x6e654; // step over 6e651  mov  rbp, rsp
+    do_check(pc, UnwindRegsX86_64::new(pc, 0x130, 0x130), &s);
+    pc = 0x6e656; // step over 6e654  push  r15
+    do_check(pc, UnwindRegsX86_64::new(pc, 0x128, 0x130), &s);
+    pc = 0x6e658; // step over 6e656  push  r14
+    do_check(pc, UnwindRegsX86_64::new(pc, 0x120, 0x130), &s);
+    pc = 0x6e659; // step over 6e658  push  rbx
+    do_check(pc, UnwindRegsX86_64::new(pc, 0x118, 0x130), &s);
+    pc = 0x6e65d; // step over 6e659  sub  rsp, 0x18
+    do_check(pc, UnwindRegsX86_64::new(pc, 0x100, 0x130), &s);
+    pc = 0x6e660; // step over 6e65d  inc  rsi
+    do_check(pc, UnwindRegsX86_64::new(pc, 0x100, 0x130), &s);
+    pc = 0x6e666; // step over 6e660  je  loc_10006e6e7
+    do_check(pc, UnwindRegsX86_64::new(pc, 0x100, 0x130), &s);
+    pc = 0x6e669; // step over 6e666  mov  r14, rdi
+    do_check(pc, UnwindRegsX86_64::new(pc, 0x100, 0x130), &s);
+
+    // We are now in the body of the function.
+
+    // Skip ahead, close to an epilogue.
+    pc = 0x6e6c8;
+    do_check(pc, UnwindRegsX86_64::new(pc, 0x100, 0x130), &s);
+    pc = 0x6e6cc; // step over 6e6c8  mov  rax, qword [rbp+var_28]
+    do_check(pc, UnwindRegsX86_64::new(pc, 0x100, 0x130), &s);
+    pc = 0x6e6cf; // step over 6e6cc  mov  qword [r14], rax
+    do_check(pc, UnwindRegsX86_64::new(pc, 0x100, 0x130), &s);
+    pc = 0x6e6d3; // step over 6e6cf  mov  qword [r14+8], r15
+    do_check(pc, UnwindRegsX86_64::new(pc, 0x100, 0x130), &s);
+    pc = 0x6e6d7; // step over 6e6d3  add  rsp, 0x18
+    do_check(pc, UnwindRegsX86_64::new(pc, 0x118, 0x130), &s);
+    pc = 0x6e6d8; // step over 6e6d7  pop  rbx
+    do_check(pc, UnwindRegsX86_64::new(pc, 0x120, 0x130), &s);
+    pc = 0x6e6da; // step over 6e6d8  pop  r14
+    do_check(pc, UnwindRegsX86_64::new(pc, 0x128, 0x130), &s);
+    pc = 0x6e6dc; // step over 6e6da  pop  r15
+    do_check(pc, UnwindRegsX86_64::new(pc, 0x130, 0x130), &s);
+    pc = 0x6e6dd; // step over 6e6dc  pop  rbp
+    do_check(pc, UnwindRegsX86_64::new(pc, 0x138, 0x160), &s);
+    pc = 0x6e6de; // step over 6e6dd  ret
+    // Now we are in a different basic block, back in the body of the function.
+    do_check(pc, UnwindRegsX86_64::new(pc, 0x100, 0x130), &s);
+    pc = 0x6e6e2; // step over 6e6de  mov  rsi, qword [rbp+var_20]
+    do_check(pc, UnwindRegsX86_64::new(pc, 0x100, 0x130), &s);
+}
+
+// This test fails at the moment.
+#[ignore]
+#[test]
+fn test_prologue_epilogue_tail_call_x86_64_nofp() {
+    let mut cache = CacheX86_64::<_>::new();
+    let mut unwinder = UnwinderX86_64::new();
+    common::add_object(
+        &mut unwinder,
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/macos/x86_64/nofp/libmozglue.dylib"),
+        0,
+    );
+
+    // sub_1a20:
+    // 1a20  push  r14
+    // 1a22  push  rbx
+    // 1a23  push  rax
+    // 1a24  mov  rbx, rsi
+    // 1a27  mov  r14, rdi
+    // 1a2a  mov  rdi, rsi
+    // 1a2d  call  _malloc_usable_size
+    // 1a32  test  rax, rax
+    // 1a35  je  loc_1a46
+    // 1a37  mov  rdi, rbx
+    // 1a3a  add  rsp, 0x8
+    // 1a3e  pop  rbx
+    // 1a3f  pop  r14
+    // 1a41  jmp  _free
+    // 1a46  mov  rdi, r14
+    // 1a49  mov  rsi, rbx
+    // 1a4c  add  rsp, 0x8
+    // 1a50  pop  rbx
+    // 1a51  pop  r14
+    // 1a53  jmp  sub_2af90+16
+    // 1a58  align  32
+
+    let mut do_check = |pc, mut regs, stack: &[u64]| {
+        let res = unwinder.unwind_frame(
+            FrameAddress::from_instruction_pointer(pc),
+            &mut regs,
+            &mut cache,
+            &mut |addr| stack.get((addr / 8) as usize).cloned().ok_or(()),
+        );
+        // The result after unwinding should always be the same.
+        assert_eq!(res, Ok(Some(0x12345)));
+        assert_eq!(regs.sp(), 0x100);
+        assert_eq!(regs.bp(), 0x120);
+    };
+    // Start at the function start and then step towards the function body.
+    // At every address, the unwinding post state should be the same.
+    let mut s = make_stack(0x160);
+    s[0xf8 / 8] = 0x12345; // put return address on the stack
+    let mut pc = 0x1a20;
+    do_check(pc, UnwindRegsX86_64::new(pc, 0xf8, 0x120), &s);
+    pc = 0x1a22; // step over 1a20  push  r14
+    do_check(pc, UnwindRegsX86_64::new(pc, 0xf0, 0x120), &s);
+    pc = 0x1a23; // step over 1a22  push  rbx
+    do_check(pc, UnwindRegsX86_64::new(pc, 0xe8, 0x120), &s);
+    pc = 0x1a24; // step over 1a23  push  rax
+    do_check(pc, UnwindRegsX86_64::new(pc, 0xe0, 0x120), &s);
+    pc = 0x1a27; // step over 1a24  mov  rbx, rsi
+    do_check(pc, UnwindRegsX86_64::new(pc, 0xe0, 0x120), &s);
+    pc = 0x1a2a; // step over 1a27  mov  r14, rdi
+    do_check(pc, UnwindRegsX86_64::new(pc, 0xe0, 0x120), &s);
+    pc = 0x1a2d; // step over 1a2a  mov  rdi, rsi
+    do_check(pc, UnwindRegsX86_64::new(pc, 0xe0, 0x120), &s);
+    pc = 0x1a32; // step over 1a2d  call  _malloc_usable_size
+    do_check(pc, UnwindRegsX86_64::new(pc, 0xe0, 0x120), &s);
+    pc = 0x1a35; // step over 1a32  test  rax, rax
+    do_check(pc, UnwindRegsX86_64::new(pc, 0xe0, 0x120), &s);
+    pc = 0x1a37; // step over 1a35  je  loc_1a46
+    do_check(pc, UnwindRegsX86_64::new(pc, 0xe0, 0x120), &s);
+    pc = 0x1a3a; // step over 1a37  mov  rdi, rbx
+    do_check(pc, UnwindRegsX86_64::new(pc, 0xe0, 0x120), &s);
+    pc = 0x1a3e; // step over 1a3a  add  rsp, 0x8
+    do_check(pc, UnwindRegsX86_64::new(pc, 0xe8, 0x120), &s);
+    pc = 0x1a3f; // step over 1a3e  pop  rbx
+    do_check(pc, UnwindRegsX86_64::new(pc, 0xf0, 0x120), &s);
+    pc = 0x1a41; // step over 1a3f  pop  r14
+    do_check(pc, UnwindRegsX86_64::new(pc, 0xf8, 0x120), &s);
+    pc = 0x1a46; // step over 1a41  jmp  _free
+    do_check(pc, UnwindRegsX86_64::new(pc, 0xe0, 0x120), &s);
+    pc = 0x1a49; // step over 1a46  mov  rdi, r14
+    do_check(pc, UnwindRegsX86_64::new(pc, 0xe0, 0x120), &s);
+    pc = 0x1a4c; // step over 1a49  mov  rsi, rbx
+    do_check(pc, UnwindRegsX86_64::new(pc, 0xe0, 0x120), &s);
+    pc = 0x1a50; // step over 1a4c  add  rsp, 0x8
+    do_check(pc, UnwindRegsX86_64::new(pc, 0xe8, 0x120), &s);
+    pc = 0x1a51; // step over 1a50  pop  rbx
+    do_check(pc, UnwindRegsX86_64::new(pc, 0xf0, 0x120), &s);
+    pc = 0x1a53; // step over 1a51  pop  r14
+    do_check(pc, UnwindRegsX86_64::new(pc, 0xf8, 0x120), &s);
+    // 1a53  jmp  sub_2af90+16
 }
