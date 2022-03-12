@@ -397,12 +397,8 @@ pub enum ModuleUnwindData<D: Deref<Target = [u8]>> {
 }
 
 pub struct Module<D: Deref<Target = [u8]>> {
-    #[allow(unused)]
-    name: String,
     address_range: Range<u64>,
     base_address: u64,
-    #[allow(unused)]
-    vm_addr_at_base_addr: u64,
     sections: ModuleSectionAddresses,
     unwind_data: ModuleUnwindData<D>,
     text_data: Option<D>,
@@ -419,7 +415,6 @@ pub struct ModuleSectionAddresses {
 impl<D: Deref<Target = [u8]>> Debug for Module<D> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Module")
-            .field("name", &self.name)
             .field("address_range", &self.address_range)
             .finish()
     }
@@ -427,19 +422,15 @@ impl<D: Deref<Target = [u8]>> Debug for Module<D> {
 
 impl<D: Deref<Target = [u8]>> Module<D> {
     pub fn new(
-        name: String,
         address_range: std::ops::Range<u64>,
         base_address: u64,
-        vm_addr_at_base_addr: u64,
         sections: ModuleSectionAddresses,
         unwind_data: ModuleUnwindData<D>,
         text_data: Option<D>,
     ) -> Self {
         Self {
-            name,
             address_range,
             base_address,
-            vm_addr_at_base_addr,
             sections,
             unwind_data,
             text_data,
