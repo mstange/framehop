@@ -26,7 +26,7 @@ pub fn unwind_rule_from_detected_prologue(
         if cursor >= 1 {
             // Detect push rXX with optional prefix
             let byte = slice_from_start[cursor - 1];
-            if (0x50..=0x57).contains(&byte) {
+            if byte & 0xf8 == 0x50 {
                 sp_offset_by_8 += 1;
                 cursor -= 1;
 
@@ -50,11 +50,11 @@ fn is_next_instruction_expected_in_prologue(bytes: &[u8]) -> bool {
     }
 
     // Detect push rXX
-    if (0x50..=0x57).contains(&bytes[0]) {
+    if bytes[0] & 0xf8 == 0x50 {
         return true;
     }
     // Detect push rXX with prefix
-    if bytes[0] & 0xfe == 0x40 && (0x50..=0x57).contains(&bytes[1]) {
+    if bytes[0] & 0xfe == 0x40 && bytes[1] & 0xf8 == 0x50 {
         return true;
     }
     // Detect sub rsp, 0xXX

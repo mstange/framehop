@@ -35,7 +35,7 @@ pub fn unwind_rule_from_detected_epilogue(
                 // Get the previous byte. We have no idea how long the previous instruction
                 // is, so we might be looking at a random last byte of a wider instruction.
                 // Let's just pray that this is not the case.
-                if (0x58..=0x5f).contains(potential_pop_byte) {
+                if potential_pop_byte & 0xf8 == 0x58 {
                     // Assuming we haven't just misinterpreted the last byte of a wider
                     // instruction, this is a `pop rXX`.
                     break;
@@ -57,7 +57,7 @@ pub fn unwind_rule_from_detected_epilogue(
             continue;
         }
         // Detect pop rXX with prefix
-        if bytes.len() >= 2 && bytes[0] & 0xfe == 0x40 && (0x58..=0x5f).contains(&bytes[1]) {
+        if bytes.len() >= 2 && bytes[0] & 0xfe == 0x40 && bytes[1] & 0xf8 == 0x58 {
             sp_offset_by_8 += 1;
             bytes = &bytes[2..];
             continue;
