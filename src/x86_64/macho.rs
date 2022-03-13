@@ -1,9 +1,7 @@
 use super::arch::ArchX86_64;
 use super::unwind_rule::UnwindRuleX86_64;
-use crate::macho::{
-    CompactUnwindInfoUnwinderError, CompactUnwindInfoUnwinding, CuiUnwindResult, CuiUnwindResult2,
-    FunctionInfo,
-};
+use crate::instruction_analysis::InstructionAnalysis;
+use crate::macho::{CompactUnwindInfoUnwinderError, CompactUnwindInfoUnwinding, CuiUnwindResult};
 use macho_unwind_info::opcodes::{OpcodeX86_64, RegisterNameX86_64};
 use macho_unwind_info::Function;
 
@@ -11,31 +9,41 @@ impl CompactUnwindInfoUnwinding for ArchX86_64 {
     fn unwind_frame(
         function: Function,
         is_first_frame: bool,
+        address_offset_within_function: usize,
+        function_bytes: Option<&[u8]>,
     ) -> Result<CuiUnwindResult<UnwindRuleX86_64>, CompactUnwindInfoUnwinderError> {
         let opcode = OpcodeX86_64::parse(function.opcode);
+        if is_first_frame {
+            if opcode == OpcodeX86_64::Null {
+                return Ok(CuiUnwindResult::ExecRule(UnwindRuleX86_64::JustReturn));
+            }
+            // The pc might be in a prologue or an epilogue. The compact unwind info format ignores
+            // prologues and epilogues; the opcodes only describe the function body. So we do some
+            // instruction analysis to check for prologues and epilogues.
+            if let Some(function_bytes) = function_bytes {
+                if let Some(rule) = Self::rule_from_instruction_analysis(
+                    function_bytes,
+                    address_offset_within_function,
+                ) {
+                    // We are inside a prologue / epilogue. Ignore the opcode and use the rule from
+                    // instruction analysis.
+                    return Ok(CuiUnwindResult::ExecRule(rule));
+                }
+            }
+        }
+
+        // At this point we know with high certainty that we are in a function body.
         let r = match opcode {
             OpcodeX86_64::Null => {
-                if is_first_frame {
-                    CuiUnwindResult::exec_rule(UnwindRuleX86_64::JustReturn)
-                } else {
-                    return Err(CompactUnwindInfoUnwinderError::FunctionHasNoInfo);
-                }
+                return Err(CompactUnwindInfoUnwinderError::FunctionHasNoInfo);
             }
             OpcodeX86_64::FramelessImmediate {
                 stack_size_in_bytes,
                 saved_regs,
             } => {
                 if stack_size_in_bytes == 8 {
-                    CuiUnwindResult::exec_rule(UnwindRuleX86_64::JustReturn)
+                    CuiUnwindResult::ExecRule(UnwindRuleX86_64::JustReturn)
                 } else {
-                    let function_info = if is_first_frame {
-                        Some(FunctionInfo {
-                            function_start: function.start_address,
-                            function_end: function.end_address,
-                        })
-                    } else {
-                        None
-                    };
                     let bp_positon_from_outside = saved_regs
                         .iter()
                         .rev()
@@ -49,53 +57,23 @@ impl CompactUnwindInfoUnwinding for ArchX86_64 {
                                 i16::try_from(bp_offset_from_sp / 8).map_err(|_| {
                                     CompactUnwindInfoUnwinderError::BpOffsetDoesNotFit
                                 })?;
-                            CuiUnwindResult {
-                                result: CuiUnwindResult2::ExecRule(
-                                    UnwindRuleX86_64::OffsetSpAndRestoreBp {
-                                        sp_offset_by_8: stack_size_in_bytes / 8,
-                                        bp_storage_offset_from_sp_by_8,
-                                    },
-                                ),
-                                function_info,
-                            }
-                        }
-                        None => CuiUnwindResult {
-                            result: CuiUnwindResult2::ExecRule(UnwindRuleX86_64::OffsetSp {
+                            CuiUnwindResult::ExecRule(UnwindRuleX86_64::OffsetSpAndRestoreBp {
                                 sp_offset_by_8: stack_size_in_bytes / 8,
-                            }),
-                            function_info,
-                        },
+                                bp_storage_offset_from_sp_by_8,
+                            })
+                        }
+                        None => CuiUnwindResult::ExecRule(UnwindRuleX86_64::OffsetSp {
+                            sp_offset_by_8: stack_size_in_bytes / 8,
+                        }),
                     }
                 }
             }
             OpcodeX86_64::FramelessIndirect { .. } => {
                 return Err(CompactUnwindInfoUnwinderError::CantHandleFramelessIndirect)
             }
-            OpcodeX86_64::Dwarf { eh_frame_fde } => {
-                if is_first_frame {
-                    CuiUnwindResult::analyze_leaf_and_use_dwarf(
-                        FunctionInfo {
-                            function_start: function.start_address,
-                            function_end: function.end_address,
-                        },
-                        eh_frame_fde,
-                    )
-                } else {
-                    CuiUnwindResult::use_dwarf(eh_frame_fde)
-                }
-            }
+            OpcodeX86_64::Dwarf { eh_frame_fde } => CuiUnwindResult::NeedDwarf(eh_frame_fde),
             OpcodeX86_64::FrameBased { .. } => {
-                if is_first_frame {
-                    CuiUnwindResult::analyze_leaf_and_exec_rule(
-                        FunctionInfo {
-                            function_start: function.start_address,
-                            function_end: function.end_address,
-                        },
-                        UnwindRuleX86_64::UseFramePointer,
-                    )
-                } else {
-                    CuiUnwindResult::exec_rule(UnwindRuleX86_64::UseFramePointer)
-                }
+                CuiUnwindResult::ExecRule(UnwindRuleX86_64::UseFramePointer)
             }
             OpcodeX86_64::UnrecognizedKind(kind) => {
                 return Err(CompactUnwindInfoUnwinderError::BadOpcodeKind(kind))

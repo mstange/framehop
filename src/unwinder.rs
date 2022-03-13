@@ -8,7 +8,7 @@ use crate::dwarf::{DwarfUnwinder, DwarfUnwinding};
 use crate::error::{Error, UnwinderError};
 use crate::instruction_analysis::InstructionAnalysis;
 use crate::macho::{
-    CompactUnwindInfoUnwinder, CompactUnwindInfoUnwinding, CuiUnwindResult2, FunctionInfo,
+    CompactUnwindInfoUnwinder, CompactUnwindInfoUnwinding, CuiUnwindResult, TextBytes,
 };
 use crate::rule_cache::CacheResult;
 use crate::unwind_result::UnwindResult;
@@ -152,15 +152,6 @@ impl<
     fn default() -> Self {
         Self::new()
     }
-}
-
-#[derive(Debug)]
-enum InstructionAnalysisError {
-    NoModuleTextBytes,
-    ModuleTextBeforeBaseAddress,
-    TextOffsetFromBaseAddressTooLarge,
-    TextSectionTooSmall,
-    FunctionAddressBeforeTextSection,
 }
 
 impl<
@@ -307,57 +298,6 @@ impl<
         self.with_cache(address, regs, cache, read_stack, Self::unwind_frame_impl)
     }
 
-    /// Detect prologues and epilogues.
-    fn rule_from_instruction_analysis(
-        function_info: &FunctionInfo,
-        rel_pc: u32,
-        module: &Module<D>,
-    ) -> Result<Option<A::UnwindRule>, InstructionAnalysisError> {
-        let text_data = module
-            .text_data
-            .as_deref()
-            .ok_or(InstructionAnalysisError::NoModuleTextBytes)?;
-        let text_section_offset_from_base = u32::try_from(
-            module
-                .sections
-                .text
-                .checked_sub(module.base_address)
-                .ok_or(InstructionAnalysisError::ModuleTextBeforeBaseAddress)?,
-        )
-        .map_err(|_| InstructionAnalysisError::TextOffsetFromBaseAddressTooLarge)?;
-        let pc_offset_to_function = usize::try_from(rel_pc - function_info.function_start).unwrap();
-        let function_start_relative_to_text = usize::try_from(
-            function_info
-                .function_start
-                .checked_sub(text_section_offset_from_base)
-                .ok_or(InstructionAnalysisError::FunctionAddressBeforeTextSection)?,
-        )
-        .unwrap();
-        let function_end_relative_to_text = usize::try_from(
-            function_info
-                .function_end
-                .checked_sub(text_section_offset_from_base)
-                .ok_or(InstructionAnalysisError::FunctionAddressBeforeTextSection)?,
-        )
-        .unwrap();
-        let function_text = text_data
-            .get(function_start_relative_to_text..function_end_relative_to_text)
-            .ok_or(InstructionAnalysisError::TextSectionTooSmall)?;
-        if let Some(rule) = <A as InstructionAnalysis>::rule_from_prologue_analysis(
-            function_text,
-            pc_offset_to_function,
-        ) {
-            return Ok(Some(rule));
-        }
-        if let Some(rule) = <A as InstructionAnalysis>::rule_from_epilogue_analysis(
-            function_text,
-            pc_offset_to_function,
-        ) {
-            return Ok(Some(rule));
-        }
-        Ok(None)
-    }
-
     fn unwind_frame_impl<F>(
         module: &Module<D>,
         address: FrameAddress,
@@ -372,22 +312,20 @@ impl<
         let unwind_result = match &module.unwind_data {
             ModuleUnwindData::CompactUnwindInfoAndEhFrame(unwind_data, eh_frame_data) => {
                 // eprintln!("unwinding with cui and eh_frame in module {}", module.name);
-                let mut unwinder = CompactUnwindInfoUnwinder::<A>::new(&unwind_data[..]);
+                let text_bytes = module.text_data.as_deref().and_then(|data| {
+                    let offset_from_base =
+                        u32::try_from(module.sections.text.checked_sub(module.base_address)?)
+                            .ok()?;
+                    Some(TextBytes::new(offset_from_base, data))
+                });
+                let mut unwinder =
+                    CompactUnwindInfoUnwinder::<A>::new(&unwind_data[..], text_bytes);
                 let is_first_frame = !address.is_return_address();
 
                 let unwind_result = unwinder.unwind_frame(rel_lookup_address, is_first_frame)?;
-                if let Some(function_info) = unwind_result.function_info {
-                    if let Ok(Some(rule)) = Self::rule_from_instruction_analysis(
-                        &function_info,
-                        rel_lookup_address,
-                        module,
-                    ) {
-                        return Ok(UnwindResult::ExecRule(rule));
-                    }
-                }
-                match unwind_result.result {
-                    CuiUnwindResult2::ExecRule(rule) => UnwindResult::ExecRule(rule),
-                    CuiUnwindResult2::NeedDwarf(fde_offset) => {
+                match unwind_result {
+                    CuiUnwindResult::ExecRule(rule) => UnwindResult::ExecRule(rule),
+                    CuiUnwindResult::NeedDwarf(fde_offset) => {
                         let eh_frame_data = match eh_frame_data {
                             Some(data) => ArcData(data.clone()),
                             None => return Err(UnwinderError::NoDwarfData),

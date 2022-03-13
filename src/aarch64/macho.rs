@@ -1,8 +1,7 @@
 use super::arch::ArchAarch64;
 use super::unwind_rule::UnwindRuleAarch64;
-use crate::macho::{
-    CompactUnwindInfoUnwinderError, CompactUnwindInfoUnwinding, CuiUnwindResult, FunctionInfo,
-};
+use crate::instruction_analysis::InstructionAnalysis;
+use crate::macho::{CompactUnwindInfoUnwinderError, CompactUnwindInfoUnwinding, CuiUnwindResult};
 use macho_unwind_info::opcodes::OpcodeArm64;
 use macho_unwind_info::Function;
 
@@ -10,34 +9,42 @@ impl CompactUnwindInfoUnwinding for ArchAarch64 {
     fn unwind_frame(
         function: Function,
         is_first_frame: bool,
+        address_offset_within_function: usize,
+        function_bytes: Option<&[u8]>,
     ) -> Result<CuiUnwindResult<UnwindRuleAarch64>, CompactUnwindInfoUnwinderError> {
         let opcode = OpcodeArm64::parse(function.opcode);
+        if is_first_frame {
+            if opcode == OpcodeArm64::Null {
+                return Ok(CuiUnwindResult::ExecRule(UnwindRuleAarch64::NoOp));
+            }
+            // The pc might be in a prologue or an epilogue. The compact unwind info format ignores
+            // prologues and epilogues; the opcodes only describe the function body. So we do some
+            // instruction analysis to check for prologues and epilogues.
+            if let Some(function_bytes) = function_bytes {
+                if let Some(rule) = Self::rule_from_instruction_analysis(
+                    function_bytes,
+                    address_offset_within_function,
+                ) {
+                    // We are inside a prologue / epilogue. Ignore the opcode and use the rule from
+                    // instruction analysis.
+                    return Ok(CuiUnwindResult::ExecRule(rule));
+                }
+            }
+        }
+
+        // At this point we know with high certainty that we are in a function body.
         let r = match opcode {
             OpcodeArm64::Null => {
-                if is_first_frame {
-                    CuiUnwindResult::exec_rule(UnwindRuleAarch64::NoOp)
-                } else {
-                    return Err(CompactUnwindInfoUnwinderError::FunctionHasNoInfo);
-                }
+                return Err(CompactUnwindInfoUnwinderError::FunctionHasNoInfo);
             }
             OpcodeArm64::Frameless {
                 stack_size_in_bytes,
             } => {
                 if is_first_frame {
                     if stack_size_in_bytes == 0 {
-                        CuiUnwindResult::exec_rule(UnwindRuleAarch64::NoOp)
-                    } else if is_first_frame {
-                        CuiUnwindResult::analyze_leaf_and_exec_rule(
-                            FunctionInfo {
-                                function_start: function.start_address,
-                                function_end: function.end_address,
-                            },
-                            UnwindRuleAarch64::OffsetSp {
-                                sp_offset_by_16: stack_size_in_bytes / 16,
-                            },
-                        )
+                        CuiUnwindResult::ExecRule(UnwindRuleAarch64::NoOp)
                     } else {
-                        CuiUnwindResult::exec_rule(UnwindRuleAarch64::OffsetSp {
+                        CuiUnwindResult::ExecRule(UnwindRuleAarch64::OffsetSp {
                             sp_offset_by_16: stack_size_in_bytes / 16,
                         })
                     }
@@ -45,31 +52,9 @@ impl CompactUnwindInfoUnwinding for ArchAarch64 {
                     return Err(CompactUnwindInfoUnwinderError::CallerCannotBeFrameless);
                 }
             }
-            OpcodeArm64::Dwarf { eh_frame_fde } => {
-                if is_first_frame {
-                    CuiUnwindResult::analyze_leaf_and_use_dwarf(
-                        FunctionInfo {
-                            function_start: function.start_address,
-                            function_end: function.end_address,
-                        },
-                        eh_frame_fde,
-                    )
-                } else {
-                    CuiUnwindResult::use_dwarf(eh_frame_fde)
-                }
-            }
+            OpcodeArm64::Dwarf { eh_frame_fde } => CuiUnwindResult::NeedDwarf(eh_frame_fde),
             OpcodeArm64::FrameBased { .. } => {
-                if is_first_frame {
-                    CuiUnwindResult::analyze_leaf_and_exec_rule(
-                        FunctionInfo {
-                            function_start: function.start_address,
-                            function_end: function.end_address,
-                        },
-                        UnwindRuleAarch64::UseFramePointer,
-                    )
-                } else {
-                    CuiUnwindResult::exec_rule(UnwindRuleAarch64::UseFramePointer)
-                }
+                CuiUnwindResult::ExecRule(UnwindRuleAarch64::UseFramePointer)
             }
             OpcodeArm64::UnrecognizedKind(kind) => {
                 return Err(CompactUnwindInfoUnwinderError::BadOpcodeKind(kind))
