@@ -397,6 +397,8 @@ pub enum ModuleUnwindData<D: Deref<Target = [u8]>> {
 }
 
 pub struct Module<D: Deref<Target = [u8]>> {
+    #[allow(unused)]
+    name: String,
     address_range: Range<u64>,
     base_address: u64,
     sections: ModuleSectionAddresses,
@@ -414,6 +416,7 @@ pub struct ModuleSectionAddresses {
 
 impl<D: Deref<Target = [u8]>> Module<D> {
     pub fn new(
+        name: String,
         address_range: std::ops::Range<u64>,
         base_address: u64,
         sections: ModuleSectionAddresses,
@@ -421,6 +424,7 @@ impl<D: Deref<Target = [u8]>> Module<D> {
         text_data: Option<D>,
     ) -> Self {
         Self {
+            name,
             address_range,
             base_address,
             sections,

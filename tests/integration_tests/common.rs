@@ -54,6 +54,7 @@ where
     let text_data = text.as_ref().and_then(section_data);
 
     let module = framehop::Module::new(
+        objpath.to_string_lossy().to_string(),
         base_address..(base_address + buf.len() as u64),
         base_address,
         ModuleSectionAddresses {
