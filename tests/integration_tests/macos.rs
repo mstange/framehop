@@ -774,3 +774,70 @@ fn test_frameless_indirect_x86_64_nofp() {
     assert_eq!(regs.sp(), 0x1000);
     assert_eq!(regs.bp(), 0x1020);
 }
+
+#[test]
+fn test_uncovered_x86_64_fp() {
+    let mut cache = CacheX86_64::<_>::new();
+    let mut unwinder = UnwinderX86_64::new();
+    common::add_object(
+        &mut unwinder,
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/macos/x86_64/fp/perfrecord"),
+        0,
+    );
+
+    // This test checks what happens if the compiler emits "null" opcodes for perfectly normal
+    // functions that just need frame pointer unwinding.
+
+    // __unwind_info:
+    // ...
+    // 11f710: CFA=reg6+16: reg6=[CFA-16], reg16=[CFA-8]
+    // 11f820: (uncovered)
+    // 11fbd0: CFA=reg6+16: reg6=[CFA-16], reg16=[CFA-8], reg3=[CFA-40], reg14=[CFA-32], reg15=[CFA-24]
+    // ...
+
+    // framehop::code_address::FrameAddress::address::h9184267f7d47b8bc
+    // 11f8d0  push  rbp
+    // 11f8d1  mov  rbp, rsp
+    // 11f8d4  mov  rax, rsi
+    // ...
+    // framehop::x86_64::instruction_analysis::epilogue::unwind_rule_from_detected_epilogue::had38cc825241f7e6
+    // 11f910  push  rbp
+    // 11f911  mov  rbp, rsp
+    // 11f914  push  r15
+    // 11f916  push  r14
+    // 11f918  push  rbx
+    // 11f919  push  rax
+    // 11f91a  sub  rsi, rdx
+    // 11f91d  jb  loc_10011fa47
+    // 11f923  mov  r8w, 0x4
+    // 11f928  je  loc_10011fa0b
+    // 11f92e  lea  rax, qword [rdi+rdx]
+    // 11f932  mov  r9w, 0x1
+    // ...
+
+    let mut s = make_stack(0x160);
+    s[0xf8 / 8] = 0x12345; // put return address on the stack
+    s[0xf0 / 8] = 0x120; // put caller bp on the stack
+    let mut regs = UnwindRegsX86_64::new(0x11f92e, 0xd0, 0xf0);
+    let res = unwinder.unwind_frame(
+        FrameAddress::InstructionPointer(0x11f92e),
+        &mut regs,
+        &mut cache,
+        &mut |addr| s.get((addr / 8) as usize).cloned().ok_or(()),
+    );
+    assert_eq!(res, Ok(Some(0x12345)));
+    assert_eq!(regs.sp(), 0x100);
+    assert_eq!(regs.bp(), 0x120);
+
+    // Check a spot in the prologue as well.
+    let mut regs = UnwindRegsX86_64::new(0x11f911, 0xf0, 0x120);
+    let res = unwinder.unwind_frame(
+        FrameAddress::InstructionPointer(0x11f911),
+        &mut regs,
+        &mut cache,
+        &mut |addr| s.get((addr / 8) as usize).cloned().ok_or(()),
+    );
+    assert_eq!(res, Ok(Some(0x12345)));
+    assert_eq!(regs.sp(), 0x100);
+    assert_eq!(regs.bp(), 0x120);
+}

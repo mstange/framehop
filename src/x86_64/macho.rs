@@ -14,9 +14,6 @@ impl CompactUnwindInfoUnwinding for ArchX86_64 {
     ) -> Result<CuiUnwindResult<UnwindRuleX86_64>, CompactUnwindInfoUnwinderError> {
         let opcode = OpcodeX86_64::parse(function.opcode);
         if is_first_frame {
-            if opcode == OpcodeX86_64::Null {
-                return Ok(CuiUnwindResult::ExecRule(UnwindRuleX86_64::JustReturn));
-            }
             // The pc might be in a prologue or an epilogue. The compact unwind info format ignores
             // prologues and epilogues; the opcodes only describe the function body. So we do some
             // instruction analysis to check for prologues and epilogues.
@@ -29,6 +26,15 @@ impl CompactUnwindInfoUnwinding for ArchX86_64 {
                     // instruction analysis.
                     return Ok(CuiUnwindResult::ExecRule(rule));
                 }
+                if opcode == OpcodeX86_64::Null
+                    && function_bytes.starts_with(&[0x55, 0x48, 0x89, 0xe5])
+                {
+                    // The function is uncovered but it has a `push rbp; mov rbp, rsp` prologue.
+                    return Ok(CuiUnwindResult::ExecRule(UnwindRuleX86_64::UseFramePointer));
+                }
+            }
+            if opcode == OpcodeX86_64::Null {
+                return Ok(CuiUnwindResult::ExecRule(UnwindRuleX86_64::JustReturn));
             }
         }
 
