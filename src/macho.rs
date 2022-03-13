@@ -31,7 +31,7 @@ pub enum CompactUnwindInfoUnwinderError {
     CantHandleFramelessIndirect,
 
     #[error("Encountered invalid unwind entry")]
-    InvalidFramelessImmediate,
+    InvalidFrameless,
 }
 
 #[derive(Clone, Debug)]

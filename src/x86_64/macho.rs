@@ -100,8 +100,8 @@ impl CompactUnwindInfoUnwinding for ArchX86_64 {
             OpcodeX86_64::UnrecognizedKind(kind) => {
                 return Err(CompactUnwindInfoUnwinderError::BadOpcodeKind(kind))
             }
-            OpcodeX86_64::InvalidFramelessImmediate => {
-                return Err(CompactUnwindInfoUnwinderError::InvalidFramelessImmediate)
+            OpcodeX86_64::InvalidFrameless => {
+                return Err(CompactUnwindInfoUnwinderError::InvalidFrameless)
             }
         };
         Ok(r)
