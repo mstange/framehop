@@ -741,3 +741,36 @@ fn test_prologue_epilogue_rbp_x86_64_nofp() {
     do_check(pc, UnwindRegsX86_64::new(pc, 0xc0, 0x999), &s);
     // e078  lea  rdi, qword [byte_772b0+8]
 }
+
+#[test]
+fn test_frameless_indirect_x86_64_nofp() {
+    let mut cache = CacheX86_64::<_>::new();
+    let mut unwinder = UnwinderX86_64::new();
+    common::add_object(
+        &mut unwinder,
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/macos/x86_64/nofp/firefox-esr-78"),
+        0,
+    );
+
+    // ...
+    // 1e45  call  sub_1000017f0
+    // 1e4a  movq  %r15, %rdi
+    // 1e4d  movl  $0x109, %esi
+    // 1e52  call  imp___stubs__dlopen
+    // 1e57  testq  %rax, %rax
+    // ...
+
+    let mut s = make_stack(0x1060);
+    s[0xff8 / 8] = 0x12345; // put return address on the stack
+    s[0xff0 / 8] = 0x1020; // put caller bp on the stack
+    let mut regs = UnwindRegsX86_64::new(0x1e4a, 0x3a0, 0x6543);
+    let res = unwinder.unwind_frame(
+        FrameAddress::from_return_address(0x1e4a).unwrap(),
+        &mut regs,
+        &mut cache,
+        &mut |addr| s.get((addr / 8) as usize).cloned().ok_or(()),
+    );
+    assert_eq!(res, Ok(Some(0x12345)));
+    assert_eq!(regs.sp(), 0x1000);
+    assert_eq!(regs.bp(), 0x1020);
+}

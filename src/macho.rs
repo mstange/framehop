@@ -27,8 +27,17 @@ pub enum CompactUnwindInfoUnwinderError {
     #[error("DWARF unwinding failed: {0}")]
     BadDwarfUnwinding(#[from] DwarfUnwinderError),
 
-    #[error("Encountered frameless function with indirect stack offset, TODO")]
-    CantHandleFramelessIndirect,
+    #[error("Don't have the function bytes to look up the offset for frameless function with indirect stack offset")]
+    NoTextBytesToLookUpIndirectStackOffset,
+
+    #[error("Stack offset not found inside the bounds of the text bytes")]
+    IndirectStackOffsetOutOfBounds,
+
+    #[error("Stack adjust addition overflowed")]
+    StackAdjustOverflow,
+
+    #[error("Stack size does not fit into the rule representation")]
+    StackSizeDoesNotFit,
 
     #[error("Encountered invalid unwind entry")]
     InvalidFrameless,
