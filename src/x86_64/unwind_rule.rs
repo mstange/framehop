@@ -98,19 +98,28 @@ impl UnwindRule for UnwindRuleX86_64 {
                 // and rbp is a *const CallFrameInfo.
                 let sp = regs.sp();
                 let bp = regs.bp();
-                let new_sp = bp + 16;
-                let new_bp = read_stack(bp).map_err(|_| Error::CouldNotReadStack(bp))?;
-                if new_bp == 0 {
+                if bp == 0 {
                     return Ok(None);
                 }
-                if new_bp <= bp || new_sp <= sp {
+                let new_sp = bp + 16;
+                if new_sp <= sp {
                     return Err(Error::FramepointerUnwindingMovedBackwards);
                 }
+                let new_bp = read_stack(bp).map_err(|_| Error::CouldNotReadStack(bp))?;
+                // new_bp is the caller's bp. If the caller uses frame pointers, then bp should be
+                // a valid frame pointer and we could do a coherency check on new_bp to make sure
+                // it's moving in the right direction. But if the caller is using bp as a general
+                // purpose register, then any value (including zero) would be a valid value.
+                // At this point we don't know how the caller uses bp, so we leave new_bp unchecked.
+
                 (new_sp, new_bp)
             }
         };
         let return_address =
             read_stack(new_sp - 8).map_err(|_| Error::CouldNotReadStack(new_sp - 8))?;
+        if return_address == 0 {
+            return Ok(None);
+        }
         regs.set_ip(return_address);
         regs.set_sp(new_sp);
         regs.set_bp(new_bp);
