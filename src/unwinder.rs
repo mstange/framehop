@@ -154,8 +154,13 @@ impl<
     }
 }
 
+#[derive(Debug)]
 enum InstructionAnalysisError {
     NoModuleTextBytes,
+    ModuleTextBeforeBaseAddress,
+    TextOffsetFromBaseAddressTooLarge,
+    TextSectionTooSmall,
+    FunctionAddressBeforeTextSection,
 }
 
 impl<
@@ -204,26 +209,32 @@ impl<
         };
     }
 
-    fn find_module_for_address(&self, pc: u64) -> Option<usize> {
-        let module_index = match self
+    fn find_module_for_address(&self, address: u64) -> Option<(usize, u32)> {
+        let (module_index, module) = match self
             .modules
-            .binary_search_by_key(&pc, |m| m.address_range.start)
+            .binary_search_by_key(&address, |m| m.address_range.start)
         {
-            Ok(i) => i,
+            Ok(i) => (i, &self.modules[i]),
             Err(insertion_index) => {
                 if insertion_index == 0 {
-                    // pc is before first known module
+                    // address is before first known module
                     return None;
                 }
                 let i = insertion_index - 1;
-                if self.modules[i].address_range.end <= pc {
-                    // pc is after this module
+                let module = &self.modules[i];
+                if module.address_range.end <= address {
+                    // address is after this module
                     return None;
                 }
-                i
+                (i, module)
             }
         };
-        Some(module_index)
+        if address < module.base_address {
+            // Invalid base address
+            return None;
+        }
+        let relative_address = u32::try_from(address - module.base_address).ok()?;
+        Some((module_index, relative_address))
     }
 
     fn with_cache<F, G>(
@@ -239,6 +250,7 @@ impl<
         G: FnOnce(
             &Module<D>,
             FrameAddress,
+            u32,
             &mut A::UnwindRegs,
             &mut Cache<D, A::UnwindRule, P>,
             &mut F,
@@ -257,9 +269,16 @@ impl<
 
         let unwind_rule = match self.find_module_for_address(lookup_address) {
             None => A::UnwindRule::fallback_rule(),
-            Some(module_index) => {
+            Some((module_index, relative_lookup_address)) => {
                 let module = &self.modules[module_index];
-                match callback(module, address, regs, cache, read_stack) {
+                match callback(
+                    module,
+                    address,
+                    relative_lookup_address,
+                    regs,
+                    cache,
+                    read_stack,
+                ) {
                     Ok(UnwindResult::ExecRule(rule)) => rule,
                     Ok(UnwindResult::Uncacheable(return_address)) => {
                         return Ok(Some(return_address))
@@ -291,29 +310,48 @@ impl<
     /// Detect prologues and epilogues.
     fn rule_from_instruction_analysis(
         function_info: &FunctionInfo,
-        pc: u64,
+        rel_pc: u32,
         module: &Module<D>,
     ) -> Result<Option<A::UnwindRule>, InstructionAnalysisError> {
         let text_data = module
             .text_data
             .as_deref()
             .ok_or(InstructionAnalysisError::NoModuleTextBytes)?;
-        // TODO: use checked addition / subtraction / casts
-        let absolute_function_start = module.base_address + u64::from(function_info.function_start);
-        let function_start_relative_to_text = absolute_function_start - module.sections.text;
-        let function_size = function_info.function_end - function_info.function_start;
-        let function_text =
-            &text_data[function_start_relative_to_text as usize..][..function_size as usize];
-        let function_relative_address = (pc - absolute_function_start) as usize;
+        let text_section_offset_from_base = u32::try_from(
+            module
+                .sections
+                .text
+                .checked_sub(module.base_address)
+                .ok_or(InstructionAnalysisError::ModuleTextBeforeBaseAddress)?,
+        )
+        .map_err(|_| InstructionAnalysisError::TextOffsetFromBaseAddressTooLarge)?;
+        let pc_offset_to_function = usize::try_from(rel_pc - function_info.function_start).unwrap();
+        let function_start_relative_to_text = usize::try_from(
+            function_info
+                .function_start
+                .checked_sub(text_section_offset_from_base)
+                .ok_or(InstructionAnalysisError::FunctionAddressBeforeTextSection)?,
+        )
+        .unwrap();
+        let function_end_relative_to_text = usize::try_from(
+            function_info
+                .function_end
+                .checked_sub(text_section_offset_from_base)
+                .ok_or(InstructionAnalysisError::FunctionAddressBeforeTextSection)?,
+        )
+        .unwrap();
+        let function_text = text_data
+            .get(function_start_relative_to_text..function_end_relative_to_text)
+            .ok_or(InstructionAnalysisError::TextSectionTooSmall)?;
         if let Some(rule) = <A as InstructionAnalysis>::rule_from_prologue_analysis(
             function_text,
-            function_relative_address,
+            pc_offset_to_function,
         ) {
             return Ok(Some(rule));
         }
         if let Some(rule) = <A as InstructionAnalysis>::rule_from_epilogue_analysis(
             function_text,
-            function_relative_address,
+            pc_offset_to_function,
         ) {
             return Ok(Some(rule));
         }
@@ -323,6 +361,7 @@ impl<
     fn unwind_frame_impl<F>(
         module: &Module<D>,
         address: FrameAddress,
+        rel_lookup_address: u32,
         regs: &mut A::UnwindRegs,
         cache: &mut Cache<D, A::UnwindRule, P>,
         read_stack: &mut F,
@@ -334,15 +373,13 @@ impl<
             ModuleUnwindData::CompactUnwindInfoAndEhFrame(unwind_data, eh_frame_data) => {
                 // eprintln!("unwinding with cui and eh_frame in module {}", module.name);
                 let mut unwinder = CompactUnwindInfoUnwinder::<A>::new(&unwind_data[..]);
-                let rel_lookup_address =
-                    (address.address_for_lookup() - module.base_address) as u32;
                 let is_first_frame = !address.is_return_address();
 
                 let unwind_result = unwinder.unwind_frame(rel_lookup_address, is_first_frame)?;
                 if let Some(function_info) = unwind_result.function_info {
                     if let Ok(Some(rule)) = Self::rule_from_instruction_analysis(
                         &function_info,
-                        address.address(),
+                        rel_lookup_address,
                         module,
                     ) {
                         return Ok(UnwindResult::ExecRule(rule));
