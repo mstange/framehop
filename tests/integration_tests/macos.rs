@@ -903,3 +903,36 @@ fn test_stubs_x86_64() {
     assert_eq!(regs.sp(), 0x100);
     assert_eq!(regs.bp(), 0x120);
 }
+
+// This test fails, and also requires a binary which is not in this repo.
+#[ignore]
+#[test]
+fn test_stubs_x86_64_xul() {
+    let mut cache = CacheX86_64::<_>::new();
+    let mut unwinder = UnwinderX86_64::new();
+    common::add_object(
+        &mut unwinder,
+        &Path::new("/Users/mstange/XUL-esr-78-x86_64"),
+        0,
+    );
+
+    // Check an address inside the __stubs section.
+    // In this binary, the __unwind_info contains entries for both the __text section and the
+    // text_env section. However, it does not have an entry which excludes the addresses covered by
+    // the sections in between: __stubs, __stub_helper, __const, __cstring, and __gc_except_tab.
+    // So we might think that the last entry in the __text section also covers all of the code in
+    // __stubs and __stub_helper. But this is not the case; __stubs functions are always frameless.
+
+    let mut s = make_stack(0x160);
+    s[0xf8 / 8] = 0x12345; // put return address on the stack
+    let mut regs = UnwindRegsX86_64::new(0x5cf7676, 0xf8, 0x120);
+    let res = unwinder.unwind_frame(
+        FrameAddress::InstructionPointer(0x5cf7676),
+        &mut regs,
+        &mut cache,
+        &mut |addr| s.get((addr / 8) as usize).cloned().ok_or(()),
+    );
+    assert_eq!(res, Ok(Some(0x12345)));
+    assert_eq!(regs.sp(), 0x100);
+    assert_eq!(regs.bp(), 0x120);
+}
