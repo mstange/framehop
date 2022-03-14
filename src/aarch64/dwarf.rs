@@ -43,8 +43,9 @@ impl DwarfUnwinding for ArchAarch64 {
 
         match translate_into_unwind_rule(cfa_rule, &fp_rule, &lr_rule) {
             Ok(unwind_rule) => return Ok(UnwindResult::ExecRule(unwind_rule)),
-            Err(err) => {
-                eprintln!("Unwind rule translation failed: {:?}", err);
+            Err(_err) => {
+                // Could not translate into a cacheable unwind rule. Fall back to the generic path.
+                // eprintln!("Unwind rule translation failed: {:?}", err);
             }
         }
 
