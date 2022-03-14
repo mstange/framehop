@@ -872,3 +872,34 @@ fn test_prologue_x86_64_sub_with_32_bit_immediate() {
     assert_eq!(regs.sp(), 0x200);
     assert_eq!(regs.bp(), 0x220);
 }
+
+#[test]
+fn test_stubs_x86_64() {
+    let mut cache = CacheX86_64::<_>::new();
+    let mut unwinder = UnwinderX86_64::new();
+    common::add_object(
+        &mut unwinder,
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/macos/x86_64/fp/query-api"),
+        0,
+    );
+
+    // imp___stubs__pthread_mutex_init:
+    // 22a22e  jmp  qword [_pthread_mutex_init_ptr]
+    // imp___stubs__pthread_mutex_lock:
+    // 22a234  jmp  qword [_pthread_mutex_lock_ptr]
+    // imp___stubs__pthread_mutex_trylock:
+    // 22a23a  jmp  qword [_pthread_mutex_trylock_ptr]
+
+    let mut s = make_stack(0x160);
+    s[0xf8 / 8] = 0x12345; // put return address on the stack
+    let mut regs = UnwindRegsX86_64::new(0x22a234, 0xf8, 0x120);
+    let res = unwinder.unwind_frame(
+        FrameAddress::InstructionPointer(0x22a234),
+        &mut regs,
+        &mut cache,
+        &mut |addr| s.get((addr / 8) as usize).cloned().ok_or(()),
+    );
+    assert_eq!(res, Ok(Some(0x12345)));
+    assert_eq!(regs.sp(), 0x100);
+    assert_eq!(regs.bp(), 0x120);
+}
