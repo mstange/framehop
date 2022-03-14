@@ -137,6 +137,14 @@ fn translate_into_unwind_rule<R: gimli::Reader>(
                 if *offset == 16 && bp_cfa_offset == -16 {
                     Ok(UnwindRuleX86_64::UseFramePointer)
                 } else {
+                    // TODO: Maybe handle this case. This case has been observed in _ffi_call_unix64,
+                    // which has the following unwind table:
+                    //
+                    // 00000060 00000024 0000001c FDE cie=00000048 pc=000de548...000de6a6
+                    //   0xde548: CFA=reg7+8: reg16=[CFA-8]
+                    //   0xde562: CFA=reg6+32: reg6=[CFA-16], reg16=[CFA-8]
+                    //   0xde5ad: CFA=reg7+8: reg16=[CFA-8]
+                    //   0xde668: CFA=reg7+8: reg6=[CFA-16], reg16=[CFA-8]
                     Err(ConversionError::FramePointerRuleHasStrangeBpOffset)
                 }
             }
