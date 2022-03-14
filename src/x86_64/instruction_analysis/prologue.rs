@@ -57,12 +57,20 @@ fn is_next_instruction_expected_in_prologue(bytes: &[u8]) -> bool {
     if bytes[0] & 0xfe == 0x40 && bytes[1] & 0xf8 == 0x50 {
         return true;
     }
-    // Detect sub rsp, 0xXX
+    // Detect sub rsp, 0xXX (8-bit immediate operand)
     if bytes[0..2] == [0x83, 0xec] {
         return true;
     }
-    // Detect sub rsp, 0xXX with prefix
+    // Detect sub rsp, 0xXX with prefix (8-bit immediate operand)
     if bytes[0..3] == [0x48, 0x83, 0xec] {
+        return true;
+    }
+    // Detect sub rsp, 0xXX (32-bit immediate operand)
+    if bytes[0..2] == [0x81, 0xec] {
+        return true;
+    }
+    // Detect sub rsp, 0xXX with prefix (32-bit immediate operand)
+    if bytes[0..3] == [0x48, 0x81, 0xec] {
         return true;
     }
     // Detect mov rbp, rsp [0x48 0x89 0xe5]
@@ -72,3 +80,21 @@ fn is_next_instruction_expected_in_prologue(bytes: &[u8]) -> bool {
 
     false
 }
+
+// TODO: Write tests for different "sub" types
+// 4e88e40  41 57                 push  r15
+// 4e88e42  41 56                 push  r14
+// 4e88e44  53                    push  rbx
+// 4e88e45  48 81 EC 80 00 00 00  sub  rsp, 0x80
+// 4e88e4c  48 89 F3              mov  rbx, rsi
+//
+//
+// 4423f9  55           push  rbp
+// 4423fa  48 89 E5     mov  rbp, rsp
+// 4423fd  41 57        push  r15
+// 4423ff  41 56        push  r14
+// 442401  41 55        push  r13
+// 442403  41 54        push  r12
+// 442405  53           push  rbx
+// 442406  48 83 EC 18  sub  rsp, 0x18
+// 44240a  48 8B 07     mov  rax, qword [rdi]

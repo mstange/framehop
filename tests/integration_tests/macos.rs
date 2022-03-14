@@ -841,3 +841,34 @@ fn test_uncovered_x86_64_fp() {
     assert_eq!(regs.sp(), 0x100);
     assert_eq!(regs.bp(), 0x120);
 }
+
+#[test]
+fn test_prologue_x86_64_sub_with_32_bit_immediate() {
+    let mut cache = CacheX86_64::<_>::new();
+    let mut unwinder = UnwinderX86_64::new();
+    common::add_object(
+        &mut unwinder,
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/macos/x86_64/nofp/firefox-esr-78"),
+        0,
+    );
+
+    // sub_1000014a0:
+    // 14a0  41 57                 push  r15
+    // 14a2  41 56                 push  r14
+    // 14a4  53                    push  rbx
+    // 14a5  48 81 EC F0 00 00 00  sub  rsp, 0xf0
+    // 14ac  49 89 FE              mov  r14, rdi
+
+    let mut s = make_stack(0x260);
+    s[0x1f8 / 8] = 0x12345; // put return address on the stack
+    let mut regs = UnwindRegsX86_64::new(0x14a5, 0x1e0, 0x220);
+    let res = unwinder.unwind_frame(
+        FrameAddress::InstructionPointer(0x14a5),
+        &mut regs,
+        &mut cache,
+        &mut |addr| s.get((addr / 8) as usize).cloned().ok_or(()),
+    );
+    assert_eq!(res, Ok(Some(0x12345)));
+    assert_eq!(regs.sp(), 0x200);
+    assert_eq!(regs.bp(), 0x220);
+}
