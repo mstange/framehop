@@ -39,6 +39,9 @@ pub enum CompactUnwindInfoUnwinderError {
     #[error("Stack size does not fit into the rule representation")]
     StackSizeDoesNotFit,
 
+    #[error("A caller had its address in the __stubs section")]
+    StubFunctionCannotBeCaller,
+
     #[error("Encountered invalid unwind entry")]
     InvalidFrameless,
 }
@@ -55,6 +58,10 @@ pub trait CompactUnwindInfoUnwinding: Arch {
         is_first_frame: bool,
         address_offset_within_function: usize,
         function_bytes: Option<&[u8]>,
+    ) -> Result<CuiUnwindResult<Self::UnwindRule>, CompactUnwindInfoUnwinderError>;
+
+    fn rule_for_stub_helper(
+        offset: u32,
     ) -> Result<CuiUnwindResult<Self::UnwindRule>, CompactUnwindInfoUnwinderError>;
 }
 
@@ -76,14 +83,23 @@ impl<'a> TextBytes<'a> {
 pub struct CompactUnwindInfoUnwinder<'a, A: CompactUnwindInfoUnwinding> {
     unwind_info_data: &'a [u8],
     text_bytes: Option<TextBytes<'a>>,
+    stubs_range: (u32, u32),
+    stub_helper_range: (u32, u32),
     _arch: PhantomData<A>,
 }
 
 impl<'a, A: CompactUnwindInfoUnwinding> CompactUnwindInfoUnwinder<'a, A> {
-    pub fn new(unwind_info_data: &'a [u8], text_bytes: Option<TextBytes<'a>>) -> Self {
+    pub fn new(
+        unwind_info_data: &'a [u8],
+        text_bytes: Option<TextBytes<'a>>,
+        stubs_range: (u32, u32),
+        stub_helper_range: (u32, u32),
+    ) -> Self {
         Self {
             unwind_info_data,
             text_bytes,
+            stubs_range,
+            stub_helper_range,
             _arch: PhantomData,
         }
     }
@@ -105,6 +121,30 @@ impl<'a, A: CompactUnwindInfoUnwinding> CompactUnwindInfoUnwinder<'a, A> {
         rel_lookup_address: u32,
         is_first_frame: bool,
     ) -> Result<CuiUnwindResult<A::UnwindRule>, CompactUnwindInfoUnwinderError> {
+        // Exclude __stubs and __stub_helper sections. The __unwind_info does not describe those
+        // sections. These sections need to be manually excluded because the addresses in
+        // __unwind_info can be both before and after the stubs/stub_helper sections, if there is
+        // both a __text and a text_env section.
+        if self.stubs_range.0 <= rel_lookup_address && rel_lookup_address < self.stubs_range.1 {
+            if !is_first_frame {
+                return Err(CompactUnwindInfoUnwinderError::StubFunctionCannotBeCaller);
+            }
+            // All stub functions are frameless.
+            return Ok(CuiUnwindResult::ExecRule(
+                A::UnwindRule::rule_for_stub_functions(),
+            ));
+        }
+        if self.stub_helper_range.0 <= rel_lookup_address
+            && rel_lookup_address < self.stub_helper_range.1
+        {
+            if !is_first_frame {
+                return Err(CompactUnwindInfoUnwinderError::StubFunctionCannotBeCaller);
+            }
+            let lookup_address_relative_to_section = rel_lookup_address - self.stub_helper_range.0;
+            return <A as CompactUnwindInfoUnwinding>::rule_for_stub_helper(
+                lookup_address_relative_to_section,
+            );
+        }
         let function = match self.function_for_address(rel_lookup_address) {
             Ok(f) => f,
             Err(CompactUnwindInfoUnwinderError::AddressOutsideRange(_)) if is_first_frame => {

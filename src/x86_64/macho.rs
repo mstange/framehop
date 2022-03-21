@@ -134,4 +134,38 @@ impl CompactUnwindInfoUnwinding for ArchX86_64 {
         };
         Ok(r)
     }
+
+    fn rule_for_stub_helper(
+        offset: u32,
+    ) -> Result<CuiUnwindResult<UnwindRuleX86_64>, CompactUnwindInfoUnwinderError> {
+        //     shared:
+        //  +0x0 235cc4  4C 8D 1D 3D 03 04 00   lea  r11, qword [dyld_stub_binder_276000+8]
+        //  +0x7 235ccb  41 53                  push  r11
+        //  +0x9 235ccd  FF 25 2D 03 04 00      jmp  qword [dyld_stub_binder_276000] ; tail call
+        //  +0xf 235cd3  90                     nop
+        //    first stub:
+        // +0x10 235cd4  68 F1 61 00 00         push  0x61f1
+        // +0x15 235cd9  E9 E6 FF FF FF         jmp  0x235cc4 ; jump to shared
+        //    second stub:
+        // +0x1a 235cde  68 38 62 00 00         push  0x6238
+        // +0x1f 235ce3  E9 DC FF FF FF         jmp  0x235cc4 ; jump to shared
+        let rule = if offset < 0x7 {
+            // pop 1 and return
+            UnwindRuleX86_64::OffsetSp { sp_offset_by_8: 2 }
+        } else if offset < 0x10 {
+            // pop 2 and return
+            UnwindRuleX86_64::OffsetSp { sp_offset_by_8: 3 }
+        } else {
+            let offset_after_shared = offset - 0x10;
+            let offset_within_stub = offset_after_shared % 10;
+            if offset_within_stub < 5 {
+                UnwindRuleX86_64::JustReturn
+                // just return
+            } else {
+                // pop 1 and return
+                UnwindRuleX86_64::OffsetSp { sp_offset_by_8: 2 }
+            }
+        };
+        Ok(CuiUnwindResult::ExecRule(rule))
+    }
 }

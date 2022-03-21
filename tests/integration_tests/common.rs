@@ -1,6 +1,6 @@
-use std::{io::Read, path::Path, sync::Arc};
+use std::{io::Read, ops::Range, path::Path, sync::Arc};
 
-use object::{Object, ObjectSection};
+use object::{Object, ObjectSection, ObjectSegment};
 
 use framehop::*;
 
@@ -21,6 +21,9 @@ where
     let text = file
         .section_by_name("__text")
         .or_else(|| file.section_by_name(".text"));
+    let stubs = file.section_by_name("__stubs");
+    let stub_helper = file.section_by_name("__stub_helper");
+    let text_env = file.section_by_name("__text_env");
     let unwind_info = file.section_by_name("__unwind_info");
     let eh_frame = file
         .section_by_name("__eh_frame")
@@ -51,29 +54,52 @@ where
         (None, None, _) => framehop::ModuleUnwindData::None,
     };
 
-    let text_data = text.as_ref().and_then(section_data);
+    let text_data = if let Some(text_segment) = file
+        .segments()
+        .find(|segment| segment.name_bytes() == Ok(Some(b"__TEXT")))
+    {
+        let (start, size) = text_segment.file_range();
+        let address_range = base_address + start..base_address + start + size;
+        text_segment
+            .data()
+            .ok()
+            .map(|data| TextByteData::new(data.to_owned(), address_range))
+    } else if let Some(text_section) = &text {
+        if let Some((start, size)) = text_section.file_range() {
+            let address_range = base_address + start..base_address + start + size;
+            text_section
+                .data()
+                .ok()
+                .map(|data| TextByteData::new(data.to_owned(), address_range))
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    fn address_range<'a>(
+        section: &Option<impl ObjectSection<'a>>,
+        base_address: u64,
+    ) -> Option<Range<u64>> {
+        section
+            .as_ref()
+            .and_then(|section| section.file_range())
+            .map(|(start, size)| base_address + start..base_address + start + size)
+    }
 
     let module = framehop::Module::new(
         objpath.to_string_lossy().to_string(),
         base_address..(base_address + buf.len() as u64),
         base_address,
-        ModuleSectionAddresses {
-            text: base_address
-                + text
-                    .and_then(|s| s.file_range())
-                    .map_or(0, |(start, _end)| start),
-            eh_frame: base_address
-                + eh_frame
-                    .and_then(|s| s.file_range())
-                    .map_or(0, |(start, _end)| start),
-            eh_frame_hdr: base_address
-                + eh_frame_hdr
-                    .and_then(|s| s.file_range())
-                    .map_or(0, |(start, _end)| start),
-            got: base_address
-                + got
-                    .and_then(|s| s.file_range())
-                    .map_or(0, |(start, _end)| start),
+        ModuleSectionAddressRanges {
+            text: address_range(&text, base_address),
+            text_env: address_range(&text_env, base_address),
+            stubs: address_range(&stubs, base_address),
+            stub_helper: address_range(&stub_helper, base_address),
+            eh_frame: address_range(&eh_frame, base_address),
+            eh_frame_hdr: address_range(&eh_frame_hdr, base_address),
+            got: address_range(&got, base_address),
         },
         unwind_data,
         text_data,

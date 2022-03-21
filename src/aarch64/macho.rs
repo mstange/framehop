@@ -62,4 +62,35 @@ impl CompactUnwindInfoUnwinding for ArchAarch64 {
         };
         Ok(r)
     }
+
+    fn rule_for_stub_helper(
+        offset: u32,
+    ) -> Result<CuiUnwindResult<UnwindRuleAarch64>, CompactUnwindInfoUnwinderError> {
+        //    shared:
+        //  +0x0  1d309c  B1 94 48 10        adr        x17, #0x100264330
+        //  +0x4  1d30a0  1F 20 03 D5        nop
+        //  +0x8  1d30a4  F0 47 BF A9        stp        x16, x17, [sp, #-0x10]!
+        //  +0xc  1d30a8  1F 20 03 D5        nop
+        // +0x10  1d30ac  F0 7A 32 58        ldr        x16, #dyld_stub_binder_100238008
+        // +0x14  1d30b0  00 02 1F D6        br         x16
+        //     first stub:
+        // +0x18  1d30b4  50 00 00 18        ldr        w16, =0x1800005000000000
+        // +0x1c  1d30b8  F9 FF FF 17        b          0x1001d309c
+        // +0x20  1d30bc  00 00 00 00        (padding)
+        //     second stub:
+        // +0x24  1d30c0  50 00 00 18        ldr        w16, =0x1800005000000012
+        // +0x28  1d30c4  F6 FF FF 17        b          0x1001d309c
+        // +0x2c  1d30c8  00 00 00 00        (padding)
+        let rule = if offset < 0xc {
+            // Stack pointer hasn't been touched, just follow lr
+            UnwindRuleAarch64::NoOp
+        } else if offset < 0x18 {
+            // Add 0x10 to the stack pointer and follow lr
+            UnwindRuleAarch64::OffsetSp { sp_offset_by_16: 1 }
+        } else {
+            // Stack pointer hasn't been touched, just follow lr
+            UnwindRuleAarch64::NoOp
+        };
+        Ok(CuiUnwindResult::ExecRule(rule))
+    }
 }

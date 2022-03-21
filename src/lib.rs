@@ -18,7 +18,9 @@ pub mod x86_64;
 pub use cache::{AllocationPolicy, MayAllocateDuringUnwind, MustNotAllocateDuringUnwind};
 pub use code_address::FrameAddress;
 pub use error::Error;
-pub use unwinder::{Module, ModuleSectionAddresses, ModuleUnwindData, UnwindIterator, Unwinder};
+pub use unwinder::{
+    Module, ModuleSectionAddressRanges, ModuleUnwindData, TextByteData, UnwindIterator, Unwinder,
+};
 
 #[cfg(target_arch = "aarch64")]
 pub type CacheNative<D, P> = aarch64::CacheAarch64<D, P>;

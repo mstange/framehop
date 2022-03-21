@@ -312,14 +312,34 @@ impl<
         let unwind_result = match &module.unwind_data {
             ModuleUnwindData::CompactUnwindInfoAndEhFrame(unwind_data, eh_frame_data) => {
                 // eprintln!("unwinding with cui and eh_frame in module {}", module.name);
-                let text_bytes = module.text_data.as_deref().and_then(|data| {
+                let text_bytes = module.text_data.as_ref().and_then(|data| {
                     let offset_from_base =
-                        u32::try_from(module.sections.text.checked_sub(module.base_address)?)
-                            .ok()?;
-                    Some(TextBytes::new(offset_from_base, data))
+                        u32::try_from(data.range.start.checked_sub(module.base_address)?).ok()?;
+                    Some(TextBytes::new(offset_from_base, &data.bytes[..]))
                 });
-                let mut unwinder =
-                    CompactUnwindInfoUnwinder::<A>::new(&unwind_data[..], text_bytes);
+                let stubs_range = if let Some(stubs_range) = &module.sections.stubs {
+                    (
+                        (stubs_range.start - module.base_address) as u32,
+                        (stubs_range.end - module.base_address) as u32,
+                    )
+                } else {
+                    (0, 0)
+                };
+                let stub_helper_range =
+                    if let Some(stub_helper_range) = &module.sections.stub_helper {
+                        (
+                            (stub_helper_range.start - module.base_address) as u32,
+                            (stub_helper_range.end - module.base_address) as u32,
+                        )
+                    } else {
+                        (0, 0)
+                    };
+                let mut unwinder = CompactUnwindInfoUnwinder::<A>::new(
+                    &unwind_data[..],
+                    text_bytes,
+                    stubs_range,
+                    stub_helper_range,
+                );
                 let is_first_frame = !address.is_return_address();
 
                 let unwind_result = unwinder.unwind_frame(rel_lookup_address, is_first_frame)?;
@@ -371,22 +391,36 @@ pub enum ModuleUnwindData<D: Deref<Target = [u8]>> {
     None,
 }
 
+pub struct TextByteData<D: Deref<Target = [u8]>> {
+    bytes: D,
+    range: Range<u64>,
+}
+
+impl<D: Deref<Target = [u8]>> TextByteData<D> {
+    pub fn new(bytes: D, range: Range<u64>) -> Self {
+        Self { bytes, range }
+    }
+}
+
 pub struct Module<D: Deref<Target = [u8]>> {
     #[allow(unused)]
     name: String,
     address_range: Range<u64>,
     base_address: u64,
-    sections: ModuleSectionAddresses,
+    sections: ModuleSectionAddressRanges,
     unwind_data: ModuleUnwindData<D>,
-    text_data: Option<D>,
+    text_data: Option<TextByteData<D>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ModuleSectionAddresses {
-    pub text: u64,
-    pub eh_frame: u64,
-    pub eh_frame_hdr: u64,
-    pub got: u64,
+pub struct ModuleSectionAddressRanges {
+    pub text: Option<Range<u64>>,
+    pub text_env: Option<Range<u64>>,
+    pub stubs: Option<Range<u64>>,
+    pub stub_helper: Option<Range<u64>>,
+    pub eh_frame: Option<Range<u64>>,
+    pub eh_frame_hdr: Option<Range<u64>>,
+    pub got: Option<Range<u64>>,
 }
 
 impl<D: Deref<Target = [u8]>> Module<D> {
@@ -394,9 +428,9 @@ impl<D: Deref<Target = [u8]>> Module<D> {
         name: String,
         address_range: std::ops::Range<u64>,
         base_address: u64,
-        sections: ModuleSectionAddresses,
+        sections: ModuleSectionAddressRanges,
         unwind_data: ModuleUnwindData<D>,
-        text_data: Option<D>,
+        text_data: Option<TextByteData<D>>,
     ) -> Self {
         Self {
             name,

@@ -1,4 +1,4 @@
-use std::marker::PhantomData;
+use std::{marker::PhantomData, ops::Range};
 
 use gimli::{
     BaseAddresses, CfaRule, EhFrameHdr, Encoding, Evaluation, EvaluationResult, EvaluationStorage,
@@ -6,7 +6,7 @@ use gimli::{
     UnwindContext, UnwindContextStorage, UnwindSection, UnwindTableRow, Value,
 };
 
-use crate::{arch::Arch, unwind_result::UnwindResult, FrameAddress, ModuleSectionAddresses};
+use crate::{arch::Arch, unwind_result::UnwindResult, FrameAddress, ModuleSectionAddressRanges};
 
 #[derive(thiserror::Error, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DwarfUnwinderError {
@@ -79,13 +79,20 @@ impl<'a, R: Reader, A: DwarfUnwinding, S: UnwindContextStorage<R> + EvaluationSt
         eh_frame_data: R,
         eh_frame_hdr_data: Option<R>,
         unwind_context: &'a mut UnwindContext<R, S>,
-        sections: &ModuleSectionAddresses,
+        sections: &ModuleSectionAddressRanges,
     ) -> Self {
+        fn start_addr(range: &Option<Range<u64>>) -> u64 {
+            if let Some(range) = range {
+                range.start
+            } else {
+                0
+            }
+        }
         let bases = BaseAddresses::default()
-            .set_eh_frame(sections.eh_frame)
-            .set_eh_frame_hdr(sections.eh_frame_hdr)
-            .set_text(sections.text)
-            .set_got(sections.got);
+            .set_eh_frame(start_addr(&sections.eh_frame))
+            .set_eh_frame_hdr(start_addr(&sections.eh_frame_hdr))
+            .set_text(start_addr(&sections.text))
+            .set_got(start_addr(&sections.got));
         let eh_frame_hdr = match eh_frame_hdr_data {
             Some(eh_frame_hdr_data) => {
                 let hdr = EhFrameHdr::from(eh_frame_hdr_data);

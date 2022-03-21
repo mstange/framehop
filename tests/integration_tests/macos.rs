@@ -904,7 +904,7 @@ fn test_stubs_x86_64() {
     assert_eq!(regs.bp(), 0x120);
 }
 
-// This test fails, and also requires a binary which is not in this repo.
+// This test requires a binary which is not in this repo.
 #[ignore]
 #[test]
 fn test_stubs_x86_64_xul() {
