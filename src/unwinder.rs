@@ -16,6 +16,7 @@ use crate::unwind_rule::UnwindRule;
 use crate::FrameAddress;
 
 use std::marker::PhantomData;
+use std::sync::atomic::{AtomicU16, Ordering};
 use std::{
     fmt::Debug,
     ops::{Deref, Range},
@@ -130,6 +131,18 @@ impl<'u, 'c, 'r, U: Unwinder + ?Sized, F: FnMut(u64) -> Result<u64, ()>> Fallibl
     }
 }
 
+/// This global generation counter makes it so that the cache can be shared
+/// between multiple unwinders.
+/// This is a u16, so if you make it wrap around by adding / removing modules
+/// more than 65535 times, then you risk collisions in the cache; meaning:
+/// unwinding might not work properly if an old unwind rule was found in the
+/// cache for the same address and the same (pre-wraparound) modules_generation.
+static GLOBAL_MODULES_GENERATION: AtomicU16 = AtomicU16::new(0);
+
+fn next_global_modules_generation() -> u16 {
+    GLOBAL_MODULES_GENERATION.fetch_add(1, Ordering::Relaxed)
+}
+
 pub struct UnwinderInternal<
     D: Deref<Target = [u8]>,
     A: Arch + DwarfUnwinding + CompactUnwindInfoUnwinding + InstructionAnalysis,
@@ -163,7 +176,7 @@ impl<
     pub fn new() -> Self {
         Self {
             modules: Vec::new(),
-            modules_generation: 0,
+            modules_generation: next_global_modules_generation(),
             _arch: PhantomData,
             _allocation_policy: PhantomData,
         }
@@ -185,7 +198,7 @@ impl<
             Err(i) => i,
         };
         self.modules.insert(insertion_index, module);
-        self.modules_generation += 1;
+        self.modules_generation = next_global_modules_generation();
     }
 
     pub fn remove_module(&mut self, module_address_range_start: u64) {
@@ -196,7 +209,7 @@ impl<
             })
         {
             self.modules.remove(index);
-            self.modules_generation += 1;
+            self.modules_generation = next_global_modules_generation();
         };
     }
 
