@@ -912,7 +912,7 @@ fn test_stubs_x86_64_xul() {
     let mut unwinder = UnwinderX86_64::new();
     common::add_object(
         &mut unwinder,
-        &Path::new("/Users/mstange/XUL-esr-78-x86_64"),
+        Path::new("/Users/mstange/XUL-esr-78-x86_64"),
         0,
     );
 
