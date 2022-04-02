@@ -8,6 +8,8 @@ description = "Stack frame unwinding support for various formats"
 keywords = ["unwind", "stackwalk", "profiling", "debug"]
 license = "MIT/Apache-2.0"
 readme = "Readme.md"
+documentation = "https://docs.rs/framehop/"
+repository = "https://github.com/mstange/framehop/"
 exclude = ["/.github", "/.vscode", "/tests", "/fixtures", "/big-fixtures"]
 
 [dependencies]
