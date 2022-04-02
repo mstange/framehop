@@ -176,7 +176,7 @@ impl<'a, A: CompactUnwindInfoUnwinding> CompactUnwindInfoUnwinder<'a, A> {
                 as usize;
             let function_end_relative_to_text =
                 function.end_address.checked_sub(offset_from_base_address)? as usize;
-            Some(bytes.get(function_start_relative_to_text..function_end_relative_to_text)?)
+            bytes.get(function_start_relative_to_text..function_end_relative_to_text)
         });
         <A as CompactUnwindInfoUnwinding>::unwind_frame(
             function,
