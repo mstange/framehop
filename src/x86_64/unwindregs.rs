@@ -48,6 +48,7 @@ pub type UnwindRegsNative = UnwindRegsX86_64;
 impl Debug for UnwindRegsX86_64 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("UnwindRegsX86_64")
+            .field("ip", &HexNum(self.ip))
             .field("sp", &HexNum(self.sp))
             .field("bp", &HexNum(self.bp))
             .finish()
