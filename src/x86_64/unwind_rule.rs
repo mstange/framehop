@@ -22,6 +22,15 @@ fn wrapping_add_signed(lhs: u64, rhs: i64) -> u64 {
     lhs.wrapping_add(rhs as u64)
 }
 
+fn checked_add_signed(lhs: u64, rhs: i64) -> Option<u64> {
+    let res = wrapping_add_signed(lhs, rhs);
+    if (rhs >= 0 && res >= lhs) || (rhs < 0 && res < lhs) {
+        Some(res)
+    } else {
+        None
+    }
+}
+
 impl UnwindRule for UnwindRuleX86_64 {
     type UnwindRegs = UnwindRegsX86_64;
 
@@ -39,19 +48,26 @@ impl UnwindRule for UnwindRuleX86_64 {
     where
         F: FnMut(u64) -> Result<u64, ()>,
     {
+        let sp = regs.sp();
         let (new_sp, new_bp) = match self {
-            UnwindRuleX86_64::JustReturn => (regs.sp() + 8, regs.bp()),
+            UnwindRuleX86_64::JustReturn => {
+                let new_sp = sp.checked_add(8).ok_or(Error::IntegerOverflow)?;
+                (new_sp, regs.bp())
+            }
             UnwindRuleX86_64::OffsetSp { sp_offset_by_8 } => {
-                (regs.sp() + sp_offset_by_8 as u64 * 8, regs.bp())
+                let sp_offset = u64::from(sp_offset_by_8) * 8;
+                let new_sp = sp.checked_add(sp_offset).ok_or(Error::IntegerOverflow)?;
+                (new_sp, regs.bp())
             }
             UnwindRuleX86_64::OffsetSpAndRestoreBp {
                 sp_offset_by_8,
                 bp_storage_offset_from_sp_by_8,
             } => {
-                let sp = regs.sp();
-                let new_sp = sp + sp_offset_by_8 as u64 * 8;
-                let bp_location =
-                    wrapping_add_signed(sp, bp_storage_offset_from_sp_by_8 as i64 * 8);
+                let sp_offset = u64::from(sp_offset_by_8) * 8;
+                let new_sp = sp.checked_add(sp_offset).ok_or(Error::IntegerOverflow)?;
+                let bp_storage_offset_from_sp = i64::from(bp_storage_offset_from_sp_by_8) * 8;
+                let bp_location = checked_add_signed(sp, bp_storage_offset_from_sp)
+                    .ok_or(Error::IntegerOverflow)?;
                 let new_bp =
                     read_stack(bp_location).map_err(|_| Error::CouldNotReadStack(bp_location))?;
                 (new_sp, new_bp)
@@ -101,7 +117,7 @@ impl UnwindRule for UnwindRuleX86_64 {
                 if bp == 0 {
                     return Ok(None);
                 }
-                let new_sp = bp + 16;
+                let new_sp = bp.checked_add(16).ok_or(Error::IntegerOverflow)?;
                 if new_sp <= sp {
                     return Err(Error::FramepointerUnwindingMovedBackwards);
                 }
@@ -155,5 +171,29 @@ mod test {
         assert_eq!(regs.bp(), 0x70);
         let res = UnwindRuleX86_64::UseFramePointer.exec(&mut regs, &mut read_stack);
         assert_eq!(res, Ok(None));
+    }
+
+    #[test]
+    fn test_overflow() {
+        // This test makes sure that debug builds don't panic when trying to use frame pointer
+        // unwinding on code that was using the bp register as a general-purpose register and
+        // storing -1 in it. -1 is u64::MAX, so an unchecked add panics in debug builds.
+        let stack = [
+            1, 2, 0x100300, 4, 0x40, 0x100200, 5, 6, 0x70, 0x100100, 7, 8, 9, 10, 0x0, 0x0,
+        ];
+        let mut read_stack = |addr| Ok(stack[(addr / 8) as usize]);
+        let mut regs = UnwindRegsX86_64::new(0x100400, u64::MAX / 8 * 8, u64::MAX);
+        let res = UnwindRuleX86_64::JustReturn.exec(&mut regs, &mut read_stack);
+        assert_eq!(res, Err(Error::IntegerOverflow));
+        let res = UnwindRuleX86_64::OffsetSp { sp_offset_by_8: 1 }.exec(&mut regs, &mut read_stack);
+        assert_eq!(res, Err(Error::IntegerOverflow));
+        let res = UnwindRuleX86_64::OffsetSpAndRestoreBp {
+            sp_offset_by_8: 1,
+            bp_storage_offset_from_sp_by_8: 2,
+        }
+        .exec(&mut regs, &mut read_stack);
+        assert_eq!(res, Err(Error::IntegerOverflow));
+        let res = UnwindRuleX86_64::UseFramePointer.exec(&mut regs, &mut read_stack);
+        assert_eq!(res, Err(Error::IntegerOverflow));
     }
 }
