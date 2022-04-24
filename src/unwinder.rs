@@ -216,10 +216,7 @@ impl<
     }
 
     pub fn max_known_code_address(&self) -> u64 {
-        self.modules
-            .last()
-            .map(|m| m.address_range.end)
-            .unwrap_or(0)
+        self.modules.last().map_or(0, |m| m.address_range.end)
     }
 
     fn find_module_for_address(&self, address: u64) -> Option<(usize, u32)> {
