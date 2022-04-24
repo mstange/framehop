@@ -1,4 +1,5 @@
 use super::unwindregs::UnwindRegsX86_64;
+use crate::add_signed::checked_add_signed;
 use crate::error::Error;
 use crate::unwind_rule::UnwindRule;
 
@@ -16,19 +17,6 @@ pub enum UnwindRuleX86_64 {
     },
     /// (sp, bp) = (bp + 16, *bp)
     UseFramePointer,
-}
-
-fn wrapping_add_signed(lhs: u64, rhs: i64) -> u64 {
-    lhs.wrapping_add(rhs as u64)
-}
-
-fn checked_add_signed(lhs: u64, rhs: i64) -> Option<u64> {
-    let res = wrapping_add_signed(lhs, rhs);
-    if (rhs >= 0 && res >= lhs) || (rhs < 0 && res < lhs) {
-        Some(res)
-    } else {
-        None
-    }
 }
 
 impl UnwindRule for UnwindRuleX86_64 {

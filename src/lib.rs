@@ -1,3 +1,4 @@
+mod add_signed;
 mod arcdata;
 mod arch;
 mod cache;
