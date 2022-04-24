@@ -38,6 +38,10 @@ impl<D: Deref<Target = [u8]>, P: AllocationPolicy<D>> Unwinder for UnwinderX86_6
         self.0.remove_module(module_address_range_start);
     }
 
+    fn max_known_code_address(&self) -> u64 {
+        self.0.max_known_code_address()
+    }
+
     fn unwind_frame<F>(
         &self,
         address: FrameAddress,

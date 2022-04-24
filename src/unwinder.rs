@@ -31,6 +31,8 @@ pub trait Unwinder {
 
     fn remove_module(&mut self, module_address_range_start: u64);
 
+    fn max_known_code_address(&self) -> u64;
+
     fn unwind_frame<F>(
         &self,
         address: FrameAddress,
@@ -211,6 +213,13 @@ impl<
             self.modules.remove(index);
             self.modules_generation = next_global_modules_generation();
         };
+    }
+
+    pub fn max_known_code_address(&self) -> u64 {
+        self.modules
+            .last()
+            .map(|m| m.address_range.end)
+            .unwrap_or(0)
     }
 
     fn find_module_for_address(&self, address: u64) -> Option<(usize, u32)> {

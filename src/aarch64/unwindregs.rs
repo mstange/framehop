@@ -4,6 +4,7 @@ use crate::display_utils::HexNum;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct UnwindRegsAarch64 {
+    lr_mask: PtrAuthMask,
     lr: u64,
     sp: u64,
     fp: u64,
@@ -12,26 +13,76 @@ pub struct UnwindRegsAarch64 {
 #[cfg(target_arch = "aarch64")]
 pub type UnwindRegsNative = UnwindRegsAarch64;
 
-/// On macOS arm64, system libraries are arm64e binaries, and arm64e can do pointer authentication:
-/// The low bits of the pointer are the actual pointer value, and the high bits are an encrypted hash.
-/// During stackwalking, we need to strip off this hash.
-/// I don't know of an easy way to get the correct mask dynamically - all the potential functions
-/// I've seen for this are no-ops when called from regular arm64 code.
-/// So for now, we hardcode a mask that seems to work today, and worry about it if it stops working.
-/// 24 bits hash + 40 bits pointer
-const PTR_MASK: u64 = (1 << 40) - 1;
+/// Aarch64 CPUs support special instructions which interpret pointers as pair
+/// of the pointer address and an encrypted hash: The address is stored in the
+/// lower bits and the hash in the high bits. These are called "authenticated"
+/// pointers. Special instructions exist to verify pointers before dereferencing
+/// them.
+/// Return address can be such authenticated pointers. To return to an
+/// authenticated return address, the "retab" instruction is used instead of
+/// the regular "ret" instruction.
+/// Stack walkers need to strip the encrypted hash from return addresses because
+/// they need the raw code address.
+/// On macOS arm64, system libraries compiled with the arm64e target use pointer
+/// pointer authentication for return addresses.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct PtrAuthMask(pub u64);
 
-#[inline(always)]
-pub fn strip_ptr_auth(ptr: u64) -> u64 {
-    ptr & PTR_MASK
+impl PtrAuthMask {
+    /// Create a no-op mask which treats all bits of the pointer as address bits,
+    /// so no bits are stripped.
+    pub fn new_no_strip() -> Self {
+        Self(u64::MAX)
+    }
+
+    /// Create a mask for 24 bits hash + 40 bits pointer. This appears to be
+    /// what macOS arm64e uses. It is unclear whether we can rely on this or
+    /// whether it can change.
+    /// On macOS arm64, this mask can be applied to both authenticated pointers
+    /// and to non-authenticated pointers without data loss; non-authenticated
+    /// don't appear to use the top 24 bits (they're always zero).
+    pub fn new_24_40() -> Self {
+        Self(u64::MAX >> 24)
+    }
+
+    /// Deduce a mask based on the highest known address. The leading zero bits
+    /// in this address will be reserved for the hash.
+    pub fn from_max_known_address(address: u64) -> Self {
+        Self(u64::MAX >> address.leading_zeros())
+    }
+
+    /// Apply the mask to the given pointer.
+    #[inline(always)]
+    pub fn strip_ptr_auth(&self, ptr: u64) -> u64 {
+        ptr & self.0
+    }
 }
 
 impl UnwindRegsAarch64 {
+    /// Create a set of unwind register values and do not apply any pointer
+    /// authentication stripping.
     pub fn new(lr: u64, sp: u64, fp: u64) -> Self {
         Self {
-            lr: strip_ptr_auth(lr),
-            sp: strip_ptr_auth(sp),
-            fp: strip_ptr_auth(fp),
+            lr_mask: PtrAuthMask::new_no_strip(),
+            lr,
+            sp,
+            fp,
+        }
+    }
+
+    /// Create a set of unwind register values with the given mask for return
+    /// address pointer authentication stripping.
+    pub fn new_with_ptr_auth_mask(
+        code_ptr_auth_mask: PtrAuthMask,
+        lr: u64,
+        sp: u64,
+        fp: u64,
+    ) -> Self {
+        Self {
+            lr_mask: code_ptr_auth_mask,
+            lr: code_ptr_auth_mask.strip_ptr_auth(lr),
+            sp,
+            fp,
         }
     }
 
@@ -41,7 +92,7 @@ impl UnwindRegsAarch64 {
     }
     #[inline(always)]
     pub fn set_sp(&mut self, sp: u64) {
-        self.sp = strip_ptr_auth(sp)
+        self.sp = sp
     }
 
     #[inline(always)]
@@ -50,7 +101,7 @@ impl UnwindRegsAarch64 {
     }
     #[inline(always)]
     pub fn set_fp(&mut self, fp: u64) {
-        self.fp = strip_ptr_auth(fp)
+        self.fp = fp
     }
 
     #[inline(always)]
@@ -59,7 +110,7 @@ impl UnwindRegsAarch64 {
     }
     #[inline(always)]
     pub fn set_lr(&mut self, lr: u64) {
-        self.lr = strip_ptr_auth(lr)
+        self.lr = self.lr_mask.strip_ptr_auth(lr)
     }
 }
 
@@ -70,5 +121,40 @@ impl Debug for UnwindRegsAarch64 {
             .field("sp", &HexNum(self.sp))
             .field("fp", &HexNum(self.fp))
             .finish()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::aarch64::PtrAuthMask;
+
+    #[test]
+    fn test() {
+        assert_eq!(PtrAuthMask::new_24_40().0, u64::MAX >> 24);
+        assert_eq!(PtrAuthMask::new_24_40().0, (1 << 40) - 1);
+        assert_eq!(
+            PtrAuthMask::from_max_known_address(0x0000aaaab54f7000).0,
+            0x0000ffffffffffff
+        );
+        assert_eq!(
+            PtrAuthMask::from_max_known_address(0x0000ffffa3206000).0,
+            0x0000ffffffffffff
+        );
+        assert_eq!(
+            PtrAuthMask::from_max_known_address(0xffffffffc05a9000).0,
+            0xffffffffffffffff
+        );
+        assert_eq!(
+            PtrAuthMask::from_max_known_address(0x000055ba9f07e000).0,
+            0x00007fffffffffff
+        );
+        assert_eq!(
+            PtrAuthMask::from_max_known_address(0x00007f76b8019000).0,
+            0x00007fffffffffff
+        );
+        assert_eq!(
+            PtrAuthMask::from_max_known_address(0x000000022a3ccff7).0,
+            0x00000003ffffffff
+        );
     }
 }
