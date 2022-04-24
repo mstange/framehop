@@ -1,4 +1,5 @@
 use super::unwindregs::UnwindRegsAarch64;
+use crate::add_signed::checked_add_signed;
 use crate::error::Error;
 
 use crate::unwind_rule::UnwindRule;
@@ -30,10 +31,6 @@ pub enum UnwindRuleAarch64 {
     },
 }
 
-fn wrapping_add_signed(lhs: u64, rhs: i64) -> u64 {
-    lhs.wrapping_add(rhs as u64)
-}
-
 impl UnwindRule for UnwindRuleAarch64 {
     type UnwindRegs = UnwindRegsAarch64;
 
@@ -54,16 +51,21 @@ impl UnwindRule for UnwindRuleAarch64 {
         match self {
             UnwindRuleAarch64::NoOp => {}
             UnwindRuleAarch64::OffsetSp { sp_offset_by_16 } => {
-                regs.set_sp(regs.sp() + sp_offset_by_16 as u64 * 16);
+                let sp = regs.sp();
+                let sp_offset = u64::from(sp_offset_by_16) * 16;
+                let new_sp = sp.checked_add(sp_offset).ok_or(Error::IntegerOverflow)?;
+                regs.set_sp(new_sp);
             }
             UnwindRuleAarch64::OffsetSpAndRestoreLr {
                 sp_offset_by_16,
                 lr_storage_offset_from_sp_by_8,
             } => {
                 let sp = regs.sp();
-                let new_sp = sp + sp_offset_by_16 as u64 * 16;
+                let sp_offset = u64::from(sp_offset_by_16) * 16;
+                let new_sp = sp.checked_add(sp_offset).ok_or(Error::IntegerOverflow)?;
+                let lr_storage_offset = i64::from(lr_storage_offset_from_sp_by_8) * 8;
                 let lr_location =
-                    wrapping_add_signed(sp, lr_storage_offset_from_sp_by_8 as i64 * 8);
+                    checked_add_signed(sp, lr_storage_offset).ok_or(Error::IntegerOverflow)?;
                 let new_lr =
                     read_stack(lr_location).map_err(|_| Error::CouldNotReadStack(lr_location))?;
                 regs.set_sp(new_sp);
@@ -75,13 +77,16 @@ impl UnwindRule for UnwindRuleAarch64 {
                 lr_storage_offset_from_sp_by_8,
             } => {
                 let sp = regs.sp();
-                let new_sp = sp + sp_offset_by_16 as u64 * 16;
+                let sp_offset = u64::from(sp_offset_by_16) * 16;
+                let new_sp = sp.checked_add(sp_offset).ok_or(Error::IntegerOverflow)?;
+                let lr_storage_offset = i64::from(lr_storage_offset_from_sp_by_8) * 8;
                 let lr_location =
-                    wrapping_add_signed(sp, lr_storage_offset_from_sp_by_8 as i64 * 8);
+                    checked_add_signed(sp, lr_storage_offset).ok_or(Error::IntegerOverflow)?;
                 let new_lr =
                     read_stack(lr_location).map_err(|_| Error::CouldNotReadStack(lr_location))?;
+                let fp_storage_offset = i64::from(fp_storage_offset_from_sp_by_8) * 8;
                 let fp_location =
-                    wrapping_add_signed(sp, fp_storage_offset_from_sp_by_8 as i64 * 8);
+                    checked_add_signed(sp, fp_storage_offset).ok_or(Error::IntegerOverflow)?;
                 let new_fp =
                     read_stack(fp_location).map_err(|_| Error::CouldNotReadStack(fp_location))?;
                 regs.set_sp(new_sp);
@@ -129,7 +134,7 @@ impl UnwindRule for UnwindRuleAarch64 {
                 // So: *fp is the caller's frame pointer, and *(fp + 8) is the return address.
                 let sp = regs.sp();
                 let fp = regs.fp();
-                let new_sp = fp + 16;
+                let new_sp = fp.checked_add(16).ok_or(Error::IntegerOverflow)?;
                 let new_lr = read_stack(fp + 8).map_err(|_| Error::CouldNotReadStack(fp + 8))?;
                 let new_fp = read_stack(fp).map_err(|_| Error::CouldNotReadStack(fp))?;
                 if new_fp == 0 {
@@ -149,15 +154,22 @@ impl UnwindRule for UnwindRuleAarch64 {
             } => {
                 let sp = regs.sp();
                 let fp = regs.fp();
-                let new_sp = fp + sp_offset_from_fp_by_8 as u64 * 8;
+
+                let sp_offset_from_fp = u64::from(sp_offset_from_fp_by_8) * 8;
+                let new_sp = fp
+                    .checked_add(sp_offset_from_fp)
+                    .ok_or(Error::IntegerOverflow)?;
+                let lr_storage_offset = i64::from(lr_storage_offset_from_fp_by_8) * 8;
                 let lr_location =
-                    wrapping_add_signed(fp, lr_storage_offset_from_fp_by_8 as i64 * 8);
+                    checked_add_signed(fp, lr_storage_offset).ok_or(Error::IntegerOverflow)?;
                 let new_lr =
                     read_stack(lr_location).map_err(|_| Error::CouldNotReadStack(lr_location))?;
+                let fp_storage_offset = i64::from(fp_storage_offset_from_fp_by_8) * 8;
                 let fp_location =
-                    wrapping_add_signed(fp, fp_storage_offset_from_fp_by_8 as i64 * 8);
+                    checked_add_signed(fp, fp_storage_offset).ok_or(Error::IntegerOverflow)?;
                 let new_fp =
                     read_stack(fp_location).map_err(|_| Error::CouldNotReadStack(fp_location))?;
+
                 if new_fp == 0 {
                     return Ok(None);
                 }
