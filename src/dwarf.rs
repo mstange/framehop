@@ -1,9 +1,9 @@
 use std::{marker::PhantomData, ops::Range};
 
 use gimli::{
-    BaseAddresses, CfaRule, EhFrameHdr, Encoding, Evaluation, EvaluationResult, EvaluationStorage,
-    Expression, Location, ParsedEhFrameHdr, Reader, ReaderOffset, Register, RegisterRule,
-    UnwindContext, UnwindContextStorage, UnwindSection, UnwindTableRow, Value,
+    BaseAddresses, CfaRule, EhFrameHdr, Encoding, EndianSlice, Evaluation, EvaluationResult,
+    EvaluationStorage, Expression, Location, ParsedEhFrameHdr, Reader, ReaderOffset, Register,
+    RegisterRule, UnwindContext, UnwindContextStorage, UnwindSection, UnwindTableRow, Value,
 };
 
 use crate::{arch::Arch, unwind_result::UnwindResult, FrameAddress, ModuleSectionAddressRanges};
@@ -66,7 +66,7 @@ pub trait DwarfUnwinding: Arch {
 
 pub struct DwarfUnwinder<'a, R: Reader, A: DwarfUnwinding + ?Sized, S: UnwindContextStorage<R>> {
     eh_frame_data: R,
-    eh_frame_hdr: Option<ParsedEhFrameHdr<R>>,
+    eh_frame_hdr: Option<ParsedEhFrameHdr<EndianSlice<'a, R::Endian>>>,
     unwind_context: &'a mut UnwindContext<R, S>,
     bases: BaseAddresses,
     _arch: PhantomData<A>,
@@ -77,7 +77,7 @@ impl<'a, R: Reader, A: DwarfUnwinding, S: UnwindContextStorage<R> + EvaluationSt
 {
     pub fn new(
         eh_frame_data: R,
-        eh_frame_hdr_data: Option<R>,
+        eh_frame_hdr_data: Option<&'a [u8]>,
         unwind_context: &'a mut UnwindContext<R, S>,
         sections: &ModuleSectionAddressRanges,
     ) -> Self {
@@ -95,7 +95,7 @@ impl<'a, R: Reader, A: DwarfUnwinding, S: UnwindContextStorage<R> + EvaluationSt
             .set_got(start_addr(&sections.got));
         let eh_frame_hdr = match eh_frame_hdr_data {
             Some(eh_frame_hdr_data) => {
-                let hdr = EhFrameHdr::from(eh_frame_hdr_data);
+                let hdr = EhFrameHdr::new(eh_frame_hdr_data, eh_frame_data.endian());
                 match hdr.parse(&bases, 8) {
                     Ok(hdr) => Some(hdr),
                     Err(_) => None,

@@ -381,11 +381,11 @@ impl<
                 }
             }
             ModuleUnwindData::EhFrameHdrAndEhFrame(eh_frame_hdr, eh_frame_data) => {
-                let eh_frame_hdr_data = ArcData(eh_frame_hdr.clone());
+                let eh_frame_hdr_data = &eh_frame_hdr[..];
                 let eh_frame_data = ArcData(eh_frame_data.clone());
                 let mut dwarf_unwinder = DwarfUnwinder::<_, A, P::GimliStorage>::new(
                     EndianReader::new(eh_frame_data, LittleEndian),
-                    Some(EndianReader::new(eh_frame_hdr_data, LittleEndian)),
+                    Some(eh_frame_hdr_data),
                     &mut cache.eh_frame_unwind_context,
                     &module.sections,
                 );
@@ -405,7 +405,7 @@ impl<
 
 pub enum ModuleUnwindData<D: Deref<Target = [u8]>> {
     CompactUnwindInfoAndEhFrame(D, Option<Arc<D>>),
-    EhFrameHdrAndEhFrame(Arc<D>, Arc<D>),
+    EhFrameHdrAndEhFrame(D, Arc<D>),
     EhFrame(Arc<D>),
     None,
 }

@@ -45,10 +45,7 @@ where
             )
         }
         (None, Some(eh_frame), Some(eh_frame_hdr)) => {
-            framehop::ModuleUnwindData::EhFrameHdrAndEhFrame(
-                Arc::new(eh_frame_hdr),
-                Arc::new(eh_frame),
-            )
+            framehop::ModuleUnwindData::EhFrameHdrAndEhFrame(eh_frame_hdr, Arc::new(eh_frame))
         }
         (None, Some(eh_frame), None) => framehop::ModuleUnwindData::EhFrame(Arc::new(eh_frame)),
         (None, None, _) => framehop::ModuleUnwindData::None,
