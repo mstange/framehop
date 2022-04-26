@@ -27,9 +27,6 @@ pub enum UnwinderError {
     #[error("__unwind_info referred to DWARF FDE but we do not have __eh_frame data")]
     NoDwarfData,
 
-    #[error("Unhandled unwind data type")]
-    UnhandledModuleUnwindDataType,
-
     #[error("No unwind data for the module containing the address")]
     NoModuleUnwindData,
 

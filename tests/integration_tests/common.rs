@@ -1,4 +1,4 @@
-use std::{io::Read, ops::Range, path::Path, sync::Arc};
+use std::{io::Read, ops::Range, path::Path};
 
 use object::{Object, ObjectSection, ObjectSegment};
 
@@ -39,15 +39,12 @@ where
         eh_frame_hdr.as_ref().and_then(section_data),
     ) {
         (Some(unwind_info), eh_frame, _) => {
-            framehop::ModuleUnwindData::CompactUnwindInfoAndEhFrame(
-                unwind_info,
-                eh_frame.map(Arc::new),
-            )
+            framehop::ModuleUnwindData::CompactUnwindInfoAndEhFrame(unwind_info, eh_frame)
         }
         (None, Some(eh_frame), Some(eh_frame_hdr)) => {
-            framehop::ModuleUnwindData::EhFrameHdrAndEhFrame(eh_frame_hdr, Arc::new(eh_frame))
+            framehop::ModuleUnwindData::EhFrameHdrAndEhFrame(eh_frame_hdr, eh_frame)
         }
-        (None, Some(eh_frame), None) => framehop::ModuleUnwindData::EhFrame(Arc::new(eh_frame)),
+        (None, Some(eh_frame), None) => framehop::ModuleUnwindData::EhFrame(eh_frame),
         (None, None, _) => framehop::ModuleUnwindData::None,
     };
 

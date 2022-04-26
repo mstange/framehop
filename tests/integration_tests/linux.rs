@@ -1,5 +1,6 @@
 use std::path::Path;
 
+use framehop::aarch64::*;
 use framehop::x86_64::*;
 use framehop::FrameAddress;
 use framehop::Unwinder;
@@ -141,4 +142,120 @@ fn test_pthread_cfa_expr() {
     assert_eq!(res, Ok(Some(0xbe7042)));
     assert_eq!(regs.sp(), 0x130);
     assert_eq!(regs.bp(), 0x1234);
+}
+
+#[test]
+fn test_no_eh_frame_hdr() {
+    let mut cache = CacheAarch64::<_>::new();
+    let mut unwinder = UnwinderAarch64::new();
+    common::add_object(
+        &mut unwinder,
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/linux/aarch64/vdso.so"),
+        0x0,
+    );
+    let mut stack = [
+        /* 0x0: */ 0, /* 0x8: */ 1, /* 0x10: */ 2, /* 0x18: */ 3,
+        /* 0x20: */ 40000, // stored fp
+        /* 0x28: */ 50000, // stored lr
+        /* 0x30: */ 6, /* 0x38: */ 7, /* 0x40: */ 80000, // stored fp
+        /* 0x48: */ 90000, // stored lr
+        /* 0x50: */ 10, /* 0x58: */ 11, /* 0x60: */ 12, /* 0x68: */ 13,
+        /* 0x70: */ 0x0, // sentinel fp
+        /* 0x78: */ 0x0, // sentinel lr
+    ];
+    let mut regs = UnwindRegsAarch64::new(0x1234, 0x50, 0x70);
+    let res = unwinder.unwind_frame(
+        FrameAddress::from_instruction_pointer(0x5a8),
+        &mut regs,
+        &mut cache,
+        &mut |addr| stack.get((addr / 8) as usize).cloned().ok_or(()),
+    );
+    assert_eq!(res, Ok(Some(0x1234)));
+    assert_eq!(regs.sp(), 0x50);
+    assert_eq!(regs.fp(), 0x70);
+    assert_eq!(regs.lr(), 0x1234);
+
+    let mut regs = UnwindRegsAarch64::new(0x1234, 0x40, 0x70);
+    stack[8] = regs.fp();
+    stack[9] = regs.lr();
+    let res = unwinder.unwind_frame(
+        FrameAddress::from_instruction_pointer(0x5ac),
+        &mut regs,
+        &mut cache,
+        &mut |addr| stack.get((addr / 8) as usize).cloned().ok_or(()),
+    );
+    assert_eq!(res, Ok(Some(0x1234)));
+    assert_eq!(regs.sp(), 0x50);
+    assert_eq!(regs.fp(), 0x70);
+    assert_eq!(regs.lr(), 0x1234);
+
+    let mut regs = UnwindRegsAarch64::new(0x1234, 0x40, 0x40);
+    let res = unwinder.unwind_frame(
+        FrameAddress::from_instruction_pointer(0x5b0),
+        &mut regs,
+        &mut cache,
+        &mut |addr| stack.get((addr / 8) as usize).cloned().ok_or(()),
+    );
+    assert_eq!(res, Ok(Some(0x1234)));
+    assert_eq!(regs.sp(), 0x50);
+    assert_eq!(regs.fp(), 0x70);
+    assert_eq!(regs.lr(), 0x1234);
+
+    let mut regs = UnwindRegsAarch64::new(0x5b4, 0x40, 0x40);
+    let res = unwinder.unwind_frame(
+        FrameAddress::from_instruction_pointer(0x3c0),
+        &mut regs,
+        &mut cache,
+        &mut |addr| stack.get((addr / 8) as usize).cloned().ok_or(()),
+    );
+    assert_eq!(res, Ok(Some(0x5b4)));
+    assert_eq!(regs.sp(), 0x40);
+    assert_eq!(regs.fp(), 0x40);
+    assert_eq!(regs.lr(), 0x5b4);
+
+    let mut regs = UnwindRegsAarch64::new(0x5b4, 0x40, 0x40);
+    let res = unwinder.unwind_frame(
+        FrameAddress::from_instruction_pointer(0x3c0),
+        &mut regs,
+        &mut cache,
+        &mut |addr| stack.get((addr / 8) as usize).cloned().ok_or(()),
+    );
+    assert_eq!(res, Ok(Some(0x5b4)));
+    assert_eq!(regs.sp(), 0x40);
+    assert_eq!(regs.fp(), 0x40);
+    assert_eq!(regs.lr(), 0x5b4);
+
+    let mut regs = UnwindRegsAarch64::new(0x5b4, 0x40, 0x40);
+    let res = unwinder.unwind_frame(
+        FrameAddress::from_instruction_pointer(0x3ec),
+        &mut regs,
+        &mut cache,
+        &mut |addr| stack.get((addr / 8) as usize).cloned().ok_or(()),
+    );
+    assert_eq!(res, Ok(Some(0x5b4)));
+    assert_eq!(regs.sp(), 0x40);
+    assert_eq!(regs.fp(), 0x40);
+    assert_eq!(regs.lr(), 0x5b4);
+    let res = unwinder.unwind_frame(
+        FrameAddress::from_instruction_pointer(0x5b4),
+        &mut regs,
+        &mut cache,
+        &mut |addr| stack.get((addr / 8) as usize).cloned().ok_or(()),
+    );
+    assert_eq!(res, Ok(Some(0x1234)));
+    assert_eq!(regs.sp(), 0x50);
+    assert_eq!(regs.fp(), 0x70);
+    assert_eq!(regs.lr(), 0x1234);
+
+    let mut regs = UnwindRegsAarch64::new(0x1234, 0x50, 0x70);
+    let res = unwinder.unwind_frame(
+        FrameAddress::from_instruction_pointer(0x5b8),
+        &mut regs,
+        &mut cache,
+        &mut |addr| stack.get((addr / 8) as usize).cloned().ok_or(()),
+    );
+    assert_eq!(res, Ok(Some(0x1234)));
+    assert_eq!(regs.sp(), 0x50);
+    assert_eq!(regs.fp(), 0x70);
+    assert_eq!(regs.lr(), 0x1234);
 }

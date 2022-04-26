@@ -4,7 +4,7 @@ use gimli::{EndianReader, LittleEndian};
 use crate::arcdata::ArcData;
 use crate::arch::Arch;
 use crate::cache::{AllocationPolicy, Cache};
-use crate::dwarf::{DwarfUnwinder, DwarfUnwinding};
+use crate::dwarf::{DwarfCfiIndex, DwarfUnwinder, DwarfUnwinding};
 use crate::error::{Error, UnwinderError};
 use crate::instruction_analysis::InstructionAnalysis;
 use crate::macho::{
@@ -329,7 +329,7 @@ impl<
         F: FnMut(u64) -> Result<u64, ()>,
     {
         let unwind_result = match &module.unwind_data {
-            ModuleUnwindData::CompactUnwindInfoAndEhFrame(unwind_data, eh_frame_data) => {
+            ModuleUnwindDataInternal::CompactUnwindInfoAndEhFrame(unwind_data, eh_frame_data) => {
                 // eprintln!("unwinding with cui and eh_frame in module {}", module.name);
                 let text_bytes = module.text_data.as_ref().and_then(|data| {
                     let offset_from_base =
@@ -380,7 +380,7 @@ impl<
                     }
                 }
             }
-            ModuleUnwindData::EhFrameHdrAndEhFrame(eh_frame_hdr, eh_frame_data) => {
+            ModuleUnwindDataInternal::EhFrameHdrAndEhFrame(eh_frame_hdr, eh_frame_data) => {
                 let eh_frame_hdr_data = &eh_frame_hdr[..];
                 let eh_frame_data = ArcData(eh_frame_data.clone());
                 let mut dwarf_unwinder = DwarfUnwinder::<_, A, P::GimliStorage>::new(
@@ -394,20 +394,63 @@ impl<
                     .ok_or(UnwinderError::EhFrameHdrCouldNotFindAddress)?;
                 dwarf_unwinder.unwind_frame_with_fde(regs, address, fde_offset, read_stack)?
             }
-            ModuleUnwindData::EhFrame(_) => {
-                return Err(UnwinderError::UnhandledModuleUnwindDataType)
+            ModuleUnwindDataInternal::DwarfCfiIndexAndEhFrame(index, eh_frame_data) => {
+                let eh_frame_data = ArcData(eh_frame_data.clone());
+                let mut dwarf_unwinder = DwarfUnwinder::<_, A, P::GimliStorage>::new(
+                    EndianReader::new(eh_frame_data, LittleEndian),
+                    None,
+                    &mut cache.eh_frame_unwind_context,
+                    &module.sections,
+                );
+                let fde_offset = index
+                    .fde_offset_for_relative_address(rel_lookup_address)
+                    .ok_or(UnwinderError::EhFrameHdrCouldNotFindAddress)?;
+                dwarf_unwinder.unwind_frame_with_fde(regs, address, fde_offset, read_stack)?
             }
-            ModuleUnwindData::None => return Err(UnwinderError::NoModuleUnwindData),
+            ModuleUnwindDataInternal::None => return Err(UnwinderError::NoModuleUnwindData),
         };
         Ok(unwind_result)
     }
 }
 
 pub enum ModuleUnwindData<D: Deref<Target = [u8]>> {
+    CompactUnwindInfoAndEhFrame(D, Option<D>),
+    EhFrameHdrAndEhFrame(D, D),
+    EhFrame(D),
+    None,
+}
+
+enum ModuleUnwindDataInternal<D: Deref<Target = [u8]>> {
     CompactUnwindInfoAndEhFrame(D, Option<Arc<D>>),
     EhFrameHdrAndEhFrame(D, Arc<D>),
-    EhFrame(Arc<D>),
+    DwarfCfiIndexAndEhFrame(DwarfCfiIndex, Arc<D>),
     None,
+}
+
+impl<D: Deref<Target = [u8]>> ModuleUnwindDataInternal<D> {
+    fn new(
+        unwind_data: ModuleUnwindData<D>,
+        sections: &ModuleSectionAddressRanges,
+        base_address: u64,
+    ) -> Self {
+        match unwind_data {
+            ModuleUnwindData::CompactUnwindInfoAndEhFrame(cui, eh_frame) => {
+                ModuleUnwindDataInternal::CompactUnwindInfoAndEhFrame(cui, eh_frame.map(Arc::new))
+            }
+            ModuleUnwindData::EhFrameHdrAndEhFrame(eh_frame_hdr, eh_frame) => {
+                ModuleUnwindDataInternal::EhFrameHdrAndEhFrame(eh_frame_hdr, Arc::new(eh_frame))
+            }
+            ModuleUnwindData::EhFrame(eh_frame) => {
+                match DwarfCfiIndex::try_new(&eh_frame, sections, base_address) {
+                    Ok(index) => {
+                        ModuleUnwindDataInternal::DwarfCfiIndexAndEhFrame(index, Arc::new(eh_frame))
+                    }
+                    Err(_) => ModuleUnwindDataInternal::None,
+                }
+            }
+            ModuleUnwindData::None => ModuleUnwindDataInternal::None,
+        }
+    }
 }
 
 pub struct TextByteData<D: Deref<Target = [u8]>> {
@@ -427,7 +470,7 @@ pub struct Module<D: Deref<Target = [u8]>> {
     address_range: Range<u64>,
     base_address: u64,
     sections: ModuleSectionAddressRanges,
-    unwind_data: ModuleUnwindData<D>,
+    unwind_data: ModuleUnwindDataInternal<D>,
     text_data: Option<TextByteData<D>>,
 }
 
@@ -451,6 +494,7 @@ impl<D: Deref<Target = [u8]>> Module<D> {
         unwind_data: ModuleUnwindData<D>,
         text_data: Option<TextByteData<D>>,
     ) -> Self {
+        let unwind_data = ModuleUnwindDataInternal::new(unwind_data, &sections, base_address);
         Self {
             name,
             address_range,

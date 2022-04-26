@@ -1,9 +1,10 @@
 use std::{marker::PhantomData, ops::Range};
 
 use gimli::{
-    BaseAddresses, CfaRule, EhFrameHdr, Encoding, EndianSlice, Evaluation, EvaluationResult,
-    EvaluationStorage, Expression, Location, ParsedEhFrameHdr, Reader, ReaderOffset, Register,
-    RegisterRule, UnwindContext, UnwindContextStorage, UnwindSection, UnwindTableRow, Value,
+    BaseAddresses, CfaRule, CieOrFde, EhFrameHdr, Encoding, EndianSlice, Evaluation,
+    EvaluationResult, EvaluationStorage, Expression, LittleEndian, Location, ParsedEhFrameHdr,
+    Reader, ReaderOffset, Register, RegisterRule, UnwindContext, UnwindContextStorage,
+    UnwindSection, UnwindTableRow, Value,
 };
 
 use crate::{arch::Arch, unwind_result::UnwindResult, FrameAddress, ModuleSectionAddressRanges};
@@ -81,18 +82,7 @@ impl<'a, R: Reader, A: DwarfUnwinding, S: UnwindContextStorage<R> + EvaluationSt
         unwind_context: &'a mut UnwindContext<R, S>,
         sections: &ModuleSectionAddressRanges,
     ) -> Self {
-        fn start_addr(range: &Option<Range<u64>>) -> u64 {
-            if let Some(range) = range {
-                range.start
-            } else {
-                0
-            }
-        }
-        let bases = BaseAddresses::default()
-            .set_eh_frame(start_addr(&sections.eh_frame))
-            .set_eh_frame_hdr(start_addr(&sections.eh_frame_hdr))
-            .set_text(start_addr(&sections.text))
-            .set_got(start_addr(&sections.got));
+        let bases = base_addresses_for_sections(sections);
         let eh_frame_hdr = match eh_frame_hdr_data {
             Some(eh_frame_hdr_data) => {
                 let hdr = EhFrameHdr::new(eh_frame_hdr_data, eh_frame_data.endian());
@@ -151,6 +141,105 @@ impl<'a, R: Reader, A: DwarfUnwinding, S: UnwindContextStorage<R> + EvaluationSt
             }
         };
         A::unwind_frame::<F, R, S>(unwind_info, encoding, regs, address, read_stack)
+    }
+}
+
+fn base_addresses_for_sections(sections: &ModuleSectionAddressRanges) -> BaseAddresses {
+    fn start_addr(range: &Option<Range<u64>>) -> u64 {
+        if let Some(range) = range {
+            range.start
+        } else {
+            0
+        }
+    }
+    BaseAddresses::default()
+        .set_eh_frame(start_addr(&sections.eh_frame))
+        .set_eh_frame_hdr(start_addr(&sections.eh_frame_hdr))
+        .set_text(start_addr(&sections.text))
+        .set_got(start_addr(&sections.got))
+}
+
+#[derive(thiserror::Error, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DwarfCfiIndexError {
+    #[error("EhFrame processing failed: {0}")]
+    Gimli(#[from] gimli::Error),
+
+    #[error("Could not subtract base address to create relative pc")]
+    CouldNotSubtractBaseAddress,
+
+    #[error("Relative address did not fit into u32")]
+    RelativeAddressTooBig,
+
+    #[error("FDE offset did not fit into u32")]
+    FdeOffsetTooBig,
+}
+
+pub struct DwarfCfiIndex {
+    sorted_fde_pc_starts: Vec<u32>,
+    fde_offsets: Vec<u32>,
+}
+
+impl DwarfCfiIndex {
+    pub fn try_new(
+        eh_frame_data: &[u8],
+        sections: &ModuleSectionAddressRanges,
+        base_address: u64,
+    ) -> Result<Self, DwarfCfiIndexError> {
+        let bases = base_addresses_for_sections(sections);
+        let mut eh_frame = gimli::EhFrame::from(EndianSlice::new(eh_frame_data, LittleEndian));
+        eh_frame.set_address_size(8);
+
+        let mut fde_pc_and_offset = Vec::new();
+
+        let mut cur_cie = None;
+        let mut entries_iter = eh_frame.entries(&bases);
+        while let Some(entry) = entries_iter.next()? {
+            let fde = match entry {
+                CieOrFde::Cie(cie) => {
+                    cur_cie = Some(cie);
+                    continue;
+                }
+                CieOrFde::Fde(partial_fde) => {
+                    partial_fde.parse(|eh_frame, bases, cie_offset| {
+                        if let Some(cie) = &cur_cie {
+                            if cie.offset() == cie_offset.0 {
+                                return Ok(cie.clone());
+                            }
+                        }
+                        let cie = eh_frame.cie_from_offset(bases, cie_offset);
+                        if let Ok(cie) = &cie {
+                            cur_cie = Some(cie.clone());
+                        }
+                        cie
+                    })?
+                }
+            };
+            let pc = fde.initial_address();
+            let relative_pc = pc
+                .checked_sub(base_address)
+                .ok_or(DwarfCfiIndexError::CouldNotSubtractBaseAddress)?;
+            let relative_pc = u32::try_from(relative_pc)
+                .map_err(|_| DwarfCfiIndexError::RelativeAddressTooBig)?;
+            let fde_offset =
+                u32::try_from(fde.offset()).map_err(|_| DwarfCfiIndexError::FdeOffsetTooBig)?;
+            fde_pc_and_offset.push((relative_pc, fde_offset));
+        }
+        fde_pc_and_offset.sort_by_key(|(pc, _)| *pc);
+        let sorted_fde_pc_starts = fde_pc_and_offset.iter().map(|(pc, _)| *pc).collect();
+        let fde_offsets = fde_pc_and_offset.into_iter().map(|(_, fde)| fde).collect();
+        Ok(Self {
+            sorted_fde_pc_starts,
+            fde_offsets,
+        })
+    }
+
+    pub fn fde_offset_for_relative_address(&self, rel_lookup_address: u32) -> Option<u32> {
+        let i = match self.sorted_fde_pc_starts.binary_search(&rel_lookup_address) {
+            Err(0) => return None,
+            Ok(i) => i,
+            Err(i) => i - 1,
+        };
+        Some(self.fde_offsets[i])
     }
 }
 
