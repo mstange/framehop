@@ -1,10 +1,10 @@
 use std::{marker::PhantomData, ops::Range};
 
 use gimli::{
-    BaseAddresses, CfaRule, CieOrFde, EhFrameHdr, Encoding, EndianSlice, Evaluation,
-    EvaluationResult, EvaluationStorage, Expression, LittleEndian, Location, ParsedEhFrameHdr,
-    Reader, ReaderOffset, Register, RegisterRule, UnwindContext, UnwindContextStorage,
-    UnwindSection, UnwindTableRow, Value,
+    BaseAddresses, CfaRule, CieOrFde, EhFrame, EhFrameHdr, EhFrameOffset, Encoding, EndianSlice,
+    Evaluation, EvaluationResult, EvaluationStorage, Expression, LittleEndian, Location,
+    ParsedEhFrameHdr, Reader, ReaderOffset, Register, RegisterRule, UnwindContext,
+    UnwindContextStorage, UnwindSection, UnwindTableRow, Value,
 };
 
 use crate::{arch::Arch, unwind_result::UnwindResult, FrameAddress, ModuleSectionAddressRanges};
@@ -120,12 +120,12 @@ impl<'a, R: Reader, A: DwarfUnwinding, S: UnwindContextStorage<R> + EvaluationSt
     where
         F: FnMut(u64) -> Result<u64, ()>,
     {
-        let mut eh_frame = gimli::EhFrame::from(self.eh_frame_data.clone());
+        let mut eh_frame = EhFrame::from(self.eh_frame_data.clone());
         eh_frame.set_address_size(8);
         let fde = eh_frame.fde_from_offset(
             &self.bases,
-            gimli::EhFrameOffset::from(R::Offset::from_u32(fde_offset)),
-            gimli::EhFrame::cie_from_offset,
+            EhFrameOffset::from(R::Offset::from_u32(fde_offset)),
+            EhFrame::cie_from_offset,
         );
         let fde = fde.map_err(DwarfUnwinderError::FdeFromOffsetFailed)?;
         let encoding = fde.cie().encoding();
@@ -193,7 +193,7 @@ impl DwarfCfiIndex {
         base_address: u64,
     ) -> Result<Self, DwarfCfiIndexError> {
         let bases = base_addresses_for_sections(sections);
-        let mut eh_frame = gimli::EhFrame::from(EndianSlice::new(eh_frame_data, LittleEndian));
+        let mut eh_frame = EhFrame::from(EndianSlice::new(eh_frame_data, LittleEndian));
         eh_frame.set_address_size(8);
 
         let mut fde_pc_and_offset = Vec::new();
@@ -254,7 +254,7 @@ pub trait DwarfUnwindRegs {
     fn get(&self, register: Register) -> Option<u64>;
 }
 
-pub fn eval_cfa_rule<R: gimli::Reader, UR: DwarfUnwindRegs, S: EvaluationStorage<R>>(
+pub fn eval_cfa_rule<R: Reader, UR: DwarfUnwindRegs, S: EvaluationStorage<R>>(
     rule: &CfaRule<R>,
     encoding: Encoding,
     regs: &UR,
@@ -268,7 +268,7 @@ pub fn eval_cfa_rule<R: gimli::Reader, UR: DwarfUnwindRegs, S: EvaluationStorage
     }
 }
 
-fn eval_expr<R: gimli::Reader, UR: DwarfUnwindRegs, S: EvaluationStorage<R>>(
+fn eval_expr<R: Reader, UR: DwarfUnwindRegs, S: EvaluationStorage<R>>(
     expr: Expression<R>,
     encoding: Encoding,
     regs: &UR,
@@ -302,7 +302,7 @@ pub fn eval_register_rule<R, F, UR, S>(
     read_stack: &mut F,
 ) -> Option<u64>
 where
-    R: gimli::Reader,
+    R: Reader,
     F: FnMut(u64) -> Result<u64, ()>,
     UR: DwarfUnwindRegs,
     S: EvaluationStorage<R>,
