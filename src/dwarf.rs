@@ -174,8 +174,15 @@ pub enum DwarfCfiIndexError {
     FdeOffsetTooBig,
 }
 
+/// A binary search table for eh_frame FDEs. We generate this whenever a module
+/// without eh_frame_hdr is added.
 pub struct DwarfCfiIndex {
+    /// Contains the initial address for every FDE, relative to the base address.
+    /// This vector is sorted so that it can be used for binary search.
+    /// It has the same length as `fde_offsets`.
     sorted_fde_pc_starts: Vec<u32>,
+    /// Contains the FDE offset for every FDE. The FDE at offset `fde_offsets[i]`
+    /// has a PC range which starts at `sorted_fde_pc_starts[i]`.
     fde_offsets: Vec<u32>,
 }
 
