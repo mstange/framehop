@@ -333,7 +333,8 @@ impl<
                 // eprintln!("unwinding with cui and eh_frame in module {}", module.name);
                 let text_bytes = module.text_data.as_ref().and_then(|data| {
                     let offset_from_base =
-                        u32::try_from(data.range.start.checked_sub(module.base_address)?).ok()?;
+                        u32::try_from(data.address_range.start.checked_sub(module.base_address)?)
+                            .ok()?;
                     Some(TextBytes::new(offset_from_base, &data.bytes[..]))
                 });
                 let stubs_range = if let Some(stubs_range) = &module.sections.stubs {
@@ -483,12 +484,27 @@ impl<D: Deref<Target = [u8]>> ModuleUnwindDataInternal<D> {
 
 pub struct TextByteData<D: Deref<Target = [u8]>> {
     bytes: D,
-    range: Range<u64>,
+    address_range: Range<u64>,
 }
 
 impl<D: Deref<Target = [u8]>> TextByteData<D> {
-    pub fn new(bytes: D, range: Range<u64>) -> Self {
-        Self { bytes, range }
+    pub fn new(bytes: D, address_range: Range<u64>) -> Self {
+        Self {
+            bytes,
+            address_range,
+        }
+    }
+
+    pub fn get_bytes(&self, address_range: Range<u64>) -> Option<&[u8]> {
+        let rel_start = address_range.start.checked_sub(self.address_range.start)?;
+        let rel_start = usize::try_from(rel_start).ok()?;
+        let rel_end = address_range.end.checked_sub(self.address_range.start)?;
+        let rel_end = usize::try_from(rel_end).ok()?;
+        self.bytes.get(rel_start..rel_end)
+    }
+
+    pub fn address_range(&self) -> Range<u64> {
+        self.address_range.clone()
     }
 }
 
