@@ -936,3 +936,109 @@ fn test_stubs_x86_64_xul() {
     assert_eq!(regs.sp(), 0x100);
     assert_eq!(regs.bp(), 0x120);
 }
+
+// This test requires a binary which is not in this repo.
+// It also fails at the moment.
+#[ignore]
+#[test]
+fn test_go_zdebug_frame() {
+    let mut cache = CacheAarch64::<_>::new();
+    let mut unwinder = UnwinderAarch64::new();
+    common::add_object(
+        &mut unwinder,
+        Path::new("/Users/mstange/Downloads/esbuild"),
+        0x0,
+    );
+
+    // _context.WithCancel:
+    // e9720  ldr  x1, [x28, #0x10]
+    // e9724  mov  x2, sp
+    // e9728  cmp  x2, x1
+    // e972c  b.ls  loc_1000e9874
+    //                               ; actual prologue starts
+    // e9730  str  lr, [sp, #-0x40]!
+    // e9734  stur  fp, [sp, #-0x8]
+    // e9738  sub  fp, sp, #0x8
+    //                               ; prologue done
+    // e973c  ldr  x0, [sp, #0x48]
+    // ...
+    // e9750  bl  _runtime.newobject
+    // e9754  ldr  x0, [sp, #0x10]
+    // ...
+    // e9844  str  x0, [sp, #0x68]
+    //                               ; epilogue starts
+    // e9848  ldur  fp, [sp, #-0x8]
+    // e984c  ldr  lr, [sp], #0x40
+    // e9850  ret
+
+    let mut stack = [
+        /* 0x0: */ 0, /* 0x8: */ 1000, // fp will be stored here
+        /* 0x10: */ 2000, // lr will be stored here
+        /* 0x18: */ 3, /* 0x20: */ 4, /* 0x28: */ 5, /* 0x30: */ 6,
+        /* 0x38: */ 7, /* 0x40: */ 8, /* 0x48: */ 9, /* 0x50: */ 10,
+        /* 0x58: */ 11, /* 0x60: */ 12, /* 0x68: */ 13,
+        /* 0x70: */ 0x0, // sentinel fp
+        /* 0x78: */ 0x0, // sentinel lr
+    ];
+    let mut regs = UnwindRegsAarch64::new(0x1234, 0x50, 0x70);
+    let res = unwinder.unwind_frame(
+        FrameAddress::from_instruction_pointer(0xe9724),
+        &mut regs,
+        &mut cache,
+        &mut |addr| stack.get((addr / 8) as usize).cloned().ok_or(()),
+    );
+    assert_eq!(res, Ok(Some(0x1234)));
+    assert_eq!(regs.sp(), 0x50);
+    assert_eq!(regs.fp(), 0x70);
+    assert_eq!(regs.lr(), 0x1234);
+
+    stack[2] = 0x1234;
+    let mut regs = UnwindRegsAarch64::new(0x1234, 0x10, 0x70);
+    let res = unwinder.unwind_frame(
+        FrameAddress::from_instruction_pointer(0xe9734),
+        &mut regs,
+        &mut cache,
+        &mut |addr| stack.get((addr / 8) as usize).cloned().ok_or(()),
+    );
+    assert_eq!(res, Ok(Some(0x1234)));
+    assert_eq!(regs.sp(), 0x50);
+    assert_eq!(regs.fp(), 0x70);
+    assert_eq!(regs.lr(), 0x1234);
+
+    stack[1] = 0x70;
+    let mut regs = UnwindRegsAarch64::new(0x1234, 0x10, 0x70);
+    let res = unwinder.unwind_frame(
+        FrameAddress::from_instruction_pointer(0xe9738),
+        &mut regs,
+        &mut cache,
+        &mut |addr| stack.get((addr / 8) as usize).cloned().ok_or(()),
+    );
+    assert_eq!(res, Ok(Some(0x1234)));
+    assert_eq!(regs.sp(), 0x50);
+    assert_eq!(regs.fp(), 0x70);
+    assert_eq!(regs.lr(), 0x1234);
+
+    let mut regs = UnwindRegsAarch64::new(0x1234, 0x10, 0x8);
+    let res = unwinder.unwind_frame(
+        FrameAddress::from_instruction_pointer(0xe973c),
+        &mut regs,
+        &mut cache,
+        &mut |addr| stack.get((addr / 8) as usize).cloned().ok_or(()),
+    );
+    assert_eq!(res, Ok(Some(0x1234)));
+    assert_eq!(regs.sp(), 0x50);
+    assert_eq!(regs.fp(), 0x70);
+    assert_eq!(regs.lr(), 0x1234);
+
+    let mut regs = UnwindRegsAarch64::new(0xe9754, 0x10, 0x8);
+    let res = unwinder.unwind_frame(
+        FrameAddress::from_instruction_pointer(0xe9754),
+        &mut regs,
+        &mut cache,
+        &mut |addr| stack.get((addr / 8) as usize).cloned().ok_or(()),
+    );
+    assert_eq!(res, Ok(Some(0x1234)));
+    assert_eq!(regs.sp(), 0x50);
+    assert_eq!(regs.fp(), 0x70);
+    assert_eq!(regs.lr(), 0x1234);
+}

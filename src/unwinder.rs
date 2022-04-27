@@ -4,7 +4,7 @@ use gimli::{EndianReader, LittleEndian};
 use crate::arcdata::ArcData;
 use crate::arch::Arch;
 use crate::cache::{AllocationPolicy, Cache};
-use crate::dwarf::{DwarfCfiIndex, DwarfUnwinder, DwarfUnwinding};
+use crate::dwarf::{DwarfCfiIndex, DwarfUnwinder, DwarfUnwinding, UnwindSectionType};
 use crate::error::{Error, UnwinderError};
 use crate::instruction_analysis::InstructionAnalysis;
 use crate::macho::{
@@ -371,6 +371,7 @@ impl<
                         };
                         let mut dwarf_unwinder = DwarfUnwinder::<_, A, P::GimliStorage>::new(
                             EndianReader::new(eh_frame_data, LittleEndian),
+                            UnwindSectionType::EhFrame,
                             None,
                             &mut cache.eh_frame_unwind_context,
                             &module.sections,
@@ -385,6 +386,7 @@ impl<
                 let eh_frame_data = ArcData(eh_frame_data.clone());
                 let mut dwarf_unwinder = DwarfUnwinder::<_, A, P::GimliStorage>::new(
                     EndianReader::new(eh_frame_data, LittleEndian),
+                    UnwindSectionType::EhFrame,
                     Some(eh_frame_hdr_data),
                     &mut cache.eh_frame_unwind_context,
                     &module.sections,
@@ -398,6 +400,7 @@ impl<
                 let eh_frame_data = ArcData(eh_frame_data.clone());
                 let mut dwarf_unwinder = DwarfUnwinder::<_, A, P::GimliStorage>::new(
                     EndianReader::new(eh_frame_data, LittleEndian),
+                    UnwindSectionType::EhFrame,
                     None,
                     &mut cache.eh_frame_unwind_context,
                     &module.sections,
@@ -406,6 +409,20 @@ impl<
                     .fde_offset_for_relative_address(rel_lookup_address)
                     .ok_or(UnwinderError::EhFrameHdrCouldNotFindAddress)?;
                 dwarf_unwinder.unwind_frame_with_fde(regs, address, fde_offset, read_stack)?
+            }
+            ModuleUnwindDataInternal::DwarfCfiIndexAndDebugFrame(index, debug_frame_data) => {
+                let debug_frame_data = ArcData(debug_frame_data.clone());
+                let mut dwarf_unwinder = DwarfUnwinder::<_, A, P::GimliStorage>::new(
+                    EndianReader::new(debug_frame_data, LittleEndian),
+                    UnwindSectionType::DebugFrame,
+                    None,
+                    &mut cache.eh_frame_unwind_context,
+                    &module.sections,
+                );
+                let fde_offset = index
+                    .fde_offset_for_relative_address(rel_lookup_address)
+                    .ok_or(UnwinderError::EhFrameHdrCouldNotFindAddress)?;
+                dbg!(dwarf_unwinder.unwind_frame_with_fde(regs, address, fde_offset, read_stack))?
             }
             ModuleUnwindDataInternal::None => return Err(UnwinderError::NoModuleUnwindData),
         };
@@ -417,6 +434,7 @@ pub enum ModuleUnwindData<D: Deref<Target = [u8]>> {
     CompactUnwindInfoAndEhFrame(D, Option<D>),
     EhFrameHdrAndEhFrame(D, D),
     EhFrame(D),
+    DebugFrame(D),
     None,
 }
 
@@ -424,6 +442,7 @@ enum ModuleUnwindDataInternal<D: Deref<Target = [u8]>> {
     CompactUnwindInfoAndEhFrame(D, Option<Arc<D>>),
     EhFrameHdrAndEhFrame(D, Arc<D>),
     DwarfCfiIndexAndEhFrame(DwarfCfiIndex, Arc<D>),
+    DwarfCfiIndexAndDebugFrame(DwarfCfiIndex, Arc<D>),
     None,
 }
 
@@ -441,10 +460,19 @@ impl<D: Deref<Target = [u8]>> ModuleUnwindDataInternal<D> {
                 ModuleUnwindDataInternal::EhFrameHdrAndEhFrame(eh_frame_hdr, Arc::new(eh_frame))
             }
             ModuleUnwindData::EhFrame(eh_frame) => {
-                match DwarfCfiIndex::try_new(&eh_frame, sections, base_address) {
+                match DwarfCfiIndex::try_new_eh_frame(&eh_frame, sections, base_address) {
                     Ok(index) => {
                         ModuleUnwindDataInternal::DwarfCfiIndexAndEhFrame(index, Arc::new(eh_frame))
                     }
+                    Err(_) => ModuleUnwindDataInternal::None,
+                }
+            }
+            ModuleUnwindData::DebugFrame(debug_frame) => {
+                match DwarfCfiIndex::try_new_debug_frame(&debug_frame, sections, base_address) {
+                    Ok(index) => ModuleUnwindDataInternal::DwarfCfiIndexAndDebugFrame(
+                        index,
+                        Arc::new(debug_frame),
+                    ),
                     Err(_) => ModuleUnwindDataInternal::None,
                 }
             }

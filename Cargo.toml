@@ -20,6 +20,7 @@ fallible-iterator = "0.2.0"
 
 [dev-dependencies]
 object = "0.28.2"
+flate2 = "1.0.23"
 
 [profile.release]
 debug = true
