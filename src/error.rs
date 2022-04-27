@@ -32,6 +32,9 @@ pub enum UnwinderError {
 
     #[error(".eh_frame_hdr was not successful in looking up the address in the table")]
     EhFrameHdrCouldNotFindAddress,
+
+    #[error("Failed to look up the address in the DwarfCfiIndex search table")]
+    DwarfCfiIndexCouldNotFindAddress,
 }
 
 impl From<CompactUnwindInfoUnwinderError> for UnwinderError {

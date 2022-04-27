@@ -408,7 +408,7 @@ impl<
                 );
                 let fde_offset = index
                     .fde_offset_for_relative_address(rel_lookup_address)
-                    .ok_or(UnwinderError::EhFrameHdrCouldNotFindAddress)?;
+                    .ok_or(UnwinderError::DwarfCfiIndexCouldNotFindAddress)?;
                 dwarf_unwinder.unwind_frame_with_fde(regs, address, fde_offset, read_stack)?
             }
             ModuleUnwindDataInternal::DwarfCfiIndexAndDebugFrame(index, debug_frame_data) => {
@@ -422,7 +422,7 @@ impl<
                 );
                 let fde_offset = index
                     .fde_offset_for_relative_address(rel_lookup_address)
-                    .ok_or(UnwinderError::EhFrameHdrCouldNotFindAddress)?;
+                    .ok_or(UnwinderError::DwarfCfiIndexCouldNotFindAddress)?;
                 dwarf_unwinder.unwind_frame_with_fde(regs, address, fde_offset, read_stack)?
             }
             ModuleUnwindDataInternal::None => return Err(UnwinderError::NoModuleUnwindData),
