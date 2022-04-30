@@ -6,7 +6,6 @@ use gimli::{
 use super::{arch::ArchAarch64, unwind_rule::UnwindRuleAarch64, unwindregs::UnwindRegsAarch64};
 
 use crate::unwind_result::UnwindResult;
-use crate::FrameAddress;
 
 use crate::dwarf::{
     eval_cfa_rule, eval_register_rule, ConversionError, DwarfUnwindRegs, DwarfUnwinderError,
@@ -29,7 +28,7 @@ impl DwarfUnwinding for ArchAarch64 {
         unwind_info: &UnwindTableRow<R, S>,
         encoding: Encoding,
         regs: &mut Self::UnwindRegs,
-        address: FrameAddress,
+        is_first_frame: bool,
         read_stack: &mut F,
     ) -> Result<UnwindResult<Self::UnwindRule>, DwarfUnwinderError>
     where
@@ -56,7 +55,7 @@ impl DwarfUnwinding for ArchAarch64 {
         let fp = regs.fp();
         let sp = regs.sp();
 
-        let (fp, lr) = if address.is_return_address() {
+        let (fp, lr) = if !is_first_frame {
             if cfa <= sp {
                 return Err(DwarfUnwinderError::StackPointerMovedBackwards);
             }
@@ -87,9 +86,6 @@ impl DwarfUnwinding for ArchAarch64 {
                 .unwrap_or(fp);
             let lr = eval_register_rule::<R, F, _, S>(lr_rule, cfa, encoding, lr, regs, read_stack)
                 .unwrap_or(lr);
-            if cfa == sp && lr == address.address() {
-                return Err(DwarfUnwinderError::DidNotAdvance);
-            }
             (fp, lr)
         };
 

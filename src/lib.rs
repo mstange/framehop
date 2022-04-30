@@ -20,7 +20,7 @@ pub use cache::{AllocationPolicy, MayAllocateDuringUnwind, MustNotAllocateDuring
 pub use code_address::FrameAddress;
 pub use error::Error;
 pub use unwinder::{
-    Module, ModuleSectionAddressRanges, ModuleUnwindData, TextByteData, UnwindIterator, Unwinder,
+    Module, ModuleSvmaInfo, ModuleUnwindData, TextByteData, UnwindIterator, Unwinder,
 };
 
 #[cfg(target_arch = "aarch64")]

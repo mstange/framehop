@@ -946,7 +946,7 @@ fn test_go_zdebug_frame() {
     common::add_object(
         &mut unwinder,
         Path::new("/Users/mstange/Downloads/esbuild"),
-        0x100000000,
+        0,
     );
 
     // _context.WithCancel:
@@ -981,7 +981,7 @@ fn test_go_zdebug_frame() {
     ];
     let mut regs = UnwindRegsAarch64::new(0x1234, 0x50, 0x70);
     let res = unwinder.unwind_frame(
-        FrameAddress::from_instruction_pointer(0x1000e9724),
+        FrameAddress::from_instruction_pointer(0xe9724),
         &mut regs,
         &mut cache,
         &mut |addr| stack.get((addr / 8) as usize).cloned().ok_or(()),
@@ -994,7 +994,7 @@ fn test_go_zdebug_frame() {
     stack[2] = 0x1234;
     let mut regs = UnwindRegsAarch64::new(0x1234, 0x10, 0x70);
     let res = unwinder.unwind_frame(
-        FrameAddress::from_instruction_pointer(0x1000e9734),
+        FrameAddress::from_instruction_pointer(0xe9734),
         &mut regs,
         &mut cache,
         &mut |addr| stack.get((addr / 8) as usize).cloned().ok_or(()),
@@ -1007,7 +1007,7 @@ fn test_go_zdebug_frame() {
     stack[1] = 0x70;
     let mut regs = UnwindRegsAarch64::new(0x1234, 0x10, 0x70);
     let res = unwinder.unwind_frame(
-        FrameAddress::from_instruction_pointer(0x1000e9738),
+        FrameAddress::from_instruction_pointer(0xe9738),
         &mut regs,
         &mut cache,
         &mut |addr| stack.get((addr / 8) as usize).cloned().ok_or(()),
@@ -1019,7 +1019,7 @@ fn test_go_zdebug_frame() {
 
     let mut regs = UnwindRegsAarch64::new(0x1234, 0x10, 0x8);
     let res = unwinder.unwind_frame(
-        FrameAddress::from_instruction_pointer(0x1000e973c),
+        FrameAddress::from_instruction_pointer(0xe973c),
         &mut regs,
         &mut cache,
         &mut |addr| stack.get((addr / 8) as usize).cloned().ok_or(()),
@@ -1031,7 +1031,7 @@ fn test_go_zdebug_frame() {
 
     let mut regs = UnwindRegsAarch64::new(0xe9754, 0x10, 0x8);
     let res = unwinder.unwind_frame(
-        FrameAddress::from_instruction_pointer(0x1000e9754),
+        FrameAddress::from_instruction_pointer(0xe9754),
         &mut regs,
         &mut cache,
         &mut |addr| stack.get((addr / 8) as usize).cloned().ok_or(()),

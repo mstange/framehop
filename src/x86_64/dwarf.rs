@@ -9,7 +9,6 @@ use crate::dwarf::{
     DwarfUnwinding,
 };
 use crate::unwind_result::UnwindResult;
-use crate::FrameAddress;
 
 impl DwarfUnwindRegs for UnwindRegsX86_64 {
     fn get(&self, register: Register) -> Option<u64> {
@@ -27,7 +26,7 @@ impl DwarfUnwinding for ArchX86_64 {
         unwind_info: &UnwindTableRow<R, S>,
         encoding: Encoding,
         regs: &mut Self::UnwindRegs,
-        address: FrameAddress,
+        is_first_frame: bool,
         read_stack: &mut F,
     ) -> Result<UnwindResult<Self::UnwindRule>, DwarfUnwinderError>
     where
@@ -67,7 +66,7 @@ impl DwarfUnwinding for ArchX86_64 {
         if cfa == sp && return_address == ip {
             return Err(DwarfUnwinderError::DidNotAdvance);
         }
-        if address.is_return_address() && cfa < regs.sp() {
+        if !is_first_frame && cfa < regs.sp() {
             return Err(DwarfUnwinderError::StackPointerMovedBackwards);
         }
 
