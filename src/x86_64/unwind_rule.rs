@@ -32,7 +32,12 @@ impl UnwindRule for UnwindRuleX86_64 {
         UnwindRuleX86_64::UseFramePointer
     }
 
-    fn exec<F>(self, regs: &mut UnwindRegsX86_64, read_stack: &mut F) -> Result<Option<u64>, Error>
+    fn exec<F>(
+        self,
+        _is_first_frame: bool,
+        regs: &mut UnwindRegsX86_64,
+        read_stack: &mut F,
+    ) -> Result<Option<u64>, Error>
     where
         F: FnMut(u64) -> Result<u64, ()>,
     {
@@ -124,6 +129,9 @@ impl UnwindRule for UnwindRuleX86_64 {
         if return_address == 0 {
             return Ok(None);
         }
+        if new_sp == sp && return_address == regs.ip() {
+            return Err(Error::DidNotAdvance);
+        }
         regs.set_ip(return_address);
         regs.set_sp(new_sp);
         regs.set_bp(new_bp);
@@ -142,22 +150,23 @@ mod test {
         ];
         let mut read_stack = |addr| Ok(stack[(addr / 8) as usize]);
         let mut regs = UnwindRegsX86_64::new(0x100400, 0x10, 0x20);
-        let res = UnwindRuleX86_64::OffsetSp { sp_offset_by_8: 1 }.exec(&mut regs, &mut read_stack);
+        let res =
+            UnwindRuleX86_64::OffsetSp { sp_offset_by_8: 1 }.exec(true, &mut regs, &mut read_stack);
         assert_eq!(res, Ok(Some(0x100300)));
         assert_eq!(regs.ip(), 0x100300);
         assert_eq!(regs.sp(), 0x18);
         assert_eq!(regs.bp(), 0x20);
-        let res = UnwindRuleX86_64::UseFramePointer.exec(&mut regs, &mut read_stack);
+        let res = UnwindRuleX86_64::UseFramePointer.exec(true, &mut regs, &mut read_stack);
         assert_eq!(res, Ok(Some(0x100200)));
         assert_eq!(regs.ip(), 0x100200);
         assert_eq!(regs.sp(), 0x30);
         assert_eq!(regs.bp(), 0x40);
-        let res = UnwindRuleX86_64::UseFramePointer.exec(&mut regs, &mut read_stack);
+        let res = UnwindRuleX86_64::UseFramePointer.exec(false, &mut regs, &mut read_stack);
         assert_eq!(res, Ok(Some(0x100100)));
         assert_eq!(regs.ip(), 0x100100);
         assert_eq!(regs.sp(), 0x50);
         assert_eq!(regs.bp(), 0x70);
-        let res = UnwindRuleX86_64::UseFramePointer.exec(&mut regs, &mut read_stack);
+        let res = UnwindRuleX86_64::UseFramePointer.exec(false, &mut regs, &mut read_stack);
         assert_eq!(res, Ok(None));
     }
 
@@ -171,17 +180,18 @@ mod test {
         ];
         let mut read_stack = |addr| Ok(stack[(addr / 8) as usize]);
         let mut regs = UnwindRegsX86_64::new(0x100400, u64::MAX / 8 * 8, u64::MAX);
-        let res = UnwindRuleX86_64::JustReturn.exec(&mut regs, &mut read_stack);
+        let res = UnwindRuleX86_64::JustReturn.exec(true, &mut regs, &mut read_stack);
         assert_eq!(res, Err(Error::IntegerOverflow));
-        let res = UnwindRuleX86_64::OffsetSp { sp_offset_by_8: 1 }.exec(&mut regs, &mut read_stack);
+        let res =
+            UnwindRuleX86_64::OffsetSp { sp_offset_by_8: 1 }.exec(true, &mut regs, &mut read_stack);
         assert_eq!(res, Err(Error::IntegerOverflow));
         let res = UnwindRuleX86_64::OffsetSpAndRestoreBp {
             sp_offset_by_8: 1,
             bp_storage_offset_from_sp_by_8: 2,
         }
-        .exec(&mut regs, &mut read_stack);
+        .exec(true, &mut regs, &mut read_stack);
         assert_eq!(res, Err(Error::IntegerOverflow));
-        let res = UnwindRuleX86_64::UseFramePointer.exec(&mut regs, &mut read_stack);
+        let res = UnwindRuleX86_64::UseFramePointer.exec(true, &mut regs, &mut read_stack);
         assert_eq!(res, Err(Error::IntegerOverflow));
     }
 }

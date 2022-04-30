@@ -1,4 +1,4 @@
-use crate::{error::Error, unwind_rule::UnwindRule};
+use crate::unwind_rule::UnwindRule;
 
 pub struct RuleCache<R: UnwindRule> {
     entries: Box<[Option<CacheEntry<R>>; 509]>,
@@ -11,20 +11,11 @@ impl<R: UnwindRule> RuleCache<R> {
         }
     }
 
-    pub fn try_unwind<F>(
-        &mut self,
-        address: u64,
-        modules_generation: u16,
-        regs: &mut R::UnwindRegs,
-        read_stack: &mut F,
-    ) -> CacheResult
-    where
-        F: FnMut(u64) -> Result<u64, ()>,
-    {
+    pub fn lookup(&mut self, address: u64, modules_generation: u16) -> CacheResult<R> {
         let slot = (address % 509) as u16;
         if let Some(entry) = &self.entries[slot as usize] {
             if entry.modules_generation == modules_generation && entry.address == address {
-                return CacheResult::Hit(entry.unwind_rule.exec(regs, read_stack));
+                return CacheResult::Hit(entry.unwind_rule);
             }
         }
         CacheResult::Miss(CacheHandle {
@@ -48,9 +39,9 @@ impl<R: UnwindRule> RuleCache<R> {
     }
 }
 
-pub enum CacheResult {
+pub enum CacheResult<R: UnwindRule> {
     Miss(CacheHandle),
-    Hit(Result<Option<u64>, Error>),
+    Hit(R),
 }
 
 pub struct CacheHandle {

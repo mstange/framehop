@@ -125,7 +125,26 @@ fn translate_into_unwind_rule<R: gimli::Reader>(
                 let fp_cfa_offset = register_rule_to_cfa_offset(fp_rule)?;
                 match (lr_cfa_offset, fp_cfa_offset) {
                     (None, Some(_)) => Err(ConversionError::RestoringFpButNotLr),
-                    (None, None) => Ok(UnwindRuleAarch64::OffsetSp { sp_offset_by_16 }),
+                    (None, None) => {
+                        if let RegisterRule::Undefined = lr_rule {
+                            // If the return address is undefined, this could have two reasons:
+                            //  - The column for the return address may have been manually set to "undefined"
+                            //    using DW_CFA_undefined. This usually means that the function never returns
+                            //    and can be treated as the root of the stack.
+                            //  - The column for the return may have been omitted from the DWARF CFI table.
+                            //    Per spec (at least as of DWARF >= 3), this means that it should be treated
+                            //    as undefined. But it seems that compilers often do this when they really mean
+                            //    "same value".
+                            // Gimli follows DWARF 3 and does not differentiate between "omitted" and "undefined".
+                            Ok(
+                                UnwindRuleAarch64::OffsetSpIfFirstFrameOtherwiseStackEndsHere {
+                                    sp_offset_by_16,
+                                },
+                            )
+                        } else {
+                            Ok(UnwindRuleAarch64::OffsetSp { sp_offset_by_16 })
+                        }
+                    }
                     (Some(lr_cfa_offset), None) => {
                         let lr_storage_offset_from_sp_by_8 =
                             i16::try_from((offset + lr_cfa_offset) / 8)

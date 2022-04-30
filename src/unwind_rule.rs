@@ -3,7 +3,12 @@ use crate::error::Error;
 pub trait UnwindRule: Copy + std::fmt::Debug {
     type UnwindRegs;
 
-    fn exec<F>(self, regs: &mut Self::UnwindRegs, read_stack: &mut F) -> Result<Option<u64>, Error>
+    fn exec<F>(
+        self,
+        is_first_frame: bool,
+        regs: &mut Self::UnwindRegs,
+        read_stack: &mut F,
+    ) -> Result<Option<u64>, Error>
     where
         F: FnMut(u64) -> Result<u64, ()>;
 

@@ -938,7 +938,6 @@ fn test_stubs_x86_64_xul() {
 }
 
 // This test requires a binary which is not in this repo.
-// It also fails at the moment.
 #[ignore]
 #[test]
 fn test_go_zdebug_frame() {
@@ -947,7 +946,7 @@ fn test_go_zdebug_frame() {
     common::add_object(
         &mut unwinder,
         Path::new("/Users/mstange/Downloads/esbuild"),
-        0x0,
+        0x100000000,
     );
 
     // _context.WithCancel:
@@ -982,7 +981,7 @@ fn test_go_zdebug_frame() {
     ];
     let mut regs = UnwindRegsAarch64::new(0x1234, 0x50, 0x70);
     let res = unwinder.unwind_frame(
-        FrameAddress::from_instruction_pointer(0xe9724),
+        FrameAddress::from_instruction_pointer(0x1000e9724),
         &mut regs,
         &mut cache,
         &mut |addr| stack.get((addr / 8) as usize).cloned().ok_or(()),
@@ -995,7 +994,7 @@ fn test_go_zdebug_frame() {
     stack[2] = 0x1234;
     let mut regs = UnwindRegsAarch64::new(0x1234, 0x10, 0x70);
     let res = unwinder.unwind_frame(
-        FrameAddress::from_instruction_pointer(0xe9734),
+        FrameAddress::from_instruction_pointer(0x1000e9734),
         &mut regs,
         &mut cache,
         &mut |addr| stack.get((addr / 8) as usize).cloned().ok_or(()),
@@ -1008,37 +1007,68 @@ fn test_go_zdebug_frame() {
     stack[1] = 0x70;
     let mut regs = UnwindRegsAarch64::new(0x1234, 0x10, 0x70);
     let res = unwinder.unwind_frame(
-        FrameAddress::from_instruction_pointer(0xe9738),
+        FrameAddress::from_instruction_pointer(0x1000e9738),
         &mut regs,
         &mut cache,
         &mut |addr| stack.get((addr / 8) as usize).cloned().ok_or(()),
     );
     assert_eq!(res, Ok(Some(0x1234)));
     assert_eq!(regs.sp(), 0x50);
-    assert_eq!(regs.fp(), 0x70);
+    // assert_eq!(regs.fp(), 0x70); // Go debug_frame does not say how to restore fp
     assert_eq!(regs.lr(), 0x1234);
 
     let mut regs = UnwindRegsAarch64::new(0x1234, 0x10, 0x8);
     let res = unwinder.unwind_frame(
-        FrameAddress::from_instruction_pointer(0xe973c),
+        FrameAddress::from_instruction_pointer(0x1000e973c),
         &mut regs,
         &mut cache,
         &mut |addr| stack.get((addr / 8) as usize).cloned().ok_or(()),
     );
     assert_eq!(res, Ok(Some(0x1234)));
     assert_eq!(regs.sp(), 0x50);
-    assert_eq!(regs.fp(), 0x70);
+    // assert_eq!(regs.fp(), 0x70);
     assert_eq!(regs.lr(), 0x1234);
 
     let mut regs = UnwindRegsAarch64::new(0xe9754, 0x10, 0x8);
     let res = unwinder.unwind_frame(
-        FrameAddress::from_instruction_pointer(0xe9754),
+        FrameAddress::from_instruction_pointer(0x1000e9754),
         &mut regs,
         &mut cache,
         &mut |addr| stack.get((addr / 8) as usize).cloned().ok_or(()),
     );
     assert_eq!(res, Ok(Some(0x1234)));
     assert_eq!(regs.sp(), 0x50);
-    assert_eq!(regs.fp(), 0x70);
+    // assert_eq!(regs.fp(), 0x70);
     assert_eq!(regs.lr(), 0x1234);
+}
+
+// This test requires a binary which is not in this repo.
+#[ignore]
+#[test]
+fn test_go_debug_frame() {
+    let mut cache = CacheAarch64::<_>::new();
+    let mut unwinder = UnwinderAarch64::new();
+    common::add_object(
+        &mut unwinder,
+        Path::new("/Users/mstange/code/esbuild/esbuild"),
+        0x100000000,
+    );
+
+    let stack = [
+        /* 0x0: */ 0, /* 0x8: */ 1000, // fp will be stored here
+        /* 0x10: */ 2000, // lr will be stored here
+        /* 0x18: */ 3, /* 0x20: */ 4, /* 0x28: */ 5, /* 0x30: */ 6,
+        /* 0x38: */ 7, /* 0x40: */ 8, /* 0x48: */ 9, /* 0x50: */ 10,
+        /* 0x58: */ 11, /* 0x60: */ 12, /* 0x68: */ 13,
+        /* 0x70: */ 0x0, // sentinel fp
+        /* 0x78: */ 0x0, // sentinel lr
+    ];
+    let mut regs = UnwindRegsAarch64::new(0x100063784, 0x50, 0x70);
+    let res = unwinder.unwind_frame(
+        FrameAddress::from_return_address(0x100063784).unwrap(),
+        &mut regs,
+        &mut cache,
+        &mut |addr| stack.get((addr / 8) as usize).cloned().ok_or(()),
+    );
+    assert_eq!(res, Ok(None));
 }

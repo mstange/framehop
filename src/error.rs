@@ -9,6 +9,9 @@ pub enum Error {
     #[error("Frame pointer unwinding moved backwards")]
     FramepointerUnwindingMovedBackwards,
 
+    #[error("Neither the code address nor the stack pointer changed, would loop")]
+    DidNotAdvance,
+
     #[error("Unwinding caused integer overflow")]
     IntegerOverflow,
 

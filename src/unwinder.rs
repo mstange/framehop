@@ -267,13 +267,14 @@ impl<
         ) -> Result<UnwindResult<A::UnwindRule>, UnwinderError>,
     {
         let lookup_address = address.address_for_lookup();
-        let cache_handle = match cache.rule_cache.try_unwind(
-            lookup_address,
-            self.modules_generation,
-            regs,
-            read_stack,
-        ) {
-            CacheResult::Hit(result) => return result,
+        let is_first_frame = !address.is_return_address();
+        let cache_handle = match cache
+            .rule_cache
+            .lookup(lookup_address, self.modules_generation)
+        {
+            CacheResult::Hit(unwind_rule) => {
+                return unwind_rule.exec(is_first_frame, regs, read_stack);
+            }
             CacheResult::Miss(handle) => handle,
         };
 
@@ -301,7 +302,7 @@ impl<
             }
         };
         cache.rule_cache.insert(cache_handle, unwind_rule);
-        unwind_rule.exec(regs, read_stack)
+        unwind_rule.exec(is_first_frame, regs, read_stack)
     }
 
     pub fn unwind_frame<F>(

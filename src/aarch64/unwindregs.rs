@@ -87,6 +87,11 @@ impl UnwindRegsAarch64 {
     }
 
     #[inline(always)]
+    pub fn lr_mask(&self) -> PtrAuthMask {
+        self.lr_mask
+    }
+
+    #[inline(always)]
     pub fn sp(&self) -> u64 {
         self.sp
     }
