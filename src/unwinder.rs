@@ -513,6 +513,13 @@ impl<
 ///
 /// The type of unwind information you use depends on the platform and what's available
 /// in the binary.
+///
+/// Type arguments:
+///
+///  - `D`: The type for unwind section data. This allows carrying owned data on the
+///    module, e.g. `Vec<u8>`. But it could also be a wrapper around mapped memory from
+///    a file or a different process, for example. It just needs to provide a slice of
+///    bytes via its `Deref` implementation.
 pub enum ModuleUnwindData<D: Deref<Target = [u8]>> {
     /// Used on macOS, with mach-O binaries. Compact unwind info is in the `__unwind_info`
     /// section and is sometimes supplemented with DWARF CFI information in the `__eh_frame`
@@ -583,6 +590,13 @@ impl<D: Deref<Target = [u8]>> ModuleUnwindDataInternal<D> {
 /// On Linux, compilers produce `.eh_frame` and `.debug_frame` which provides correct
 /// unwind information for all instructions including those in function prologues and
 /// epilogues, so instruction analysis is not needed.
+///
+/// Type arguments:
+///
+///  - `D`: The type for unwind section data. This allows carrying owned data on the
+///    module, e.g. `Vec<u8>`. But it could also be a wrapper around mapped memory from
+///    a file or a different process, for example. It just needs to provide a slice of
+///    bytes via its `Deref` implementation.
 pub struct TextByteData<D: Deref<Target = [u8]>> {
     bytes: D,
     avma_range: Range<u64>,
@@ -617,6 +631,13 @@ impl<D: Deref<Target = [u8]>> TextByteData<D> {
 /// The unwinder needs to have an up-to-date list of modules so that it can match an
 /// absolute address to the right module, and so that it can find that module's unwind
 /// information.
+///
+/// Type arguments:
+///
+///  - `D`: The type for unwind section data. This allows carrying owned data on the
+///    module, e.g. `Vec<u8>`. But it could also be a wrapper around mapped memory from
+///    a file or a different process, for example. It just needs to provide a slice of
+///    bytes via its `Deref` implementation.
 pub struct Module<D: Deref<Target = [u8]>> {
     /// The name or file path of the module. Unused, it's just there for easier debugging.
     #[allow(unused)]

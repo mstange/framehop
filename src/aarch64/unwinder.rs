@@ -7,6 +7,12 @@ use crate::{
 
 use super::{ArchAarch64, CacheAarch64, UnwindRegsAarch64};
 
+/// The unwinder for the Aarch64 CPU architecture. Use the [`Unwinder`] trait for unwinding.
+///
+/// Type arguments:
+///
+///  - `D`: The type for unwind section data in the modules. See [`Module`].
+/// -  `P`: The [`AllocationPolicy`].
 pub struct UnwinderAarch64<
     D: Deref<Target = [u8]>,
     P: AllocationPolicy<D> = MayAllocateDuringUnwind,
@@ -19,6 +25,7 @@ impl<D: Deref<Target = [u8]>, P: AllocationPolicy<D>> Default for UnwinderAarch6
 }
 
 impl<D: Deref<Target = [u8]>, P: AllocationPolicy<D>> UnwinderAarch64<D, P> {
+    /// Create an unwinder for a process.
     pub fn new() -> Self {
         Self(UnwinderInternal::new())
     }

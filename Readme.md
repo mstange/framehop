@@ -58,7 +58,7 @@ Furthermore, adding a module is fast too because framehop only does minimal up-f
 
 Framehop is still a work in progress. Its API is subject to change. The API churn probably won't quieten down at least until we have one or two 32 bit architectures implemented.
 
-That said, framehop works remarkably well on the supported platforms, and is definitely worth a try if you can stomach the frequent API breakages and the lack of documentation. Please file issues if you run into any trouble or have suggestions.
+That said, framehop works remarkably well on the supported platforms, and is definitely worth a try if you can stomach the frequent API breakages. Please file issues if you run into any trouble or have suggestions.
 
 Eventually I'd like to use framehop as a replacement for Lul in the Gecko profiler (Firefox's built-in profiler). For that we'll also want to add x86 support (for 32 bit Linux), EHABI / EXIDX support (for 32 bit ARM Android), and Windows support.
 

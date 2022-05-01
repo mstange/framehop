@@ -9,6 +9,12 @@ use crate::unwinder::UnwinderInternal;
 use crate::unwinder::{Module, Unwinder};
 use crate::FrameAddress;
 
+/// The unwinder for the x86_64 CPU architecture. Use the [`Unwinder`] trait for unwinding.
+///
+/// Type arguments:
+///
+///  - `D`: The type for unwind section data in the modules. See [`Module`].
+/// -  `P`: The [`AllocationPolicy`].
 pub struct UnwinderX86_64<D: Deref<Target = [u8]>, P: AllocationPolicy<D> = MayAllocateDuringUnwind>(
     UnwinderInternal<D, ArchX86_64, P>,
 );
@@ -20,6 +26,7 @@ impl<D: Deref<Target = [u8]>, P: AllocationPolicy<D>> Default for UnwinderX86_64
 }
 
 impl<D: Deref<Target = [u8]>, P: AllocationPolicy<D>> UnwinderX86_64<D, P> {
+    /// Create an unwinder for a process.
     pub fn new() -> Self {
         Self(UnwinderInternal::new())
     }

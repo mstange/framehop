@@ -2,6 +2,12 @@ use std::fmt::Debug;
 
 use crate::display_utils::HexNum;
 
+/// The registers used for unwinding on Aarch64. We only need lr (x30), sp (x31),
+/// and fp (x29).
+///
+/// We also have a [`PtrAuthMask`] which allows stripping off the pointer authentication
+/// hash bits from the return address when unwinding through libraries which use pointer
+/// authentication, e.g. in system libraries on macOS.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct UnwindRegsAarch64 {
     lr_mask: PtrAuthMask,
@@ -87,33 +93,43 @@ impl UnwindRegsAarch64 {
         }
     }
 
+    /// Get the [`PtrAuthMask`] which we apply to the `lr` value.
     #[inline(always)]
     pub fn lr_mask(&self) -> PtrAuthMask {
         self.lr_mask
     }
 
+    /// Get the stack pointer value.
     #[inline(always)]
     pub fn sp(&self) -> u64 {
         self.sp
     }
+
+    /// Set the stack pointer value.
     #[inline(always)]
     pub fn set_sp(&mut self, sp: u64) {
         self.sp = sp
     }
 
+    /// Get the frame pointer value (x29).
     #[inline(always)]
     pub fn fp(&self) -> u64 {
         self.fp
     }
+
+    /// Set the frame pointer value (x29).
     #[inline(always)]
     pub fn set_fp(&mut self, fp: u64) {
         self.fp = fp
     }
 
+    /// Get the lr register value.
     #[inline(always)]
     pub fn lr(&self) -> u64 {
         self.lr
     }
+
+    /// Set the lr register value.
     #[inline(always)]
     pub fn set_lr(&mut self, lr: u64) {
         self.lr = self.lr_mask.strip_ptr_auth(lr)
