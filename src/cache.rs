@@ -4,6 +4,8 @@ use crate::{rule_cache::RuleCache, unwind_rule::UnwindRule};
 
 use super::arcdata::ArcDataReader;
 
+pub use crate::rule_cache::CacheStats;
+
 pub trait AllocationPolicy<D: Deref<Target = [u8]>> {
     type GimliStorage: gimli::UnwindContextStorage<ArcDataReader<D>>
         + gimli::EvaluationStorage<ArcDataReader<D>>;

@@ -11,6 +11,10 @@ impl<D: Deref<Target = [u8]>, P: AllocationPolicy<D>> CacheX86_64<D, P> {
     pub fn new() -> Self {
         Self(Cache::new())
     }
+
+    pub fn stats(&self) -> CacheStats {
+        self.0.rule_cache.stats()
+    }
 }
 
 impl<D: Deref<Target = [u8]>, P: AllocationPolicy<D>> Default for CacheX86_64<D, P> {
