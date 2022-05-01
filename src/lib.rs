@@ -2,6 +2,8 @@
 //!
 //! Framehop is a stack frame unwinder written in 100% Rust. It produces high quality stacks at high speed, on multiple platforms and architectures, without an expensive pre-processing step for unwind information. This makes it suitable for sampling profilers.
 //!
+//! It currently supports unwinding x86_64 and aarch64, with unwind information formats commonly used on macOS, Linux and Android.
+//!
 //! You give framehop register values, stack memory and unwind data, and framehop produces a list of return addresses.
 //!
 //! Framehop can be used in the following scenarios:
@@ -34,9 +36,7 @@
 //!
 //! ## Speed
 //!
-//! Framehop is so fast that stack walking is a miniscule part of sampling in both scenarios where I've tried it.
-//!
-//! Framehop achieves this speed in the following ways:
+//! Framehop achieves high speed in the following ways:
 //!
 //!  1. It only recovers registers which are needed for computing return addresses. On x86_64 that's `rip`, `rsp` and `rbp`, and on aarch64 that's `lr`, `sp` and `fp`. All other registers are not needed - in theory they could be used as inputs to DWARF CFI expressions, but in practice they are not.
 //!  2. It uses zero-copy parsing wherever possible. For example, the bytes in `__unwind_info` are only accessed during unwinding, and the binary search happens right inside the original `__unwind_info` memory. For DWARF unwinding, framehop uses the excellent [`gimli` crate](https://github.com/gimli-rs/gimli/), which was written with performance in mind.
