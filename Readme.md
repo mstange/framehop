@@ -40,7 +40,7 @@ In [this perfrecord example](https://share.firefox.dev/3s6mQKl) of profiling a s
 
 In [this example of processing a `perf.data` file](https://share.firefox.dev/3vSQOTb), the bottleneck is reading the bytes from disk, rather than stackwalking. [With a warm file cache](https://share.firefox.dev/3Kt6sK1), the cost of stack walking is still comparable to the cost of copying the bytes from the file cache, and most of the stack walking time is spent reading return addresses from the stack bytes.
 
-framehop achieves this speed in two ways:
+framehop achieves this speed in the following ways:
 
  1. It only recovers registers which are needed for computing return addresses. On x86_64 that's `rip`, `rsp` and `rbp`, and on aarch64 that's `lr`, `sp` and `fp`. All other registers are not needed - in theory they could be used as inputs to DWARF CFI expressions, but in practice they are not.
  2. It uses zero-copy parsing wherever possible. For example, the bytes in `__unwind_info` are only accessed during unwinding - the binary search happens right inside the original `__unwind_info` memory.
