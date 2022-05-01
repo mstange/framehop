@@ -1,10 +1,10 @@
 # framehop
 
-This is a library for stack frame unwinding. It is intended to be used in sampling profilers. The goal is to produce high quality stacks at high speed, on multiple platforms and architectures, without an expensive pre-processing step for unwind information.
+Framehop is a stack frame unwinder written in 100% Rust. It produces high quality stacks at high speed, on multiple platforms and architectures, without an expensive pre-processing step for unwind information. This makes it suitable for sampling profilers.
 
 You give framehop register values, stack memory and unwind data, and framehop produces a list of return addresses.
 
-This library can be used in the following scenarios:
+Framehop can be used in the following scenarios:
 
  - Live unwinding of a remote process. This is how [`perfrecord`](https://github.com/mstange/perfrecord/) uses it.
  - Offline unwinding from saved registers and stack bytes, even on a different machine, a different OS, or a different CPU architecture.
@@ -16,7 +16,7 @@ As a user of framehop, your responsibilities are the following:
  - You need to provide address ranges and unwind section data for those modules.
  - When sampling, you provide the register values and a callback  to read arbitrary stack memory without segfaulting.
  - On aarch64, picking the right bitmask to strip pointer authentication bits from return addresses is up to you.
- - You will need to do symbol resolution yourself, if you want function names. framehop only produces addresses, it does not do any symbolication.
+ - You will need to do symbol resolution yourself, if you want function names. Framehop only produces addresses, it does not do any symbolication.
 
 In turn, framehop solves the following problems:
 
@@ -30,20 +30,20 @@ In turn, framehop solves the following problems:
  - It generates binary search indexes for unwind information formats which don't have them. Specifically, for `.debug_frame` and for `.eh_frame` without `.eh_frame_hdr`.
  - It does a reasonable job of detecting the end of the stack, so that you can differentiate between properly terminated stacks and prematurely truncated stacks.
 
-framehop is not suitable to implement a debugger or exception handling. Debuggers usually need to recover all register values for every frame whereas framehop only cares about return addresses. And exception handling needs the ability to call destructors, which is also a non-goal for framehop.
+Framehop is not suitable for debuggers or to implement exception handling. Debuggers usually need to recover all register values for every frame whereas framehop only cares about return addresses. And exception handling needs the ability to call destructors, which is also a non-goal for framehop.
 
 ## Speed
 
-framehop is so fast that stack walking is a miniscule part of sampling in both scenarios where I've tried it.
+Framehop is so fast that stack walking is a miniscule part of sampling in both scenarios where I've tried it.
 
 In [this perfrecord example](https://share.firefox.dev/3s6mQKl) of profiling a single-threaded Rust application, walking the stack takes a quarter of the time it take to query macOS for the thread's register values. In [another perfrecord example](https://share.firefox.dev/3ksWaPt) of profiling a Firefox build without frame pointers, the dwarf unwinding takes 4x as long as the querying of the register values, but is still overall cheaper than the cost of thread_suspend + thread_get_state + thread_resume.
 
 In [this example of processing a `perf.data` file](https://share.firefox.dev/3vSQOTb), the bottleneck is reading the bytes from disk, rather than stackwalking. [With a warm file cache](https://share.firefox.dev/3Kt6sK1), the cost of stack walking is still comparable to the cost of copying the bytes from the file cache, and most of the stack walking time is spent reading return addresses from the stack bytes.
 
-framehop achieves this speed in the following ways:
+Framehop achieves this speed in the following ways:
 
  1. It only recovers registers which are needed for computing return addresses. On x86_64 that's `rip`, `rsp` and `rbp`, and on aarch64 that's `lr`, `sp` and `fp`. All other registers are not needed - in theory they could be used as inputs to DWARF CFI expressions, but in practice they are not.
- 2. It uses zero-copy parsing wherever possible. For example, the bytes in `__unwind_info` are only accessed during unwinding - the binary search happens right inside the original `__unwind_info` memory.
+ 2. It uses zero-copy parsing wherever possible. For example, the bytes in `__unwind_info` are only accessed during unwinding, and the binary search happens right inside the original `__unwind_info` memory. For DWARF unwinding, framehop uses the excellent [`gimli` crate](https://github.com/gimli-rs/gimli/), which was written with performance in mind.
  3. It uses binary search to find the correct unwind rule in all supported unwind information formats. For formats without an built-in index, it creates an index when the module is added.
  4. It caches unwind rules based on address. In practice, the 509 element cache achieves a hit rate of around 80% on complicated code like Firefox (with the cache being shared across all Firefox processes). When profiling simpler applications, the hit rate is likely much higher.
 
@@ -51,7 +51,7 @@ Furthermore, adding a module is fast too because framehop only does minimal up-f
 
 ## Current State and Roadmap
 
-framehop is still a work in progress. Its API is subject to change. The API churn probably won't quieten down at least until we have one or two 32 bit architectures implemented.
+Framehop is still a work in progress. Its API is subject to change. The API churn probably won't quieten down at least until we have one or two 32 bit architectures implemented.
 
 That said, framehop works remarkably well on the supported platforms, and is definitely worth a try if you can stomach the frequent API breakages and the lack of documentation. Please file issues if you run into any trouble or have suggestions.
 
@@ -60,10 +60,8 @@ Eventually I'd like to use framehop as a replacement for Lul in the Gecko profil
 ## Example
 
 ```rust
-use framehop::{
-  CacheAarch64, UnwinderAarch64, Module, ModuleSvmaInfo,
-  ModuleUnwindData, UnwindRegsAarch64,
-};
+use framehop::aarch64::{CacheAarch64, UnwindRegsAarch64, UnwinderAarch64};
+use framehop::{FrameAddress, Module, ModuleSvmaInfo, ModuleUnwindData, TextByteData};
 
 let mut cache = CacheAarch64::<_>::new();
 let mut unwinder = UnwinderAarch64::new();
@@ -82,11 +80,10 @@ let module = Module::new(
         eh_frame_hdr: None,
         got: Some(0x100238000..0x100238010),
     },
-    ModuleUnwindData::CompactUnwindInfoAndEhFrame(
-        vec![/* __unwind_info */], None
-    ),
+    ModuleUnwindData::CompactUnwindInfoAndEhFrame(vec![/* __unwind_info */], None),
     Some(TextByteData::new(
-        vec![/* __TEXT */], 0x1003fc000..0x100634000
+        vec![/* __TEXT */],
+        0x1003fc000..0x100634000,
     )),
 );
 unwinder.add_module(module);
@@ -102,24 +99,23 @@ let stack = [
 ];
 let mut read_stack = |addr| stack.get((addr / 8) as usize).cloned().ok_or(());
 
-let mut iter = unwinder
-    .iter_frames(
-        pc,
-        UnwindRegsAarch64::new(lr, sp, fp),
-        &mut cache,
-        &mut read_stack,
-    );
+use framehop::Unwinder;
+let mut iter = unwinder.iter_frames(
+    pc,
+    UnwindRegsAarch64::new(lr, sp, fp),
+    &mut cache,
+    &mut read_stack,
+);
 
 let mut frames = Vec::new();
 while let Ok(Some(frame)) = iter.next() {
-  frames.push(frame);
+    frames.push(frame);
 }
 
 assert_eq!(
     frames,
     vec![
         FrameAddress::from_instruction_pointer(0x1003fc000 + 0x1292c0),
-        FrameAddress::from_return_address(0x1003fc000 + 0xe4830).unwrap(),
         FrameAddress::from_return_address(0x1003fc000 + 0x100dc4).unwrap(),
         FrameAddress::from_return_address(0x1003fc000 + 0x12ca28).unwrap()
     ]

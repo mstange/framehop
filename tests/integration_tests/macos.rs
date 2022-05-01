@@ -74,6 +74,80 @@ fn test_basic() {
 }
 
 #[test]
+fn test_root_doc_comment() {
+    use framehop::aarch64::{CacheAarch64, UnwindRegsAarch64, UnwinderAarch64};
+    use framehop::{FrameAddress, Module, ModuleSvmaInfo, ModuleUnwindData, TextByteData};
+    let mut cache = CacheAarch64::<_>::new();
+    let mut unwinder = UnwinderAarch64::new();
+    let module = Module::new(
+        "mybinary".to_string(),
+        0x1003fc000..0x100634000,
+        0x1003fc000,
+        ModuleSvmaInfo {
+            base_svma: 0x100000000,
+            text: Some(0x100000b64..0x1001d2d18),
+            text_env: None,
+            stubs: Some(0x1001d2d18..0x1001d309c),
+            stub_helper: Some(0x1001d309c..0x1001d3438),
+            eh_frame: Some(0x100237f80..0x100237ffc),
+            eh_frame_hdr: None,
+            got: Some(0x100238000..0x100238010),
+        },
+        ModuleUnwindData::CompactUnwindInfoAndEhFrame(vec![/* __unwind_info */], None),
+        Some(TextByteData::new(
+            vec![/* __TEXT */],
+            0x1003fc000..0x100634000,
+        )),
+    );
+    unwinder.add_module(module);
+
+    let pc = 0x1003fc000 + 0x1292c0;
+    let lr = 0x1003fc000 + 0xe4830;
+    let sp = 0x10;
+    let fp = 0x20;
+    let stack = [
+        1,
+        2,
+        3,
+        4,
+        0x40,
+        0x1003fc000 + 0x100dc4,
+        5,
+        6,
+        0x70,
+        0x1003fc000 + 0x12ca28,
+        7,
+        8,
+        9,
+        10,
+        0x0,
+        0x0,
+    ];
+    let mut read_stack = |addr| stack.get((addr / 8) as usize).cloned().ok_or(());
+    use framehop::Unwinder;
+    let mut iter = unwinder.iter_frames(
+        pc,
+        UnwindRegsAarch64::new(lr, sp, fp),
+        &mut cache,
+        &mut read_stack,
+    );
+
+    let mut frames = Vec::new();
+    while let Ok(Some(frame)) = iter.next() {
+        frames.push(frame);
+    }
+
+    assert_eq!(
+        frames,
+        vec![
+            FrameAddress::from_instruction_pointer(0x1003fc000 + 0x1292c0),
+            FrameAddress::from_return_address(0x1003fc000 + 0x100dc4).unwrap(),
+            FrameAddress::from_return_address(0x1003fc000 + 0x12ca28).unwrap()
+        ]
+    );
+}
+
+#[test]
 fn test_basic_iterator() {
     let mut cache = CacheAarch64::<_>::new();
     let mut unwinder = UnwinderAarch64::new();
