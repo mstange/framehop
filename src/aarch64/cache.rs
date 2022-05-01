@@ -12,6 +12,7 @@ impl<D: Deref<Target = [u8]>, P: AllocationPolicy<D>> CacheAarch64<D, P> {
         Self(Cache::new())
     }
 
+    /// Returns a snapshot of the cache usage statistics.
     pub fn stats(&self) -> CacheStats {
         self.0.rule_cache.stats()
     }

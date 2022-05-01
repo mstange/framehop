@@ -18,11 +18,14 @@ pub type UnwindRegsNative = UnwindRegsAarch64;
 /// lower bits and the hash in the high bits. These are called "authenticated"
 /// pointers. Special instructions exist to verify pointers before dereferencing
 /// them.
+///
 /// Return address can be such authenticated pointers. To return to an
 /// authenticated return address, the "retab" instruction is used instead of
 /// the regular "ret" instruction.
+///
 /// Stack walkers need to strip the encrypted hash from return addresses because
 /// they need the raw code address.
+///
 /// On macOS arm64, system libraries compiled with the arm64e target use pointer
 /// pointer authentication for return addresses.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -38,6 +41,7 @@ impl PtrAuthMask {
     /// Create a mask for 24 bits hash + 40 bits pointer. This appears to be
     /// what macOS arm64e uses. It is unclear whether we can rely on this or
     /// whether it can change.
+    ///
     /// On macOS arm64, this mask can be applied to both authenticated pointers
     /// and to non-authenticated pointers without data loss; non-authenticated
     /// don't appear to use the top 24 bits (they're always zero).

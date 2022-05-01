@@ -1,6 +1,7 @@
 use crate::dwarf::DwarfUnwinderError;
 use crate::macho::CompactUnwindInfoUnwinderError;
 
+/// The error type used in this crate.
 #[derive(thiserror::Error, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Error {
     #[error("Could not read stack memory at 0x{0:x}")]

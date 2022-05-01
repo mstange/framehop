@@ -41,6 +41,7 @@ pub trait Unwinder {
 
     /// Add a module that's loaded in the profiled process. This is how you provide unwind
     /// information and address ranges.
+    ///
     /// This should be called whenever a new module is loaded into the process.
     fn add_module(&mut self, module: Self::Module);
 
@@ -51,6 +52,10 @@ pub trait Unwinder {
 
     /// Returns the highest code address that is known in this process based on the module
     /// address ranges. Returns 0 if no modules have been added.
+    ///
+    /// This method can be used together with
+    /// [`PtrAuthMask::from_max_known_address`](crate::aarch64::PtrAuthMask::from_max_known_address)
+    /// to make an educated guess at a pointer authentication mask for Aarch64 return addresses.
     fn max_known_code_address(&self) -> u64;
 
     /// Unwind a single frame, to recover return address and caller register values.
@@ -80,6 +85,24 @@ pub trait Unwinder {
     }
 }
 
+/// An iterator for unwinding the entire stack, starting from the initial register values.
+///
+/// The first yielded frame is the instruction pointer. Subsequent addresses are return
+/// addresses.
+///
+/// This iterator attempts to detect if stack unwinding completed successfully, or if the
+/// stack was truncated prematurely. If it thinks that it successfully found the root
+/// function, it will complete with `Ok(None)`, otherwise it will complete with `Err(...)`.
+/// However, the detection does not work in all cases, so you should expect `Err(...)` to
+/// be returned even during normal operation. As a result, it is not recommended to use
+/// this iterator as a `FallibleIterator`, because you might lose the entire stack if the
+/// last iteration returns `Err(...)`.
+///
+/// Lifetimes:
+///
+///  - `'u`: The lifetime of the [`Unwinder`].
+///  - `'c`: The lifetime of the unwinder cache.
+///  - `'r`: The lifetime of the exclusive access to the `read_stack` callback.
 pub struct UnwindIterator<'u, 'c, 'r, U: Unwinder + ?Sized, F: FnMut(u64) -> Result<u64, ()>> {
     unwinder: &'u U,
     state: UnwindIteratorState,
@@ -97,6 +120,7 @@ enum UnwindIteratorState {
 impl<'u, 'c, 'r, U: Unwinder + ?Sized, F: FnMut(u64) -> Result<u64, ()>>
     UnwindIterator<'u, 'c, 'r, U, F>
 {
+    /// Create a new iterator. You'd usually use [`Unwinder::iter_frames`] instead.
     pub fn new(
         unwinder: &'u U,
         pc: u64,
@@ -117,6 +141,14 @@ impl<'u, 'c, 'r, U: Unwinder + ?Sized, F: FnMut(u64) -> Result<u64, ()>>
 impl<'u, 'c, 'r, U: Unwinder + ?Sized, F: FnMut(u64) -> Result<u64, ()>>
     UnwindIterator<'u, 'c, 'r, U, F>
 {
+    /// Yield the next frame in the stack.
+    ///
+    /// The first frame is `Ok(Some(FrameAddress::InstructionPointer(...)))`.
+    /// Subsequent frames are `Ok(Some(FrameAddress::ReturnAddress(...)))`.
+    ///
+    /// If a root function has been reached, this iterator completes with `Ok(None)`.
+    /// Otherwise it completes with `Err(...)`, usually indicating that a certain stack
+    /// address could not be read.
     #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> Result<Option<FrameAddress>, Error> {
         let next = match self.state {
@@ -396,7 +428,7 @@ impl<
                             EndianReader::new(eh_frame_data, LittleEndian),
                             UnwindSectionType::EhFrame,
                             None,
-                            &mut cache.eh_frame_unwind_context,
+                            &mut cache.gimli_unwind_context,
                             &module.svma_info,
                         );
                         dwarf_unwinder.unwind_frame_with_fde(
@@ -416,7 +448,7 @@ impl<
                     EndianReader::new(eh_frame_data, LittleEndian),
                     UnwindSectionType::EhFrame,
                     Some(eh_frame_hdr_data),
-                    &mut cache.eh_frame_unwind_context,
+                    &mut cache.gimli_unwind_context,
                     &module.svma_info,
                 );
                 let fde_offset = dwarf_unwinder
@@ -436,7 +468,7 @@ impl<
                     EndianReader::new(eh_frame_data, LittleEndian),
                     UnwindSectionType::EhFrame,
                     None,
-                    &mut cache.eh_frame_unwind_context,
+                    &mut cache.gimli_unwind_context,
                     &module.svma_info,
                 );
                 let fde_offset = index
@@ -456,7 +488,7 @@ impl<
                     EndianReader::new(debug_frame_data, LittleEndian),
                     UnwindSectionType::DebugFrame,
                     None,
-                    &mut cache.eh_frame_unwind_context,
+                    &mut cache.gimli_unwind_context,
                     &module.svma_info,
                 );
                 let fde_offset = index
@@ -476,11 +508,29 @@ impl<
     }
 }
 
+/// The unwind data that should be used when unwinding addresses inside this module.
+/// Unwind data describes how to recover register values of the caller frame.
+///
+/// The type of unwind information you use depends on the platform and what's available
+/// in the binary.
 pub enum ModuleUnwindData<D: Deref<Target = [u8]>> {
+    /// Used on macOS, with mach-O binaries. Compact unwind info is in the `__unwind_info`
+    /// section and is sometimes supplemented with DWARF CFI information in the `__eh_frame`
+    /// section.
     CompactUnwindInfoAndEhFrame(D, Option<D>),
+    /// Used with ELF binaries (Linux and friends), in the `.eh_frame_hdr` and `.eh_frame`
+    /// sections. Contains an index and DWARF CFI.
     EhFrameHdrAndEhFrame(D, D),
+    /// Used with ELF binaries (Linux and friends), in the `.eh_frame` section. Contains
+    /// DWARF CFI. We create a binary index for the FDEs when a module with this unwind
+    /// data type is added.
     EhFrame(D),
+    /// Used with ELF binaries (Linux and friends), in the `.debug_frame` section. Contains
+    /// DWARF CFI. We create a binary index for the FDEs when a module with this unwind
+    /// data type is added.
     DebugFrame(D),
+    /// No unwind information is used. Unwinding in this module will use a fallback rule
+    /// (usually frame pointer unwinding).
     None,
 }
 
@@ -523,16 +573,29 @@ impl<D: Deref<Target = [u8]>> ModuleUnwindDataInternal<D> {
     }
 }
 
+/// Used to supply raw instruction bytes to the unwinder, which uses it to analyze
+/// instructions in order to provide high quality unwinding inside function prologues and
+/// epilogues.
+///
+/// This is only needed on macOS, because mach-O `__unwind_info` and `__eh_frame` only
+/// cares about accuracy in function bodies, not in function prologues and epilogues.
+///
+/// On Linux, compilers produce `.eh_frame` and `.debug_frame` which provides correct
+/// unwind information for all instructions including those in function prologues and
+/// epilogues, so instruction analysis is not needed.
 pub struct TextByteData<D: Deref<Target = [u8]>> {
     bytes: D,
     avma_range: Range<u64>,
 }
 
 impl<D: Deref<Target = [u8]>> TextByteData<D> {
+    /// Supply the bytes which cover `avma_range` in the process virtual memory.
+    /// Both arguments should have the same length.
     pub fn new(bytes: D, avma_range: Range<u64>) -> Self {
         Self { bytes, avma_range }
     }
 
+    /// Return a byte slice for the requested range, if in-bounds.
     pub fn get_bytes(&self, avma_range: Range<u64>) -> Option<&[u8]> {
         let rel_start = avma_range.start.checked_sub(self.avma_range.start)?;
         let rel_start = usize::try_from(rel_start).ok()?;
@@ -541,33 +604,90 @@ impl<D: Deref<Target = [u8]>> TextByteData<D> {
         self.bytes.get(rel_start..rel_end)
     }
 
+    /// The address range covered by the supplied bytes, in process virtual memory.
+    /// "Actual virtual memory address range"
     pub fn avma_range(&self) -> Range<u64> {
         self.avma_range.clone()
     }
 }
 
+/// Information about a module that is loaded in a process. You might know this under a
+/// different name, for example: (Shared) library, binary image, DSO ("Dynamic shared object")
+///
+/// The unwinder needs to have an up-to-date list of modules so that it can match an
+/// absolute address to the right module, and so that it can find that module's unwind
+/// information.
 pub struct Module<D: Deref<Target = [u8]>> {
+    /// The name or file path of the module. Unused, it's just there for easier debugging.
     #[allow(unused)]
     name: String,
+    /// The address range where this module is mapped into the process.
     avma_range: Range<u64>,
+    /// The base address of this module, in the process's address space. On Linux, the base
+    /// address can sometimes be different from the start address of the mapped range.
     base_avma: u64,
+    /// Information about various addresses in the module.
     svma_info: ModuleSvmaInfo,
+    /// The unwind data that should be used for unwinding addresses from this module.
     unwind_data: ModuleUnwindDataInternal<D>,
+    /// The raw assembly bytes of this module. Used for instruction analysis to ensure
+    /// correct unwinding inside function prologues and epilogues.
     text_data: Option<TextByteData<D>>,
 }
 
 /// The addresses of various sections in the module.
+///
 /// These are SVMAs, "stated virtual memory addresses", i.e. addresses as stated
-/// in the object.
+/// in the object, as opposed to AVMAs, "actual virtual memory addresses", i.e. addresses
+/// in the virtual memory of the profiled process.
+///
+/// Code addresses inside a module's unwind information are usually written down as SVMAs,
+/// or as relative addresses. For example, DWARF CFI can have code addresses expressed as
+/// relative-to-.text addresses or as absolute SVMAs. And mach-O compact unwind info
+/// contains addresses relative to the image base address.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ModuleSvmaInfo {
+    /// The image base address, as stated in the object. For mach-O objects, this is the
+    /// vmaddr of the `__TEXT` segment. For ELF objects, this is zero.
+    ///
+    /// This is used to convert between SVMAs and relative addresses.
     pub base_svma: u64,
+    /// The address range of the `__text` or `.text` section. This is where most of the
+    /// compiled code is stored.
+    ///
+    /// This is used to detect whether we need to do instruction analysis for an address.
     pub text: Option<Range<u64>>,
+    /// The address range of the `text_env` section, if present. If present, this contains
+    /// functions which have been marked as "cold". It stores executable code, just like
+    /// the text section.
+    ///
+    /// This is used to detect whether we need to do instruction analysis for an address.
     pub text_env: Option<Range<u64>>,
+    /// The address range of the mach-O `__stubs` section. Contains small pieces of
+    /// executable code for calling imported functions. Code inside this section is not
+    /// covered by the unwind information in `__unwind_info`.
+    ///
+    /// This is used to exclude addresses in this section from incorrectly applying
+    /// `__unwind_info` opcodes. It is also used to infer unwind rules for the known
+    /// structure of stub functions.
     pub stubs: Option<Range<u64>>,
+    /// The address range of the mach-O `__stub_helper` section. Contains small pieces of
+    /// executable code for calling imported functions. Code inside this section is not
+    /// covered by the unwind information in `__unwind_info`.
+    ///
+    /// This is used to exclude addresses in this section from incorrectly applying
+    /// `__unwind_info` opcodes. It is also used to infer unwind rules for the known
+    /// structure of stub helper
+    /// functions.
     pub stub_helper: Option<Range<u64>>,
+    /// The address range of the `__eh_frame` or `.eh_frame` section. This is used during
+    /// DWARF CFI processing, to resolve eh_frame-relative addresses.
     pub eh_frame: Option<Range<u64>>,
+    /// The address range of the `.eh_frame_hdr` section. This is used during
+    /// DWARF CFI processing, to resolve eh_frame_hdr-relative addresses.
     pub eh_frame_hdr: Option<Range<u64>>,
+    /// The address range of the `.got` section (Global Offset Table). This is used
+    /// during DWARF CFI processing, to resolve got-relative addresses.
     pub got: Option<Range<u64>>,
 }
 
