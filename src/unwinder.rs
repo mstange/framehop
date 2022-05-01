@@ -22,17 +22,39 @@ use std::{
     ops::{Deref, Range},
     sync::Arc,
 };
+
+/// Unwinder is the trait that each CPU architecture's concrete unwinder type implements.
+/// This trait's methods are what let you do the actual unwinding.
 pub trait Unwinder {
+    /// The unwind registers type for the targeted CPU architecture.
     type UnwindRegs;
+
+    /// The unwind cache for the targeted CPU architecture.
+    /// This is an associated type because the cache stores unwind rules, whose concrete
+    /// type depends on the CPU arch, and because the cache can support different allocation
+    /// policies.
     type Cache;
+
+    /// The module type. This is an associated type because the concrete type varies
+    /// depending on the type you use to give the module access to the unwind section data.
     type Module;
 
+    /// Add a module that's loaded in the profiled process. This is how you provide unwind
+    /// information and address ranges.
+    /// This should be called whenever a new module is loaded into the process.
     fn add_module(&mut self, module: Self::Module);
 
-    fn remove_module(&mut self, module_address_range_start: u64);
+    /// Remove a module that was added before using `add_module`, keyed by the start
+    /// address of that module's address range. If no match is found, the call is ignored.
+    /// This should be called whenever a module is unloaded from the process.
+    fn remove_module(&mut self, module_avma_range_start: u64);
 
+    /// Returns the highest code address that is known in this process based on the module
+    /// address ranges. Returns 0 if no modules have been added.
     fn max_known_code_address(&self) -> u64;
 
+    /// Unwind a single frame, to recover return address and caller register values.
+    /// This is the main entry point for unwinding.
     fn unwind_frame<F>(
         &self,
         address: FrameAddress,
@@ -43,6 +65,7 @@ pub trait Unwinder {
     where
         F: FnMut(u64) -> Result<u64, ()>;
 
+    /// Return an iterator that unwinds frame by frame until the end of the stack is found.
     fn iter_frames<'u, 'c, 'r, F>(
         &'u self,
         pc: u64,
