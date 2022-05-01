@@ -1,6 +1,11 @@
+[![crates.io page](https://img.shields.io/crates/v/framehop.svg)](https://crates.io/crates/framehop)
+[![docs.rs page](https://docs.rs/framehop/badge.svg)](https://docs.rs/framehop/)
+
 # framehop
 
 Framehop is a stack frame unwinder written in 100% Rust. It produces high quality stacks at high speed, on multiple platforms and architectures, without an expensive pre-processing step for unwind information. This makes it suitable for sampling profilers.
+
+It currently supports unwinding x86_64 and aarch64, with unwind information formats commonly used on macOS, Linux and Android.
 
 You give framehop register values, stack memory and unwind data, and framehop produces a list of return addresses.
 
