@@ -42,9 +42,6 @@ impl UnwindRegsX86_64 {
     }
 }
 
-#[cfg(target_arch = "x86_64")]
-pub type UnwindRegsNative = UnwindRegsX86_64;
-
 impl Debug for UnwindRegsX86_64 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("UnwindRegsX86_64")

@@ -10,9 +10,6 @@ pub struct UnwindRegsAarch64 {
     fp: u64,
 }
 
-#[cfg(target_arch = "aarch64")]
-pub type UnwindRegsNative = UnwindRegsAarch64;
-
 /// Aarch64 CPUs support special instructions which interpret pointers as pair
 /// of the pointer address and an encrypted hash: The address is stored in the
 /// lower bits and the hash in the high bits. These are called "authenticated"
