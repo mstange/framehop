@@ -131,9 +131,10 @@ assert_eq!(
 
 Here's a list of articles I found useful during development:
 
- - [Reliable and Fast DWARF-Based Stack Unwinding](https://hal.inria.fr/hal-02297690/document). This is **the** unwinding reference document. If want to read just one thing, read this. This article explains the background super clearly, and is very approachable. It shows how assembly and unwind information correspond to each other and has lots of examples that are easy to understand.
+ - [Reliable and Fast DWARF-Based Stack Unwinding](https://hal.inria.fr/hal-02297690/document), also available [as a presentation](https://deepspec.org/events/dsw18/zappa-nardelli-deepspec18.pdf). This is **the** unwinding reference document. If want to read just one thing, read this. This article explains the background super clearly, and is very approachable. It shows how assembly and unwind information correspond to each other and has lots of examples that are easy to understand.
  - [How fast can CFI/EXIDX-based stack unwinding be?](https://blog.mozilla.org/jseward/2013/08/29/how-fast-can-cfiexidx-based-stack-unwinding-be/), by Julian Seward
  - [Unwinding a Stack by Hand with Frame Pointers and ORC](https://blogs.oracle.com/linux/post/unwinding-stack-frame-pointers-and-orc), by Stephen Brennan
+ - [Aarch64 DWARF register names](https://github.com/ARM-software/abi-aa/blob/main/aadwarf64/aadwarf64.rst#dwarf-register-names)
 
 I used these tools very frequently:
 
