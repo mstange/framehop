@@ -127,6 +127,21 @@ assert_eq!(
 );
 ```
 
+## Recommended Reading and Tools
+
+Here's a list of articles I found useful during development:
+
+ - [Reliable and Fast DWARF-Based Stack Unwinding](https://hal.inria.fr/hal-02297690/document). This is **the** unwinding reference document. If want to read just one thing, read this. This article explains the background super clearly, and is very approachable. It shows how assembly and unwind information correspond to each other and has lots of examples that are easy to understand.
+ - [How fast can CFI/EXIDX-based stack unwinding be?](https://blog.mozilla.org/jseward/2013/08/29/how-fast-can-cfiexidx-based-stack-unwinding-be/), by Julian Seward
+ - [Unwinding a Stack by Hand with Frame Pointers and ORC](https://blogs.oracle.com/linux/post/unwinding-stack-frame-pointers-and-orc), by Stephen Brennan
+
+I used these tools very frequently:
+
+ - [Hopper Disassembler](https://www.hopperapp.com/), to look at assembly code.
+ - `llvm-dwarfdump --eh-frame mylib.so` to display DWARF unwind information.
+ - `llvm-objdump --section-headers mylib.so` to display section information.
+ - `unwindinfodump mylib.dylib` to display compact unwind information. (Install using `cargo install --examples macho-unwind-info`, see [macho-unwind-info](https://github.com/mstange/macho-unwind-info/blob/main/examples/unwindinfodump.rs).)
+
 ## License
 
 Licensed under either of
