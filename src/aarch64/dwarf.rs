@@ -59,24 +59,10 @@ impl DwarfUnwinding for ArchAarch64 {
             if cfa <= sp {
                 return Err(DwarfUnwinderError::StackPointerMovedBackwards);
             }
-            let fp = eval_register_rule::<R, F, _, S>(
-                fp_rule,
-                cfa,
-                encoding,
-                regs.fp(),
-                regs,
-                read_stack,
-            )
-            .ok_or(DwarfUnwinderError::CouldNotRecoverFramePointer)?;
-            let lr = eval_register_rule::<R, F, _, S>(
-                lr_rule,
-                cfa,
-                encoding,
-                regs.lr(),
-                regs,
-                read_stack,
-            )
-            .ok_or(DwarfUnwinderError::CouldNotRecoverReturnAddress)?;
+            let fp = eval_register_rule::<R, F, _, S>(fp_rule, cfa, encoding, fp, regs, read_stack)
+                .ok_or(DwarfUnwinderError::CouldNotRecoverFramePointer)?;
+            let lr = eval_register_rule::<R, F, _, S>(lr_rule, cfa, encoding, lr, regs, read_stack)
+                .ok_or(DwarfUnwinderError::CouldNotRecoverReturnAddress)?;
             (fp, lr)
         } else {
             // For the first frame, be more lenient when encountering errors.
