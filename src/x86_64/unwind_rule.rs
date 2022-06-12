@@ -34,7 +34,7 @@ impl UnwindRule for UnwindRuleX86_64 {
 
     fn exec<F>(
         self,
-        _is_first_frame: bool,
+        is_first_frame: bool,
         regs: &mut UnwindRegsX86_64,
         read_stack: &mut F,
     ) -> Result<Option<u64>, Error>
@@ -61,8 +61,21 @@ impl UnwindRule for UnwindRuleX86_64 {
                 let bp_storage_offset_from_sp = i64::from(bp_storage_offset_from_sp_by_8) * 8;
                 let bp_location = checked_add_signed(sp, bp_storage_offset_from_sp)
                     .ok_or(Error::IntegerOverflow)?;
-                let new_bp =
-                    read_stack(bp_location).map_err(|_| Error::CouldNotReadStack(bp_location))?;
+                let new_bp = match read_stack(bp_location) {
+                    Ok(new_bp) => new_bp,
+                    Err(()) if is_first_frame && bp_location < sp => {
+                        // Ignore errors when reading beyond the stack pointer in the first frame.
+                        // These negative offsets are sometimes seen in x86_64 epilogues, where
+                        // a bunch of registers are popped one after the other, and the compiler
+                        // doesn't always set the already-popped register to "unchanged" (because
+                        // doing so would take up extra space in the dwarf information).
+                        // read_stack may legitimately refuse to read beyond the stack pointer,
+                        // for example when the stack bytes are coming from a linux perf event
+                        // sample record, where the ustack bytes are copied starting from sp.
+                        regs.bp()
+                    }
+                    Err(()) => return Err(Error::CouldNotReadStack(bp_location)),
+                };
                 (new_sp, new_bp)
             }
             UnwindRuleX86_64::UseFramePointer => {

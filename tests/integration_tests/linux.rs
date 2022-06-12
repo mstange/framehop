@@ -259,3 +259,65 @@ fn test_no_eh_frame_hdr() {
     assert_eq!(regs.fp(), 0x70);
     assert_eq!(regs.lr(), 0x1234);
 }
+
+#[test]
+fn test_epilogue_bp_already_popped() {
+    let mut cache = CacheX86_64::<_>::new();
+    let mut unwinder = UnwinderX86_64::new();
+    common::add_object(
+        &mut unwinder,
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/linux/x86_64/nofp/rustup"),
+        0x0,
+    );
+
+    // ...
+    // 583a11  add  rsp, 0x128
+    // 583a18  pop  rbx
+    // 583a19  pop  r14
+    // 583a1b  pop  r15
+    // 583a1d  pop  rbp
+    // 583a1e  ret               ; <-- profiler sampled here, bp already popped
+    // 583a1f  xorps xmm0, xmm0
+    // ...
+    //
+    // DWARF CFI:
+    // ...
+    // 0x583a18: CFA=RSP+40: RBX=[CFA-40], RBP=[CFA-16], R14=[CFA-32], R15=[CFA-24], RIP=[CFA-8]
+    // 0x583a19: CFA=RSP+32: RBX=[CFA-40], RBP=[CFA-16], R14=[CFA-32], R15=[CFA-24], RIP=[CFA-8]
+    // 0x583a1b: CFA=RSP+24: RBX=[CFA-40], RBP=[CFA-16], R14=[CFA-32], R15=[CFA-24], RIP=[CFA-8]
+    // 0x583a1d: CFA=RSP+16: RBX=[CFA-40], RBP=[CFA-16], R14=[CFA-32], R15=[CFA-24], RIP=[CFA-8]
+    // 0x583a1e: CFA=RSP+8: RBX=[CFA-40], RBP=[CFA-16], R14=[CFA-32], R15=[CFA-24], RIP=[CFA-8]
+    // 0x583a1f: CFA=RSP+336: RBX=[CFA-40], RBP=[CFA-16], R14=[CFA-32], R15=[CFA-24], RIP=[CFA-8]
+    // ...
+    //
+    // Note the "CFA=RSP+8: RBX=[CFA-40], RBP=[CFA-16]" - the dwarf cfi is referring to registers
+    // that are stored on the stack at locations beyond the current stack pointer value.
+    //
+    // We don't need to read those registers; we've already popped them so they're already in
+    // the "pre-unwind" register values.
+
+    // sp = 0x330
+    // return address 0x123456 is at stack location 0x330.
+    let mut read_stack = |addr| {
+        if addr < 0x330 {
+            return Err(());
+        }
+        if addr == 0x330 {
+            return Ok(0x123456);
+        };
+        Ok(addr - 0x330)
+    };
+
+    // The correct value for bp is already in the bp register, we're just
+    // past the instruction that popped the value.
+    let mut regs = UnwindRegsX86_64::new(0x583a1e, 0x330, 0x348);
+    let res = unwinder.unwind_frame(
+        FrameAddress::from_instruction_pointer(0x583a1e),
+        &mut regs,
+        &mut cache,
+        &mut read_stack,
+    );
+    assert_eq!(res, Ok(Some(0x123456)));
+    assert_eq!(regs.sp(), 0x338);
+    assert_eq!(regs.bp(), 0x348);
+}
