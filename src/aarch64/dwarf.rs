@@ -81,6 +81,10 @@ impl DwarfUnwinding for ArchAarch64 {
 
         Ok(UnwindResult::Uncacheable(lr))
     }
+
+    fn rule_if_uncovered_by_fde() -> Self::UnwindRule {
+        UnwindRuleAarch64::NoOpIfFirstFrameOtherwiseFp
+    }
 }
 
 fn register_rule_to_cfa_offset<R: gimli::Reader>(

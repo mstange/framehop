@@ -63,6 +63,8 @@ pub trait DwarfUnwinding: Arch {
         F: FnMut(u64) -> Result<u64, ()>,
         R: Reader,
         S: UnwindContextStorage<R> + EvaluationStorage<R>;
+
+    fn rule_if_uncovered_by_fde() -> Self::UnwindRule;
 }
 
 pub enum UnwindSectionType {
@@ -134,18 +136,22 @@ impl<'a, R: Reader, A: DwarfUnwinding, S: UnwindContextStorage<R> + EvaluationSt
     {
         let lookup_svma = self.base_svma + rel_lookup_address as u64;
         let unwind_section_data = self.unwind_section_data.clone();
-        let (unwind_info, encoding) = match self.unwind_section_type {
+        let unwind_info = match self.unwind_section_type {
             UnwindSectionType::EhFrame => {
                 let mut eh_frame = EhFrame::from(unwind_section_data);
                 eh_frame.set_address_size(8);
-                self.unwind_info_for_fde(eh_frame, lookup_svma, fde_offset)?
+                self.unwind_info_for_fde(eh_frame, lookup_svma, fde_offset)
             }
             UnwindSectionType::DebugFrame => {
                 let mut debug_frame = DebugFrame::from(unwind_section_data);
                 debug_frame.set_address_size(8);
-                self.unwind_info_for_fde(debug_frame, lookup_svma, fde_offset)?
+                self.unwind_info_for_fde(debug_frame, lookup_svma, fde_offset)
             }
         };
+        if let Err(DwarfUnwinderError::UnwindInfoForAddressFailed(_)) = unwind_info {
+            return Ok(UnwindResult::ExecRule(A::rule_if_uncovered_by_fde()));
+        }
+        let (unwind_info, encoding) = unwind_info?;
         A::unwind_frame::<F, R, S>(unwind_info, encoding, regs, is_first_frame, read_stack)
     }
 

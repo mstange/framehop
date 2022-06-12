@@ -321,3 +321,58 @@ fn test_epilogue_bp_already_popped() {
     assert_eq!(regs.sp(), 0x338);
     assert_eq!(regs.bp(), 0x348);
 }
+
+#[test]
+fn test_libc_syscall_no_fde() {
+    let mut cache = CacheX86_64::<_>::new();
+    let mut unwinder = UnwinderX86_64::new();
+    common::add_object(
+        &mut unwinder,
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/linux/x86_64/nofp/libc.so.6"),
+        0x0,
+    );
+
+    // sub_129720:
+    // 129720  endbr64                      ; End of unwind block (FDE at 0x206a24), Begin of unwind block (FDE at 0x206a6c)
+    // 129724  mov        eax, 0xffffffea
+    // 129729  test       rdi, rdi
+    // 12972c  je         loc_12975a
+    // 12972e  test       rdx, rdx
+    // 129731  je         loc_12975a
+    // 129733  mov        r8, rcx
+    // 129736  mov        eax, 0x1b3
+    // 12973b  syscall                      ; End of unwind block (FDE at 0x206a6c)
+    // 12973d  test       rax, rax    ; <-- profiler sampled here
+    // 129740  jl         loc_12975a
+    // 129742  je         loc_129745
+    // 129744  ret
+    // 129745  xor        ebp, ebp
+    // ...
+
+    // There is no FDE covering the sampled instruction.
+
+    // sp = 0x330
+    // return address 0x123456 is at stack location 0x330.
+    let mut read_stack = |addr| {
+        if addr < 0x330 {
+            return Err(());
+        }
+        if addr == 0x330 {
+            return Ok(0x123456);
+        };
+        Ok(addr - 0x330)
+    };
+
+    // The correct value for bp is already in the bp register, we're just
+    // past the instruction that popped the value.
+    let mut regs = UnwindRegsX86_64::new(0x12973d, 0x330, 0x348);
+    let res = unwinder.unwind_frame(
+        FrameAddress::from_instruction_pointer(0x12973d),
+        &mut regs,
+        &mut cache,
+        &mut read_stack,
+    );
+    assert_eq!(res, Ok(Some(0x123456)));
+    assert_eq!(regs.sp(), 0x338);
+    assert_eq!(regs.bp(), 0x348);
+}

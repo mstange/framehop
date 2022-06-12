@@ -8,6 +8,8 @@ use crate::unwind_rule::UnwindRule;
 pub enum UnwindRuleX86_64 {
     /// (sp, bp) = (sp + 8, bp)
     JustReturn,
+    /// (sp, bp) = if is_first_frame (sp + 8, bp) else (bp + 16, *bp)
+    JustReturnIfFirstFrameOtherwiseFp,
     /// (sp, bp) = (sp + 8x, bp)
     OffsetSp { sp_offset_by_8: u16 },
     /// (sp, bp) = (sp + 8x, *(sp + 8y))
@@ -46,6 +48,21 @@ impl UnwindRule for UnwindRuleX86_64 {
             UnwindRuleX86_64::JustReturn => {
                 let new_sp = sp.checked_add(8).ok_or(Error::IntegerOverflow)?;
                 (new_sp, regs.bp())
+            }
+            UnwindRuleX86_64::JustReturnIfFirstFrameOtherwiseFp => {
+                if is_first_frame {
+                    let new_sp = sp.checked_add(8).ok_or(Error::IntegerOverflow)?;
+                    (new_sp, regs.bp())
+                } else {
+                    let sp = regs.sp();
+                    let bp = regs.bp();
+                    let new_sp = bp.checked_add(16).ok_or(Error::IntegerOverflow)?;
+                    if new_sp <= sp {
+                        return Err(Error::FramepointerUnwindingMovedBackwards);
+                    }
+                    let new_bp = read_stack(bp).map_err(|_| Error::CouldNotReadStack(bp))?;
+                    (new_sp, new_bp)
+                }
             }
             UnwindRuleX86_64::OffsetSp { sp_offset_by_8 } => {
                 let sp_offset = u64::from(sp_offset_by_8) * 8;

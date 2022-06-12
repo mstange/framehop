@@ -11,6 +11,9 @@ pub enum UnwindRuleAarch64 {
     /// return address from somewhere other than the lr register to avoid
     /// infinite loops.
     NoOp,
+    /// (sp, fp, lr) = if is_first_frame (sp, fp, lr) else (fp + 16, *fp, *(fp + 8))
+    /// Used as a fallback rule.
+    NoOpIfFirstFrameOtherwiseFp,
     /// (sp, fp, lr) = (sp + 16x, fp, lr)
     /// Only possible for the first frame. Subsequent frames must get the
     /// return address from somewhere other than the lr register to avoid
@@ -74,6 +77,21 @@ impl UnwindRule for UnwindRuleAarch64 {
                     return Err(Error::DidNotAdvance);
                 }
                 (lr, sp, fp)
+            }
+            UnwindRuleAarch64::NoOpIfFirstFrameOtherwiseFp => {
+                if is_first_frame {
+                    (lr, sp, fp)
+                } else {
+                    let fp = regs.fp();
+                    let new_sp = fp.checked_add(16).ok_or(Error::IntegerOverflow)?;
+                    let new_lr =
+                        read_stack(fp + 8).map_err(|_| Error::CouldNotReadStack(fp + 8))?;
+                    let new_fp = read_stack(fp).map_err(|_| Error::CouldNotReadStack(fp))?;
+                    if new_sp <= sp {
+                        return Err(Error::FramepointerUnwindingMovedBackwards);
+                    }
+                    (new_lr, new_sp, new_fp)
+                }
             }
             UnwindRuleAarch64::OffsetSpIfFirstFrameOtherwiseStackEndsHere { sp_offset_by_16 } => {
                 if !is_first_frame {
