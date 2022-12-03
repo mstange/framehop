@@ -11,7 +11,7 @@ You give framehop register values, stack memory and unwind data, and framehop pr
 
 Framehop can be used in the following scenarios:
 
- - Live unwinding of a remote process. This is how [`perfrecord`](https://github.com/mstange/perfrecord/) uses it.
+ - Live unwinding of a remote process. This is how [`samply`](https://github.com/mstange/samply/) uses it.
  - Offline unwinding from saved registers and stack bytes, even on a different machine, a different OS, or a different CPU architecture.
  - Live unwinding inside the same process. This is currently unproven, but should work as long as you can do heap allocation before sampling, in order to allocate a cache and to update the list of modules. The actual unwinding does not require any heap allocation and should work even inside a signal handler, as long as you use `MustNotAllocateDuringUnwind`.
 
@@ -41,7 +41,7 @@ Framehop is not suitable for debuggers or to implement exception handling. Debug
 
 Framehop is so fast that stack walking is a miniscule part of sampling in both scenarios where I've tried it.
 
-In [this perfrecord example](https://share.firefox.dev/3s6mQKl) of profiling a single-threaded Rust application, walking the stack takes a quarter of the time it take to query macOS for the thread's register values. In [another perfrecord example](https://share.firefox.dev/3ksWaPt) of profiling a Firefox build without frame pointers, the dwarf unwinding takes 4x as long as the querying of the register values, but is still overall cheaper than the cost of thread_suspend + thread_get_state + thread_resume.
+In [this samply example](https://share.firefox.dev/3s6mQKl) of profiling a single-threaded Rust application, walking the stack takes a quarter of the time it take to query macOS for the thread's register values. In [another samply example](https://share.firefox.dev/3ksWaPt) of profiling a Firefox build without frame pointers, the dwarf unwinding takes 4x as long as the querying of the register values, but is still overall cheaper than the cost of thread_suspend + thread_get_state + thread_resume.
 
 In [this example of processing a `perf.data` file](https://share.firefox.dev/3vSQOTb), the bottleneck is reading the bytes from disk, rather than stackwalking. [With a warm file cache](https://share.firefox.dev/3Kt6sK1), the cost of stack walking is still comparable to the cost of copying the bytes from the file cache, and most of the stack walking time is spent reading return addresses from the stack bytes.
 
