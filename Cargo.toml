@@ -13,13 +13,13 @@ repository = "https://github.com/mstange/framehop/"
 exclude = ["/.github", "/.vscode", "/tests", "/fixtures", "/big-fixtures"]
 
 [dependencies]
-gimli = "0.26.1"
+gimli = "0.27.0"
 thiserror = "1.0.30"
 macho-unwind-info = "0.3.0"
 fallible-iterator = "0.2.0"
 
 [dev-dependencies]
-object = "0.28.2"
+object = "0.30.0"
 flate2 = "1.0.23"
 
 [profile.release]
