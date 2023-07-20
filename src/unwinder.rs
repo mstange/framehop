@@ -18,7 +18,6 @@ use crate::FrameAddress;
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicU16, Ordering};
 use std::{
-    fmt::Debug,
     ops::{Deref, Range},
     sync::Arc,
 };
@@ -385,32 +384,37 @@ impl<
     {
         let is_first_frame = !address.is_return_address();
         let unwind_result = match &module.unwind_data {
-            ModuleUnwindDataInternal::CompactUnwindInfoAndEhFrame(unwind_data, eh_frame_data) => {
+            ModuleUnwindDataInternal::CompactUnwindInfoAndEhFrame {
+                unwind_info,
+                eh_frame,
+                stubs,
+                stub_helper,
+                base_addresses,
+                text_data,
+            } => {
                 // eprintln!("unwinding with cui and eh_frame in module {}", module.name);
-                let text_bytes = module.text_data.as_ref().and_then(|data| {
-                    let offset_from_base =
-                        u32::try_from(data.avma_range.start.checked_sub(module.base_avma)?).ok()?;
+                let text_bytes = text_data.as_ref().and_then(|data| {
+                    let offset_from_base = u32::try_from(data.svma_range.start).ok()?;
                     Some(TextBytes::new(offset_from_base, &data.bytes[..]))
                 });
-                let stubs_range = if let Some(stubs_range) = &module.svma_info.stubs {
+                let stubs_range = if let Some(stubs_range) = stubs {
                     (
-                        (stubs_range.start - module.svma_info.base_svma) as u32,
-                        (stubs_range.end - module.svma_info.base_svma) as u32,
+                        (stubs_range.start - module.base_svma) as u32,
+                        (stubs_range.end - module.base_svma) as u32,
                     )
                 } else {
                     (0, 0)
                 };
-                let stub_helper_range =
-                    if let Some(stub_helper_range) = &module.svma_info.stub_helper {
-                        (
-                            (stub_helper_range.start - module.svma_info.base_svma) as u32,
-                            (stub_helper_range.end - module.svma_info.base_svma) as u32,
-                        )
-                    } else {
-                        (0, 0)
-                    };
+                let stub_helper_range = if let Some(stub_helper_range) = stub_helper {
+                    (
+                        (stub_helper_range.start - module.base_svma) as u32,
+                        (stub_helper_range.end - module.base_svma) as u32,
+                    )
+                } else {
+                    (0, 0)
+                };
                 let mut unwinder = CompactUnwindInfoUnwinder::<A>::new(
-                    &unwind_data[..],
+                    &unwind_info[..],
                     text_bytes,
                     stubs_range,
                     stub_helper_range,
@@ -420,7 +424,7 @@ impl<
                 match unwind_result {
                     CuiUnwindResult::ExecRule(rule) => UnwindResult::ExecRule(rule),
                     CuiUnwindResult::NeedDwarf(fde_offset) => {
-                        let eh_frame_data = match eh_frame_data {
+                        let eh_frame_data = match eh_frame {
                             Some(data) => ArcData(data.clone()),
                             None => return Err(UnwinderError::NoDwarfData),
                         };
@@ -429,7 +433,8 @@ impl<
                             UnwindSectionType::EhFrame,
                             None,
                             &mut cache.gimli_unwind_context,
-                            &module.svma_info,
+                            base_addresses.clone(),
+                            module.base_svma,
                         );
                         dwarf_unwinder.unwind_frame_with_fde(
                             regs,
@@ -441,15 +446,20 @@ impl<
                     }
                 }
             }
-            ModuleUnwindDataInternal::EhFrameHdrAndEhFrame(eh_frame_hdr, eh_frame_data) => {
+            ModuleUnwindDataInternal::EhFrameHdrAndEhFrame {
+                eh_frame_hdr,
+                eh_frame,
+                base_addresses,
+            } => {
                 let eh_frame_hdr_data = &eh_frame_hdr[..];
-                let eh_frame_data = ArcData(eh_frame_data.clone());
+                let eh_frame_data = ArcData(eh_frame.clone());
                 let mut dwarf_unwinder = DwarfUnwinder::<_, A, P::GimliStorage>::new(
                     EndianReader::new(eh_frame_data, LittleEndian),
                     UnwindSectionType::EhFrame,
                     Some(eh_frame_hdr_data),
                     &mut cache.gimli_unwind_context,
-                    &module.svma_info,
+                    base_addresses.clone(),
+                    module.base_svma,
                 );
                 let fde_offset = dwarf_unwinder
                     .get_fde_offset_for_relative_address(rel_lookup_address)
@@ -462,14 +472,19 @@ impl<
                     read_stack,
                 )?
             }
-            ModuleUnwindDataInternal::DwarfCfiIndexAndEhFrame(index, eh_frame_data) => {
-                let eh_frame_data = ArcData(eh_frame_data.clone());
+            ModuleUnwindDataInternal::DwarfCfiIndexAndEhFrame {
+                index,
+                eh_frame,
+                base_addresses,
+            } => {
+                let eh_frame_data = ArcData(eh_frame.clone());
                 let mut dwarf_unwinder = DwarfUnwinder::<_, A, P::GimliStorage>::new(
                     EndianReader::new(eh_frame_data, LittleEndian),
                     UnwindSectionType::EhFrame,
                     None,
                     &mut cache.gimli_unwind_context,
-                    &module.svma_info,
+                    base_addresses.clone(),
+                    module.base_svma,
                 );
                 let fde_offset = index
                     .fde_offset_for_relative_address(rel_lookup_address)
@@ -482,14 +497,19 @@ impl<
                     read_stack,
                 )?
             }
-            ModuleUnwindDataInternal::DwarfCfiIndexAndDebugFrame(index, debug_frame_data) => {
-                let debug_frame_data = ArcData(debug_frame_data.clone());
+            ModuleUnwindDataInternal::DwarfCfiIndexAndDebugFrame {
+                index,
+                debug_frame,
+                base_addresses,
+            } => {
+                let debug_frame_data = ArcData(debug_frame.clone());
                 let mut dwarf_unwinder = DwarfUnwinder::<_, A, P::GimliStorage>::new(
                     EndianReader::new(debug_frame_data, LittleEndian),
                     UnwindSectionType::DebugFrame,
                     None,
                     &mut cache.gimli_unwind_context,
-                    &module.svma_info,
+                    base_addresses.clone(),
+                    module.base_svma,
                 );
                 let fde_offset = index
                     .fde_offset_for_relative_address(rel_lookup_address)
@@ -520,62 +540,102 @@ impl<
 ///    module, e.g. `Vec<u8>`. But it could also be a wrapper around mapped memory from
 ///    a file or a different process, for example. It just needs to provide a slice of
 ///    bytes via its `Deref` implementation.
-pub enum ModuleUnwindData<D: Deref<Target = [u8]>> {
+enum ModuleUnwindDataInternal<D: Deref<Target = [u8]>> {
     /// Used on macOS, with mach-O binaries. Compact unwind info is in the `__unwind_info`
     /// section and is sometimes supplemented with DWARF CFI information in the `__eh_frame`
-    /// section.
-    CompactUnwindInfoAndEhFrame(D, Option<D>),
+    /// section. `__stubs` and `__stub_helper` ranges are used by the unwinder.
+    CompactUnwindInfoAndEhFrame {
+        unwind_info: D,
+        eh_frame: Option<Arc<D>>,
+        stubs: Option<Range<u64>>,
+        stub_helper: Option<Range<u64>>,
+        base_addresses: crate::dwarf::BaseAddresses,
+        text_data: Option<TextByteData<D>>,
+    },
     /// Used with ELF binaries (Linux and friends), in the `.eh_frame_hdr` and `.eh_frame`
     /// sections. Contains an index and DWARF CFI.
-    EhFrameHdrAndEhFrame(D, D),
+    EhFrameHdrAndEhFrame {
+        eh_frame_hdr: D,
+        eh_frame: Arc<D>,
+        base_addresses: crate::dwarf::BaseAddresses,
+    },
     /// Used with ELF binaries (Linux and friends), in the `.eh_frame` section. Contains
     /// DWARF CFI. We create a binary index for the FDEs when a module with this unwind
     /// data type is added.
-    EhFrame(D),
+    DwarfCfiIndexAndEhFrame {
+        index: DwarfCfiIndex,
+        eh_frame: Arc<D>,
+        base_addresses: crate::dwarf::BaseAddresses,
+    },
     /// Used with ELF binaries (Linux and friends), in the `.debug_frame` section. Contains
     /// DWARF CFI. We create a binary index for the FDEs when a module with this unwind
     /// data type is added.
-    DebugFrame(D),
+    DwarfCfiIndexAndDebugFrame {
+        index: DwarfCfiIndex,
+        debug_frame: Arc<D>,
+        base_addresses: crate::dwarf::BaseAddresses,
+    },
     /// No unwind information is used. Unwinding in this module will use a fallback rule
     /// (usually frame pointer unwinding).
     None,
 }
 
-enum ModuleUnwindDataInternal<D: Deref<Target = [u8]>> {
-    CompactUnwindInfoAndEhFrame(D, Option<Arc<D>>),
-    EhFrameHdrAndEhFrame(D, Arc<D>),
-    DwarfCfiIndexAndEhFrame(DwarfCfiIndex, Arc<D>),
-    DwarfCfiIndexAndDebugFrame(DwarfCfiIndex, Arc<D>),
-    None,
-}
-
 impl<D: Deref<Target = [u8]>> ModuleUnwindDataInternal<D> {
-    fn new(unwind_data: ModuleUnwindData<D>, svma_info: &ModuleSvmaInfo) -> Self {
-        match unwind_data {
-            ModuleUnwindData::CompactUnwindInfoAndEhFrame(cui, eh_frame) => {
-                ModuleUnwindDataInternal::CompactUnwindInfoAndEhFrame(cui, eh_frame.map(Arc::new))
+    fn new(section_info: &impl ModuleSectionInfo<D>) -> Self {
+        use crate::dwarf::base_addresses_for_sections;
+
+        if let Some(unwind_info) = section_info.section_data(b"__unwind_info") {
+            let eh_frame = section_info.section_data(b"__eh_frame");
+            let stubs = section_info.section_svma_range(b"__stubs");
+            let stub_helper = section_info.section_svma_range(b"__stub_helper");
+            const TEXT_SECTIONS: &[&[u8]] = &[b"__text", b".text"];
+            let text_data = section_info
+                .segment_data(b"__TEXT")
+                .zip(section_info.segment_file_range(b"__TEXT"))
+                .or_else(|| {
+                    TEXT_SECTIONS.into_iter().find_map(|name| {
+                        section_info
+                            .section_data(name)
+                            .zip(section_info.section_file_range(name))
+                    })
+                })
+                .map(|(bytes, svma_range)| TextByteData { bytes, svma_range });
+            ModuleUnwindDataInternal::CompactUnwindInfoAndEhFrame {
+                unwind_info,
+                eh_frame: eh_frame.map(Arc::new),
+                stubs,
+                stub_helper,
+                base_addresses: base_addresses_for_sections(section_info),
+                text_data,
             }
-            ModuleUnwindData::EhFrameHdrAndEhFrame(eh_frame_hdr, eh_frame) => {
-                ModuleUnwindDataInternal::EhFrameHdrAndEhFrame(eh_frame_hdr, Arc::new(eh_frame))
-            }
-            ModuleUnwindData::EhFrame(eh_frame) => {
-                match DwarfCfiIndex::try_new_eh_frame(&eh_frame, svma_info) {
-                    Ok(index) => {
-                        ModuleUnwindDataInternal::DwarfCfiIndexAndEhFrame(index, Arc::new(eh_frame))
-                    }
-                    Err(_) => ModuleUnwindDataInternal::None,
+        } else if let Some(eh_frame) = section_info.section_data(b".eh_frame") {
+            if let Some(eh_frame_hdr) = section_info.section_data(b".eh_frame_hdr") {
+                ModuleUnwindDataInternal::EhFrameHdrAndEhFrame {
+                    eh_frame_hdr,
+                    eh_frame: Arc::new(eh_frame),
+                    base_addresses: base_addresses_for_sections(section_info),
                 }
-            }
-            ModuleUnwindData::DebugFrame(debug_frame) => {
-                match DwarfCfiIndex::try_new_debug_frame(&debug_frame, svma_info) {
-                    Ok(index) => ModuleUnwindDataInternal::DwarfCfiIndexAndDebugFrame(
+            } else {
+                match DwarfCfiIndex::try_new_eh_frame(&eh_frame, section_info) {
+                    Ok(index) => ModuleUnwindDataInternal::DwarfCfiIndexAndEhFrame {
                         index,
-                        Arc::new(debug_frame),
-                    ),
+                        eh_frame: Arc::new(eh_frame),
+                        base_addresses: base_addresses_for_sections(section_info),
+                    },
                     Err(_) => ModuleUnwindDataInternal::None,
                 }
             }
-            ModuleUnwindData::None => ModuleUnwindDataInternal::None,
+        } else if let Some(debug_frame) = section_info.section_data(b".debug_frame") {
+            match DwarfCfiIndex::try_new_debug_frame(&debug_frame, section_info) {
+                Ok(index) => ModuleUnwindDataInternal::DwarfCfiIndexAndDebugFrame {
+                    index,
+                    debug_frame: Arc::new(debug_frame),
+                    base_addresses: base_addresses_for_sections(section_info),
+                },
+                Err(_) => ModuleUnwindDataInternal::None,
+            }
+        } else {
+            ModuleUnwindDataInternal::None
         }
     }
 }
@@ -597,32 +657,9 @@ impl<D: Deref<Target = [u8]>> ModuleUnwindDataInternal<D> {
 ///    module, e.g. `Vec<u8>`. But it could also be a wrapper around mapped memory from
 ///    a file or a different process, for example. It just needs to provide a slice of
 ///    bytes via its `Deref` implementation.
-pub struct TextByteData<D: Deref<Target = [u8]>> {
-    bytes: D,
-    avma_range: Range<u64>,
-}
-
-impl<D: Deref<Target = [u8]>> TextByteData<D> {
-    /// Supply the bytes which cover `avma_range` in the process virtual memory.
-    /// Both arguments should have the same length.
-    pub fn new(bytes: D, avma_range: Range<u64>) -> Self {
-        Self { bytes, avma_range }
-    }
-
-    /// Return a byte slice for the requested range, if in-bounds.
-    pub fn get_bytes(&self, avma_range: Range<u64>) -> Option<&[u8]> {
-        let rel_start = avma_range.start.checked_sub(self.avma_range.start)?;
-        let rel_start = usize::try_from(rel_start).ok()?;
-        let rel_end = avma_range.end.checked_sub(self.avma_range.start)?;
-        let rel_end = usize::try_from(rel_end).ok()?;
-        self.bytes.get(rel_start..rel_end)
-    }
-
-    /// The address range covered by the supplied bytes, in process virtual memory.
-    /// "Actual virtual memory address range"
-    pub fn avma_range(&self) -> Range<u64> {
-        self.avma_range.clone()
-    }
+struct TextByteData<D: Deref<Target = [u8]>> {
+    pub bytes: D,
+    pub svma_range: Range<u64>,
 }
 
 /// Information about a module that is loaded in a process. You might know this under a
@@ -647,69 +684,96 @@ pub struct Module<D: Deref<Target = [u8]>> {
     /// The base address of this module, in the process's address space. On Linux, the base
     /// address can sometimes be different from the start address of the mapped range.
     base_avma: u64,
-    /// Information about various addresses in the module.
-    svma_info: ModuleSvmaInfo,
+    /// The base address of this module, according to the module.
+    base_svma: u64,
     /// The unwind data that should be used for unwinding addresses from this module.
     unwind_data: ModuleUnwindDataInternal<D>,
-    /// The raw assembly bytes of this module. Used for instruction analysis to ensure
-    /// correct unwinding inside function prologues and epilogues.
-    text_data: Option<TextByteData<D>>,
 }
 
-/// The addresses of various sections in the module.
+/// Type arguments:
 ///
-/// These are SVMAs, "stated virtual memory addresses", i.e. addresses as stated
-/// in the object, as opposed to AVMAs, "actual virtual memory addresses", i.e. addresses
-/// in the virtual memory of the profiled process.
-///
-/// Code addresses inside a module's unwind information are usually written down as SVMAs,
-/// or as relative addresses. For example, DWARF CFI can have code addresses expressed as
-/// relative-to-.text addresses or as absolute SVMAs. And mach-O compact unwind info
-/// contains addresses relative to the image base address.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ModuleSvmaInfo {
-    /// The image base address, as stated in the object. For mach-O objects, this is the
-    /// vmaddr of the `__TEXT` segment. For ELF objects, this is zero.
+///  - `D`: The type for section data. This allows carrying owned data on the module, e.g.
+///    `Vec<u8>`. But it could also be a wrapper around mapped memory from a file or a different
+///    process, for example.
+pub trait ModuleSectionInfo<D> {
+    /// Return the base address stated in the module.
+    ///
+    /// For mach-O objects, this is the vmaddr of the __TEXT segment. For ELF objects, this is
+    /// zero. For PE objects, this is the image base address.
     ///
     /// This is used to convert between SVMAs and relative addresses.
-    pub base_svma: u64,
-    /// The address range of the `__text` or `.text` section. This is where most of the
-    /// compiled code is stored.
-    ///
-    /// This is used to detect whether we need to do instruction analysis for an address.
-    pub text: Option<Range<u64>>,
-    /// The address range of the `text_env` section, if present. If present, this contains
-    /// functions which have been marked as "cold". It stores executable code, just like
-    /// the text section.
-    ///
-    /// This is used to detect whether we need to do instruction analysis for an address.
-    pub text_env: Option<Range<u64>>,
-    /// The address range of the mach-O `__stubs` section. Contains small pieces of
-    /// executable code for calling imported functions. Code inside this section is not
-    /// covered by the unwind information in `__unwind_info`.
-    ///
-    /// This is used to exclude addresses in this section from incorrectly applying
-    /// `__unwind_info` opcodes. It is also used to infer unwind rules for the known
-    /// structure of stub functions.
-    pub stubs: Option<Range<u64>>,
-    /// The address range of the mach-O `__stub_helper` section. Contains small pieces of
-    /// executable code for calling imported functions. Code inside this section is not
-    /// covered by the unwind information in `__unwind_info`.
-    ///
-    /// This is used to exclude addresses in this section from incorrectly applying
-    /// `__unwind_info` opcodes. It is also used to infer unwind rules for the known
-    /// structure of stub helper
-    /// functions.
-    pub stub_helper: Option<Range<u64>>,
-    /// The address range of the `__eh_frame` or `.eh_frame` section. This is used during
-    /// DWARF CFI processing, to resolve eh_frame-relative addresses.
-    pub eh_frame: Option<Range<u64>>,
-    /// The address range of the `.eh_frame_hdr` section. This is used during
-    /// DWARF CFI processing, to resolve eh_frame_hdr-relative addresses.
-    pub eh_frame_hdr: Option<Range<u64>>,
-    /// The address range of the `.got` section (Global Offset Table). This is used
-    /// during DWARF CFI processing, to resolve got-relative addresses.
-    pub got: Option<Range<u64>>,
+    fn base_svma(&self) -> u64;
+
+    /// Get the given section's memory range, as stated in the module.
+    fn section_svma_range(&self, name: &[u8]) -> Option<Range<u64>>;
+
+    /// Get the given section's file range in the module.
+    fn section_file_range(&self, name: &[u8]) -> Option<Range<u64>>;
+
+    /// Get the given section's data.
+    fn section_data(&self, name: &[u8]) -> Option<D>;
+
+    /// Get the given segment's file range in the module.
+    fn segment_file_range(&self, _name: &[u8]) -> Option<Range<u64>> {
+        None
+    }
+
+    /// Get the given segment's data.
+    fn segment_data(&self, _name: &[u8]) -> Option<D> {
+        None
+    }
+}
+
+#[cfg(feature = "object")]
+mod object {
+    use super::{ModuleSectionInfo, Range};
+    use object::read::{Object, ObjectSection, ObjectSegment};
+
+    impl<'data: 'file, 'file, O, D> ModuleSectionInfo<D> for &'file O
+    where
+        O: Object<'data, 'file>,
+        D: From<&'data [u8]>,
+    {
+        fn base_svma(&self) -> u64 {
+            if let Some(text_segment) = self.segments().find(|s| s.name() == Ok(Some("__TEXT"))) {
+                // This is a mach-O image. "Relative addresses" are relative to the
+                // vmaddr of the __TEXT segment.
+                return text_segment.address();
+            }
+
+            // For PE binaries, relative_address_base() returns the image base address.
+            // Otherwise it returns zero. This gives regular ELF images a base address of zero,
+            // which is what we want.
+            self.relative_address_base()
+        }
+
+        fn section_svma_range(&self, name: &[u8]) -> Option<Range<u64>> {
+            let section = self.section_by_name_bytes(name)?;
+            Some(section.address()..section.address() + section.size())
+        }
+
+        fn section_file_range(&self, name: &[u8]) -> Option<Range<u64>> {
+            let section = self.section_by_name_bytes(name)?;
+            let (start, size) = section.file_range()?;
+            Some(start..start + size)
+        }
+
+        fn section_data(&self, name: &[u8]) -> Option<D> {
+            let section = self.section_by_name_bytes(name)?;
+            section.data().ok().map(|data| data.into())
+        }
+
+        fn segment_file_range(&self, name: &[u8]) -> Option<Range<u64>> {
+            let segment = self.segments().find(|s| s.name_bytes() == Ok(Some(name)))?;
+            let (start, size) = segment.file_range();
+            Some(start..start + size)
+        }
+
+        fn segment_data(&self, name: &[u8]) -> Option<D> {
+            let segment = self.segments().find(|s| s.name_bytes() == Ok(Some(name)))?;
+            segment.data().ok().map(|data| data.into())
+        }
+    }
 }
 
 impl<D: Deref<Target = [u8]>> Module<D> {
@@ -717,18 +781,16 @@ impl<D: Deref<Target = [u8]>> Module<D> {
         name: String,
         avma_range: std::ops::Range<u64>,
         base_avma: u64,
-        svma_info: ModuleSvmaInfo,
-        unwind_data: ModuleUnwindData<D>,
-        text_data: Option<TextByteData<D>>,
+        section_info: impl ModuleSectionInfo<D>,
     ) -> Self {
-        let unwind_data = ModuleUnwindDataInternal::new(unwind_data, &svma_info);
+        let unwind_data = ModuleUnwindDataInternal::new(&section_info);
+
         Self {
             name,
             avma_range,
             base_avma,
-            svma_info,
+            base_svma: section_info.base_svma(),
             unwind_data,
-            text_data,
         }
     }
 }

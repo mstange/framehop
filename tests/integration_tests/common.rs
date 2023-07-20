@@ -12,97 +12,65 @@ where
     let mut file = std::fs::File::open(objpath).unwrap();
     file.read_to_end(&mut buf).unwrap();
 
-    fn section_data<'a>(section: &impl ObjectSection<'a>) -> Option<Vec<u8>> {
-        section.data().ok().map(|data| data.to_owned())
-    }
-
     let file = object::File::parse(&buf[..]).expect("Could not parse object file");
 
-    let base_svma = relative_address_base(&file);
+    struct Module<'a>(object::File<'a, &'a [u8]>);
 
-    let text = file.section_by_name(".text");
-    let stubs = file.section_by_name("__stubs");
-    let stub_helper = file.section_by_name("__stub_helper");
-    let text_env = file.section_by_name("__text_env");
-    let unwind_info = file.section_by_name("__unwind_info");
-    let eh_frame = file.section_by_name(".eh_frame");
-    let got = file.section_by_name(".got");
-    let eh_frame_hdr = file.section_by_name(".eh_frame_hdr");
-    let debug_frame = file
-        .section_by_name(".debug_frame")
-        .or_else(|| file.section_by_name("__zdebug_frame"));
+    impl ModuleSectionInfo<Vec<u8>> for Module<'_> {
+        fn base_svma(&self) -> u64 {
+            relative_address_base(&self.0)
+        }
 
-    let unwind_data = match (
-        unwind_info.as_ref().and_then(section_data),
-        eh_frame.as_ref().and_then(section_data),
-        eh_frame_hdr.as_ref().and_then(section_data),
-        debug_frame,
-    ) {
-        (Some(unwind_info), eh_frame, _, _) => {
-            framehop::ModuleUnwindData::CompactUnwindInfoAndEhFrame(unwind_info, eh_frame)
+        fn section_svma_range(&self, name: &[u8]) -> Option<Range<u64>> {
+            let section = self.0.section_by_name_bytes(name)?;
+            Some(section.address()..section.address() + section.size())
         }
-        (None, Some(eh_frame), Some(eh_frame_hdr), _) => {
-            framehop::ModuleUnwindData::EhFrameHdrAndEhFrame(eh_frame_hdr, eh_frame)
+
+        fn section_file_range(&self, name: &[u8]) -> Option<Range<u64>> {
+            let section = self.0.section_by_name_bytes(name)?;
+            let (start, size) = section.file_range()?;
+            Some(start..start + size)
         }
-        (None, Some(eh_frame), None, _) => framehop::ModuleUnwindData::EhFrame(eh_frame),
-        (None, None, _, Some(debug_frame)) => {
-            eprintln!("Have debug_frame!");
-            if let Some(section_data) = get_uncompressed_section_data(&debug_frame) {
-                let debug_frame_data = Vec::from(section_data);
-                framehop::ModuleUnwindData::DebugFrame(debug_frame_data)
-            } else {
-                framehop::ModuleUnwindData::None
+
+        fn section_data(&self, name: &[u8]) -> Option<Vec<u8>> {
+            match self.0.section_by_name_bytes(name) {
+                Some(section) => section.data().ok().map(|data| data.to_owned()),
+                None if name == b".debug_frame" => {
+                    let section = self.0.section_by_name_bytes(b"__zdebug_frame")?;
+                    get_uncompressed_section_data(&section).map(|d| d.into_owned())
+                }
+                None => None,
             }
         }
-        (None, None, _, _) => framehop::ModuleUnwindData::None,
-    };
 
-    let text_data = if let Some(text_segment) = file
-        .segments()
-        .find(|segment| segment.name_bytes() == Ok(Some(b"__TEXT")))
-    {
-        let (start, size) = text_segment.file_range();
-        let avma_range = base_avma + start..base_avma + start + size;
-        text_segment
-            .data()
-            .ok()
-            .map(|data| TextByteData::new(data.to_owned(), avma_range))
-    } else if let Some(text_section) = &text {
-        if let Some((start, size)) = text_section.file_range() {
-            let avma_range = base_avma + start..base_avma + start + size;
-            text_section
-                .data()
-                .ok()
-                .map(|data| TextByteData::new(data.to_owned(), avma_range))
-        } else {
-            None
+        fn segment_file_range(&self, name: &[u8]) -> Option<Range<u64>> {
+            let segment = self
+                .0
+                .segments()
+                .find(|s| s.name_bytes() == Ok(Some(name)))?;
+            let (start, size) = segment.file_range();
+            Some(start..start + size)
         }
-    } else {
-        None
-    };
 
-    fn svma_range<'a>(section: &Option<impl ObjectSection<'a>>) -> Option<Range<u64>> {
-        section
-            .as_ref()
-            .map(|section| section.address()..section.address() + section.size())
+        fn segment_data(&self, name: &[u8]) -> Option<Vec<u8>> {
+            let segment = self
+                .0
+                .segments()
+                .find(|s| s.name_bytes() == Ok(Some(name)))?;
+            segment.data().ok().map(|data| data.to_owned())
+        }
     }
+
+    #[cfg(not(feature = "object"))]
+    let section_info = Module(file);
+    #[cfg(feature = "object")]
+    let section_info = &file;
 
     let module = framehop::Module::new(
         objpath.to_string_lossy().to_string(),
         base_avma..(base_avma + buf.len() as u64),
         base_avma,
-        ModuleSvmaInfo {
-            base_svma,
-            text: svma_range(&text),
-            text_env: svma_range(&text_env),
-            stubs: svma_range(&stubs),
-            stub_helper: svma_range(&stub_helper),
-            eh_frame: svma_range(&eh_frame),
-            eh_frame_hdr: svma_range(&eh_frame_hdr),
-            got: svma_range(&got),
-        },
-        unwind_data,
-        text_data,
+        section_info,
     );
     unwinder.add_module(module);
 }

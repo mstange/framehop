@@ -1,13 +1,15 @@
-use std::{marker::PhantomData, ops::Range};
+use std::marker::PhantomData;
 
 use gimli::{
-    BaseAddresses, CfaRule, CieOrFde, DebugFrame, EhFrame, EhFrameHdr, Encoding, EndianSlice,
-    Evaluation, EvaluationResult, EvaluationStorage, Expression, LittleEndian, Location,
-    ParsedEhFrameHdr, Reader, ReaderOffset, Register, RegisterRule, UnwindContext,
-    UnwindContextStorage, UnwindOffset, UnwindSection, UnwindTableRow, Value,
+    CfaRule, CieOrFde, DebugFrame, EhFrame, EhFrameHdr, Encoding, EndianSlice, Evaluation,
+    EvaluationResult, EvaluationStorage, Expression, LittleEndian, Location, ParsedEhFrameHdr,
+    Reader, ReaderOffset, Register, RegisterRule, UnwindContext, UnwindContextStorage,
+    UnwindOffset, UnwindSection, UnwindTableRow, Value,
 };
 
-use crate::{arch::Arch, unwind_result::UnwindResult, ModuleSvmaInfo};
+pub(crate) use gimli::BaseAddresses;
+
+use crate::{arch::Arch, unwind_result::UnwindResult, ModuleSectionInfo};
 
 #[derive(thiserror::Error, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DwarfUnwinderError {
@@ -90,9 +92,9 @@ impl<'a, R: Reader, A: DwarfUnwinding, S: UnwindContextStorage<R> + EvaluationSt
         unwind_section_type: UnwindSectionType,
         eh_frame_hdr_data: Option<&'a [u8]>,
         unwind_context: &'a mut UnwindContext<R, S>,
-        svma_info: &ModuleSvmaInfo,
+        bases: BaseAddresses,
+        base_svma: u64,
     ) -> Self {
-        let bases = base_addresses_for_sections(svma_info);
         let eh_frame_hdr = match eh_frame_hdr_data {
             Some(eh_frame_hdr_data) => {
                 let hdr = EhFrameHdr::new(eh_frame_hdr_data, unwind_section_data.endian());
@@ -109,7 +111,7 @@ impl<'a, R: Reader, A: DwarfUnwinding, S: UnwindContextStorage<R> + EvaluationSt
             eh_frame_hdr,
             unwind_context,
             bases,
-            base_svma: svma_info.base_svma,
+            base_svma,
             _arch: PhantomData,
         }
     }
@@ -180,19 +182,21 @@ impl<'a, R: Reader, A: DwarfUnwinding, S: UnwindContextStorage<R> + EvaluationSt
     }
 }
 
-fn base_addresses_for_sections(svma_info: &ModuleSvmaInfo) -> BaseAddresses {
-    fn start_addr(range: &Option<Range<u64>>) -> u64 {
-        if let Some(range) = range {
-            range.start
-        } else {
-            0
-        }
-    }
+pub(crate) fn base_addresses_for_sections<D>(
+    section_info: &impl ModuleSectionInfo<D>,
+) -> BaseAddresses {
+    let start_addr = |names: &[&[u8]]| -> u64 {
+        names
+            .into_iter()
+            .find_map(|name| section_info.section_svma_range(name))
+            .map(|r| r.start)
+            .unwrap_or_default()
+    };
     BaseAddresses::default()
-        .set_eh_frame(start_addr(&svma_info.eh_frame))
-        .set_eh_frame_hdr(start_addr(&svma_info.eh_frame_hdr))
-        .set_text(start_addr(&svma_info.text))
-        .set_got(start_addr(&svma_info.got))
+        .set_eh_frame(start_addr(&[b"__eh_frame", b".eh_frame"]))
+        .set_eh_frame_hdr(start_addr(&[b"__eh_frame_hdr", b".eh_frame_hdr"]))
+        .set_text(start_addr(&[b"__text", b".text"]))
+        .set_got(start_addr(&[b"__got", b".got"]))
 }
 
 #[derive(thiserror::Error, Debug, Clone, Copy, PartialEq, Eq)]
@@ -279,26 +283,26 @@ impl DwarfCfiIndex {
         })
     }
 
-    pub fn try_new_eh_frame(
+    pub fn try_new_eh_frame<D>(
         eh_frame_data: &[u8],
-        svma_info: &ModuleSvmaInfo,
+        section_info: &impl ModuleSectionInfo<D>,
     ) -> Result<Self, DwarfCfiIndexError> {
-        let bases = base_addresses_for_sections(svma_info);
+        let bases = base_addresses_for_sections(section_info);
         let mut eh_frame = EhFrame::from(EndianSlice::new(eh_frame_data, LittleEndian));
         eh_frame.set_address_size(8);
 
-        Self::try_new(eh_frame, bases, svma_info.base_svma)
+        Self::try_new(eh_frame, bases, section_info.base_svma())
     }
 
-    pub fn try_new_debug_frame(
+    pub fn try_new_debug_frame<D>(
         debug_frame_data: &[u8],
-        svma_info: &ModuleSvmaInfo,
+        section_info: &impl ModuleSectionInfo<D>,
     ) -> Result<Self, DwarfCfiIndexError> {
-        let bases = base_addresses_for_sections(svma_info);
+        let bases = base_addresses_for_sections(section_info);
         let mut debug_frame = DebugFrame::from(EndianSlice::new(debug_frame_data, LittleEndian));
         debug_frame.set_address_size(8);
 
-        Self::try_new(debug_frame, bases, svma_info.base_svma)
+        Self::try_new(debug_frame, bases, section_info.base_svma())
     }
 
     pub fn fde_offset_for_relative_address(&self, rel_lookup_address: u32) -> Option<u32> {
