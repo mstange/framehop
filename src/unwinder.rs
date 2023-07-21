@@ -10,6 +10,7 @@ use crate::instruction_analysis::InstructionAnalysis;
 use crate::macho::{
     CompactUnwindInfoUnwinder, CompactUnwindInfoUnwinding, CuiUnwindResult, TextBytes,
 };
+use crate::pe::PeUnwinding;
 use crate::rule_cache::CacheResult;
 use crate::unwind_result::UnwindResult;
 use crate::unwind_rule::UnwindRule;
@@ -201,7 +202,7 @@ fn next_global_modules_generation() -> u16 {
 
 pub struct UnwinderInternal<
     D: Deref<Target = [u8]>,
-    A: Arch + DwarfUnwinding + CompactUnwindInfoUnwinding + InstructionAnalysis,
+    A: Arch + DwarfUnwinding + CompactUnwindInfoUnwinding + PeUnwinding + InstructionAnalysis,
     P: AllocationPolicy<D>,
 > {
     /// sorted by avma_range.start
@@ -214,7 +215,7 @@ pub struct UnwinderInternal<
 
 impl<
         D: Deref<Target = [u8]>,
-        A: Arch + DwarfUnwinding + CompactUnwindInfoUnwinding + InstructionAnalysis,
+        A: Arch + DwarfUnwinding + CompactUnwindInfoUnwinding + PeUnwinding + InstructionAnalysis,
         P: AllocationPolicy<D>,
     > Default for UnwinderInternal<D, A, P>
 {
@@ -225,7 +226,7 @@ impl<
 
 impl<
         D: Deref<Target = [u8]>,
-        A: Arch + DwarfUnwinding + CompactUnwindInfoUnwinding + InstructionAnalysis,
+        A: Arch + DwarfUnwinding + CompactUnwindInfoUnwinding + PeUnwinding + InstructionAnalysis,
         P: AllocationPolicy<D>,
     > UnwinderInternal<D, A, P>
 {
@@ -522,6 +523,22 @@ impl<
                     read_stack,
                 )?
             }
+            ModuleUnwindDataInternal::PeUnwindInfo {
+                pdata,
+                rdata,
+                xdata,
+                text,
+            } => <A as PeUnwinding>::unwind_frame(
+                crate::pe::PeSections {
+                    pdata,
+                    rdata: rdata.as_ref(),
+                    xdata: xdata.as_ref(),
+                    text: text.as_ref(),
+                },
+                rel_lookup_address,
+                regs,
+                read_stack,
+            )?,
             ModuleUnwindDataInternal::None => return Err(UnwinderError::NoModuleUnwindData),
         };
         Ok(unwind_result)
@@ -575,6 +592,13 @@ enum ModuleUnwindDataInternal<D: Deref<Target = [u8]>> {
         debug_frame: Arc<D>,
         base_addresses: crate::dwarf::BaseAddresses,
     },
+    /// Used with PE binaries (Windows).
+    PeUnwindInfo {
+        pdata: D,
+        rdata: Option<(Range<u32>, D)>,
+        xdata: Option<(Range<u32>, D)>,
+        text: Option<(Range<u32>, D)>,
+    },
     /// No unwind information is used. Unwinding in this module will use a fallback rule
     /// (usually frame pointer unwinding).
     None,
@@ -610,6 +634,24 @@ impl<D: Deref<Target = [u8]>> ModuleUnwindDataInternal<D> {
                 stub_helper_svma: stub_helper,
                 base_addresses: base_addresses_for_sections(section_info),
                 text_data,
+            }
+        } else if let Some(pdata) = section_info.section_data(b".pdata") {
+            let mut range_and_data = |name| {
+                section_info
+                    .section_svma_range(name)
+                    .and_then(|range| {
+                        Some(Range {
+                            start: (range.start - section_info.base_svma()).try_into().ok()?,
+                            end: (range.end - section_info.base_svma()).try_into().ok()?,
+                        })
+                    })
+                    .zip(section_info.section_data(name))
+            };
+            ModuleUnwindDataInternal::PeUnwindInfo {
+                pdata,
+                rdata: range_and_data(b".rdata"),
+                xdata: range_and_data(b".xdata"),
+                text: range_and_data(b".text"),
             }
         } else if let Some(eh_frame) = section_info
             .section_data(b".eh_frame")

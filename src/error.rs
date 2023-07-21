@@ -1,5 +1,6 @@
 use crate::dwarf::DwarfUnwinderError;
 use crate::macho::CompactUnwindInfoUnwinderError;
+use crate::pe::PeUnwinderError;
 
 /// The error type used in this crate.
 #[derive(thiserror::Error, Debug, Clone, Copy, PartialEq, Eq)]
@@ -27,6 +28,9 @@ pub enum UnwinderError {
 
     #[error("DWARF unwinding failed: {0}")]
     Dwarf(#[from] DwarfUnwinderError),
+
+    #[error("PE unwinding failed: {0}")]
+    Pe(#[from] PeUnwinderError),
 
     #[error("__unwind_info referred to DWARF FDE but we do not have __eh_frame data")]
     NoDwarfData,

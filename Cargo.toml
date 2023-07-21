@@ -17,6 +17,7 @@ gimli = "0.27.0"
 object = { version = ">=0.30", optional = true }
 thiserror = "1.0.30"
 macho-unwind-info = "0.3.0"
+pe-unwind-info = "0.1.0"
 fallible-iterator = "0.2.0"
 
 [dev-dependencies]
