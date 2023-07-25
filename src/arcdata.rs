@@ -8,7 +8,7 @@ impl<D: Deref<Target = [u8]>> Deref for ArcData<D> {
     type Target = [u8];
 
     fn deref(&self) -> &Self::Target {
-        &*self.0
+        &self.0
     }
 }
 
