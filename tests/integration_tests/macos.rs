@@ -76,59 +76,7 @@ fn test_basic() {
 #[test]
 fn test_root_doc_comment() {
     use framehop::aarch64::{CacheAarch64, UnwindRegsAarch64, UnwinderAarch64};
-    use framehop::{FrameAddress, Module, ModuleSectionInfo};
-
-    struct ModuleSvmaInfo {
-        base_svma: u64,
-        text: std::ops::Range<u64>,
-        stubs: std::ops::Range<u64>,
-        stub_helper: std::ops::Range<u64>,
-        eh_frame: std::ops::Range<u64>,
-        got: std::ops::Range<u64>,
-        text_segment: std::ops::Range<u64>,
-    }
-
-    impl ModuleSectionInfo<Vec<u8>> for ModuleSvmaInfo {
-        fn base_svma(&self) -> u64 {
-            self.base_svma
-        }
-
-        fn section_svma_range(&self, name: &[u8]) -> Option<std::ops::Range<u64>> {
-            match name {
-                b"__text" => Some(self.text.clone()),
-                b"__stubs" => Some(self.stubs.clone()),
-                b"__stub_helper" => Some(self.stub_helper.clone()),
-                b"__eh_frame" => Some(self.eh_frame.clone()),
-                b"__got" => Some(self.got.clone()),
-                _ => None,
-            }
-        }
-
-        fn section_file_range(&self, _name: &[u8]) -> Option<std::ops::Range<u64>> {
-            None
-        }
-
-        fn section_data(&self, name: &[u8]) -> Option<Vec<u8>> {
-            match name {
-                b"__text" => Some(vec![]),
-                _ => None,
-            }
-        }
-
-        fn segment_file_range(&self, name: &[u8]) -> Option<std::ops::Range<u64>> {
-            match name {
-                b"__TEXT" => Some(self.text_segment.clone()),
-                _ => None,
-            }
-        }
-
-        fn segment_data(&self, name: &[u8]) -> Option<Vec<u8>> {
-            match name {
-                b"__TEXT" => Some(vec![]),
-                _ => None,
-            }
-        }
-    }
+    use framehop::{ExplicitModuleSectionInfo, FrameAddress, Module};
 
     let mut cache = CacheAarch64::<_>::new();
     let mut unwinder = UnwinderAarch64::new();
@@ -136,14 +84,17 @@ fn test_root_doc_comment() {
         "mybinary".to_string(),
         0x1003fc000..0x100634000,
         0x1003fc000,
-        ModuleSvmaInfo {
+        ExplicitModuleSectionInfo {
             base_svma: 0x100000000,
-            text: 0x100000b64..0x1001d2d18,
-            stubs: 0x1001d2d18..0x1001d309c,
-            stub_helper: 0x1001d309c..0x1001d3438,
-            eh_frame: 0x100237f80..0x100237ffc,
-            got: 0x100238000..0x100238010,
-            text_segment: 0x1003fc000..0x100634000,
+            text_svma: Some(0x100000b64..0x1001d2d18),
+            text: Some(vec![]),
+            stubs_svma: Some(0x1001d2d18..0x1001d309c),
+            stub_helper_svma: Some(0x1001d309c..0x1001d3438),
+            eh_frame_svma: Some(0x100237f80..0x100237ffc),
+            got_svma: Some(0x100238000..0x100238010),
+            text_segment_file_range: Some(0x1003fc000..0x100634000),
+            text_segment: Some(vec![]),
+            ..Default::default()
         },
     );
     unwinder.add_module(module);

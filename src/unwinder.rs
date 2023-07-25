@@ -581,7 +581,7 @@ enum ModuleUnwindDataInternal<D: Deref<Target = [u8]>> {
 }
 
 impl<D: Deref<Target = [u8]>> ModuleUnwindDataInternal<D> {
-    fn new(section_info: &impl ModuleSectionInfo<D>) -> Self {
+    fn new(section_info: &mut impl ModuleSectionInfo<D>) -> Self {
         use crate::dwarf::base_addresses_for_sections;
 
         if let Some(unwind_info) = section_info.section_data(b"__unwind_info") {
@@ -593,7 +593,7 @@ impl<D: Deref<Target = [u8]>> ModuleUnwindDataInternal<D> {
                 .segment_data(b"__TEXT")
                 .zip(section_info.segment_file_range(b"__TEXT"))
                 .or_else(|| {
-                    TEXT_SECTIONS.into_iter().find_map(|name| {
+                    TEXT_SECTIONS.iter().find_map(|name| {
                         section_info
                             .section_data(name)
                             .zip(section_info.section_file_range(name))
@@ -690,6 +690,12 @@ pub struct Module<D: Deref<Target = [u8]>> {
     unwind_data: ModuleUnwindDataInternal<D>,
 }
 
+/// Information about a module's sections (and segments).
+///
+/// This trait is used as an interface to module information, and each function with `&mut self` is
+/// called at most once with a particular argument (e.g., `section_data(b".text")` will be called
+/// at most once, so it can move data out of the underlying type if desired).
+///
 /// Type arguments:
 ///
 ///  - `D`: The type for section data. This allows carrying owned data on the module, e.g.
@@ -705,22 +711,140 @@ pub trait ModuleSectionInfo<D> {
     fn base_svma(&self) -> u64;
 
     /// Get the given section's memory range, as stated in the module.
-    fn section_svma_range(&self, name: &[u8]) -> Option<Range<u64>>;
+    fn section_svma_range(&mut self, name: &[u8]) -> Option<Range<u64>>;
 
     /// Get the given section's file range in the module.
-    fn section_file_range(&self, name: &[u8]) -> Option<Range<u64>>;
+    fn section_file_range(&mut self, name: &[u8]) -> Option<Range<u64>>;
 
     /// Get the given section's data.
-    fn section_data(&self, name: &[u8]) -> Option<D>;
+    fn section_data(&mut self, name: &[u8]) -> Option<D>;
 
     /// Get the given segment's file range in the module.
-    fn segment_file_range(&self, _name: &[u8]) -> Option<Range<u64>> {
+    fn segment_file_range(&mut self, _name: &[u8]) -> Option<Range<u64>> {
         None
     }
 
     /// Get the given segment's data.
-    fn segment_data(&self, _name: &[u8]) -> Option<D> {
+    fn segment_data(&mut self, _name: &[u8]) -> Option<D> {
         None
+    }
+}
+
+/// Explicit addresses and data of various sections in the module. This implements
+/// the `ModuleSectionInfo` trait.
+///
+/// Unless otherwise stated, these are SVMAs, "stated virtual memory addresses", i.e. addresses as
+/// stated in the object, as opposed to AVMAs, "actual virtual memory addresses", i.e. addresses in
+/// the virtual memory of the profiled process.
+///
+/// Code addresses inside a module's unwind information are usually written down as SVMAs,
+/// or as relative addresses. For example, DWARF CFI can have code addresses expressed as
+/// relative-to-.text addresses or as absolute SVMAs. And mach-O compact unwind info
+/// contains addresses relative to the image base address.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ExplicitModuleSectionInfo<D> {
+    /// The image base address, as stated in the object. For mach-O objects, this is the
+    /// vmaddr of the `__TEXT` segment. For ELF objects, this is zero.
+    ///
+    /// This is used to convert between SVMAs and relative addresses.
+    pub base_svma: u64,
+    /// The address range of the `__text` or `.text` section. This is where most of the compiled
+    /// code is stored.
+    ///
+    /// This is used to detect whether we need to do instruction analysis for an address.
+    pub text_svma: Option<Range<u64>>,
+    /// The data of the `__text` or `.text` section. This is where most of the compiled code is
+    /// stored.
+    ///
+    /// This is used to handle function prologues and epilogues in some cases.
+    pub text: Option<D>,
+    /// The address range of the mach-O `__stubs` section. Contains small pieces of
+    /// executable code for calling imported functions. Code inside this section is not
+    /// covered by the unwind information in `__unwind_info`.
+    ///
+    /// This is used to exclude addresses in this section from incorrectly applying
+    /// `__unwind_info` opcodes. It is also used to infer unwind rules for the known
+    /// structure of stub functions.
+    pub stubs_svma: Option<Range<u64>>,
+    /// The address range of the mach-O `__stub_helper` section. Contains small pieces of
+    /// executable code for calling imported functions. Code inside this section is not
+    /// covered by the unwind information in `__unwind_info`.
+    ///
+    /// This is used to exclude addresses in this section from incorrectly applying
+    /// `__unwind_info` opcodes. It is also used to infer unwind rules for the known
+    /// structure of stub helper
+    /// functions.
+    pub stub_helper_svma: Option<Range<u64>>,
+    /// The address range of the `.got` section (Global Offset Table). This is used
+    /// during DWARF CFI processing, to resolve got-relative addresses.
+    pub got_svma: Option<Range<u64>>,
+    /// The data of the `__unwind_info` section of mach-O binaries.
+    pub unwind_info: Option<D>,
+    /// The address range of the `__eh_frame` or `.eh_frame` section. This is used during DWARF CFI
+    /// processing, to resolve eh_frame-relative addresses.
+    pub eh_frame_svma: Option<Range<u64>>,
+    /// The data of the `__eh_frame` or `.eh_frame` section. This is used during DWARF CFI
+    /// processing, to resolve eh_frame-relative addresses.
+    pub eh_frame: Option<D>,
+    /// The address range of the `.eh_frame_hdr` section. This is used during DWARF CFI processing,
+    /// to resolve eh_frame_hdr-relative addresses.
+    pub eh_frame_hdr_svma: Option<Range<u64>>,
+    /// The data of the `.eh_frame_hdr` section. This is used during DWARF CFI processing, to
+    /// resolve eh_frame_hdr-relative addresses.
+    pub eh_frame_hdr: Option<D>,
+    /// The data of the `.debug_frame` section. The related address range is not needed.
+    pub debug_frame: Option<D>,
+    /// The file range of the `__TEXT` segment of mach-O binaries, or the `__text` section if the
+    /// segment is unavailable.
+    pub text_segment_file_range: Option<Range<u64>>,
+    /// The data of the `__TEXT` segment of mach-O binaries, or the `__text` section if the segment
+    /// is unavailable.
+    pub text_segment: Option<D>,
+}
+
+impl<D> ModuleSectionInfo<D> for ExplicitModuleSectionInfo<D>
+where
+    D: Deref<Target = [u8]>,
+{
+    fn base_svma(&self) -> u64 {
+        self.base_svma
+    }
+
+    fn section_svma_range(&mut self, name: &[u8]) -> Option<Range<u64>> {
+        match name {
+            b"__text" | b".text" => self.text_svma.take(),
+            b"__stubs" => self.stubs_svma.take(),
+            b"__stub_helper" => self.stub_helper_svma.take(),
+            b"__eh_frame" | b".eh_frame" => self.eh_frame_svma.take(),
+            b"__eh_frame_hdr" | b".eh_frame_hdr" => self.eh_frame_hdr_svma.take(),
+            b"__got" | b".got" => self.got_svma.take(),
+            _ => None,
+        }
+    }
+    fn section_file_range(&mut self, _name: &[u8]) -> Option<Range<u64>> {
+        None
+    }
+    fn section_data(&mut self, name: &[u8]) -> Option<D> {
+        match name {
+            b"__text" | b".text" => self.text.take(),
+            b"__unwind_info" => self.unwind_info.take(),
+            b"__eh_frame" | b".eh_frame" => self.eh_frame.take(),
+            b"__eh_frame_hdr" | b".eh_frame_hdr" => self.eh_frame_hdr.take(),
+            b"__debug_frame" | b".debug_frame" => self.debug_frame.take(),
+            _ => None,
+        }
+    }
+    fn segment_file_range(&mut self, name: &[u8]) -> Option<Range<u64>> {
+        match name {
+            b"__TEXT" => self.text_segment_file_range.take(),
+            _ => None,
+        }
+    }
+    fn segment_data(&mut self, name: &[u8]) -> Option<D> {
+        match name {
+            b"__TEXT" => self.text_segment.take(),
+            _ => None,
+        }
     }
 }
 
@@ -747,29 +871,29 @@ mod object {
             self.relative_address_base()
         }
 
-        fn section_svma_range(&self, name: &[u8]) -> Option<Range<u64>> {
+        fn section_svma_range(&mut self, name: &[u8]) -> Option<Range<u64>> {
             let section = self.section_by_name_bytes(name)?;
             Some(section.address()..section.address() + section.size())
         }
 
-        fn section_file_range(&self, name: &[u8]) -> Option<Range<u64>> {
+        fn section_file_range(&mut self, name: &[u8]) -> Option<Range<u64>> {
             let section = self.section_by_name_bytes(name)?;
             let (start, size) = section.file_range()?;
             Some(start..start + size)
         }
 
-        fn section_data(&self, name: &[u8]) -> Option<D> {
+        fn section_data(&mut self, name: &[u8]) -> Option<D> {
             let section = self.section_by_name_bytes(name)?;
             section.data().ok().map(|data| data.into())
         }
 
-        fn segment_file_range(&self, name: &[u8]) -> Option<Range<u64>> {
+        fn segment_file_range(&mut self, name: &[u8]) -> Option<Range<u64>> {
             let segment = self.segments().find(|s| s.name_bytes() == Ok(Some(name)))?;
             let (start, size) = segment.file_range();
             Some(start..start + size)
         }
 
-        fn segment_data(&self, name: &[u8]) -> Option<D> {
+        fn segment_data(&mut self, name: &[u8]) -> Option<D> {
             let segment = self.segments().find(|s| s.name_bytes() == Ok(Some(name)))?;
             segment.data().ok().map(|data| data.into())
         }
@@ -781,9 +905,9 @@ impl<D: Deref<Target = [u8]>> Module<D> {
         name: String,
         avma_range: std::ops::Range<u64>,
         base_avma: u64,
-        section_info: impl ModuleSectionInfo<D>,
+        mut section_info: impl ModuleSectionInfo<D>,
     ) -> Self {
-        let unwind_data = ModuleUnwindDataInternal::new(&section_info);
+        let unwind_data = ModuleUnwindDataInternal::new(&mut section_info);
 
         Self {
             name,

@@ -21,18 +21,18 @@ where
             relative_address_base(&self.0)
         }
 
-        fn section_svma_range(&self, name: &[u8]) -> Option<Range<u64>> {
+        fn section_svma_range(&mut self, name: &[u8]) -> Option<Range<u64>> {
             let section = self.0.section_by_name_bytes(name)?;
             Some(section.address()..section.address() + section.size())
         }
 
-        fn section_file_range(&self, name: &[u8]) -> Option<Range<u64>> {
+        fn section_file_range(&mut self, name: &[u8]) -> Option<Range<u64>> {
             let section = self.0.section_by_name_bytes(name)?;
             let (start, size) = section.file_range()?;
             Some(start..start + size)
         }
 
-        fn section_data(&self, name: &[u8]) -> Option<Vec<u8>> {
+        fn section_data(&mut self, name: &[u8]) -> Option<Vec<u8>> {
             match self.0.section_by_name_bytes(name) {
                 Some(section) => section.data().ok().map(|data| data.to_owned()),
                 None if name == b".debug_frame" => {
@@ -43,7 +43,7 @@ where
             }
         }
 
-        fn segment_file_range(&self, name: &[u8]) -> Option<Range<u64>> {
+        fn segment_file_range(&mut self, name: &[u8]) -> Option<Range<u64>> {
             let segment = self
                 .0
                 .segments()
@@ -52,7 +52,7 @@ where
             Some(start..start + size)
         }
 
-        fn segment_data(&self, name: &[u8]) -> Option<Vec<u8>> {
+        fn segment_data(&mut self, name: &[u8]) -> Option<Vec<u8>> {
             let segment = self
                 .0
                 .segments()

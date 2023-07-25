@@ -183,11 +183,11 @@ impl<'a, R: Reader, A: DwarfUnwinding, S: UnwindContextStorage<R> + EvaluationSt
 }
 
 pub(crate) fn base_addresses_for_sections<D>(
-    section_info: &impl ModuleSectionInfo<D>,
+    section_info: &mut impl ModuleSectionInfo<D>,
 ) -> BaseAddresses {
-    let start_addr = |names: &[&[u8]]| -> u64 {
+    let mut start_addr = |names: &[&[u8]]| -> u64 {
         names
-            .into_iter()
+            .iter()
             .find_map(|name| section_info.section_svma_range(name))
             .map(|r| r.start)
             .unwrap_or_default()
@@ -285,7 +285,7 @@ impl DwarfCfiIndex {
 
     pub fn try_new_eh_frame<D>(
         eh_frame_data: &[u8],
-        section_info: &impl ModuleSectionInfo<D>,
+        section_info: &mut impl ModuleSectionInfo<D>,
     ) -> Result<Self, DwarfCfiIndexError> {
         let bases = base_addresses_for_sections(section_info);
         let mut eh_frame = EhFrame::from(EndianSlice::new(eh_frame_data, LittleEndian));
@@ -296,7 +296,7 @@ impl DwarfCfiIndex {
 
     pub fn try_new_debug_frame<D>(
         debug_frame_data: &[u8],
-        section_info: &impl ModuleSectionInfo<D>,
+        section_info: &mut impl ModuleSectionInfo<D>,
     ) -> Result<Self, DwarfCfiIndexError> {
         let bases = base_addresses_for_sections(section_info);
         let mut debug_frame = DebugFrame::from(EndianSlice::new(debug_frame_data, LittleEndian));

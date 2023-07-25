@@ -50,51 +50,29 @@
 //! ```
 //! use std::ops::Range;
 //! use framehop::aarch64::{CacheAarch64, UnwindRegsAarch64, UnwinderAarch64};
-//! use framehop::{FrameAddress, Module, ModuleSectionInfo};
+//! use framehop::{ExplicitModuleSectionInfo, FrameAddress, Module, ModuleSectionInfo};
 //!
 //! let mut cache = CacheAarch64::<_>::new();
 //! let mut unwinder = UnwinderAarch64::new();
-//!
-//! struct FixedSectionInfo;
-//!
-//! impl ModuleSectionInfo<Vec<u8>> for FixedSectionInfo {
-//!     fn base_svma(&self) -> u64 { 0x100000000 }
-//!     fn section_svma_range(&self, name: &[u8]) -> Option<Range<u64>> {
-//!         match name {
-//!             b"__text" => Some(0x100000b64..0x1001d2d18),
-//!             b"__stubs" => Some(0x1001d2d18..0x1001d309c),
-//!             b"__stub_helper" => Some(0x1001d309c..0x1001d3438),
-//!             b"__eh_frame" => Some(0x100237f80..0x100237ffc),
-//!             b"__got" => Some(0x100238000..0x100238010),
-//!             _ => None,
-//!         }
-//!     }
-//!     fn section_file_range(&self, _name: &[u8]) -> Option<Range<u64>> { None }
-//!     fn section_data(&self, name: &[u8]) -> Option<Vec<u8>> {
-//!         match name {
-//!             b"__unwind_info" => Some(vec![/* __unwind_info */]),
-//!             _ => None,
-//!         }
-//!     }
-//!     fn segment_file_range(&self, name: &[u8]) -> Option<std::ops::Range<u64>> {
-//!         match name {
-//!             b"__TEXT" => Some(0x1003fc000..0x100634000),
-//!             _ => None,
-//!         }
-//!     }
-//!     fn segment_data(&self, name: &[u8]) -> Option<Vec<u8>> {
-//!         match name {
-//!             b"__TEXT" => Some(vec![]),
-//!             _ => None,
-//!         }
-//!     }
-//! }
 //!
 //! let module = Module::new(
 //!     "mybinary".to_string(),
 //!     0x1003fc000..0x100634000,
 //!     0x1003fc000,
-//!     FixedSectionInfo,
+//!     ExplicitModuleSectionInfo {
+//!         base_svma: 0x100000000,
+//!         text_svma: Some(0x100000b64..0x1001d2d18),
+//!         text: Some(vec![/* __text */]),
+//!         stubs_svma: Some(0x1001d2d18..0x1001d309c),
+//!         stub_helper_svma: Some(0x1001d309c..0x1001d3438),
+//!         got_svma: Some(0x100238000..0x100238010),
+//!         unwind_info: Some(vec![/* __unwind_info */]),
+//!         eh_frame_svma: Some(0x100237f80..0x100237ffc),
+//!         eh_frame: Some(vec![/* __eh_frame */]),
+//!         text_segment_file_range: Some(0x1003fc000..0x100634000),
+//!         text_segment: Some(vec![/* __TEXT */]),
+//!         ..Default::default()
+//!     },
 //! );
 //! unwinder.add_module(module);
 //!
@@ -156,7 +134,9 @@ pub use cache::{AllocationPolicy, MayAllocateDuringUnwind, MustNotAllocateDuring
 pub use code_address::FrameAddress;
 pub use error::Error;
 pub use rule_cache::CacheStats;
-pub use unwinder::{Module, ModuleSectionInfo, UnwindIterator, Unwinder};
+pub use unwinder::{
+    ExplicitModuleSectionInfo, Module, ModuleSectionInfo, UnwindIterator, Unwinder,
+};
 
 /// The unwinder cache for the native CPU architecture.
 #[cfg(target_arch = "aarch64")]
