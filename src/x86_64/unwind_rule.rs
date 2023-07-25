@@ -1,4 +1,4 @@
-use super::unwindregs::UnwindRegsX86_64;
+use super::unwindregs::{Reg, UnwindRegsX86_64};
 use crate::add_signed::checked_add_signed;
 use crate::error::Error;
 use crate::unwind_rule::UnwindRule;
@@ -19,6 +19,107 @@ pub enum UnwindRuleX86_64 {
     },
     /// (sp, bp) = (bp + 16, *bp)
     UseFramePointer,
+    /// sp = sp + 8 * (offset + register count)
+    /// This supports the common case of pushed callee-saved registers followed by a stack
+    /// allocation. Up to 8 registers can be stored, which covers all callee-saved registers (aside
+    /// from RSP which is implicit).
+    OffsetSpAndPopRegisters(UnwindRuleOffsetSpAndPopRegisters),
+}
+
+#[derive(Default, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct UnwindRuleOffsetSpAndPopRegisters {
+    pub sp_offset_by_8: u16,
+    registers: u16,
+}
+
+pub enum OffsetOrPop {
+    None,
+    OffsetBy8(u16),
+    Pop(Reg),
+}
+
+impl UnwindRuleOffsetSpAndPopRegisters {
+    /// Get the rule which represents the given operations, if possible.
+    pub fn for_operations<I, T>(iter: I) -> Option<UnwindRuleX86_64>
+    where
+        I: Iterator<Item = T>,
+        T: Into<OffsetOrPop>,
+    {
+        let mut iter = iter.map(Into::into).peekable();
+        let mut rule = Self::default();
+        if let Some(OffsetOrPop::OffsetBy8(offset)) = iter.peek() {
+            rule.sp_offset_by_8 = *offset;
+            iter.next();
+        }
+        let mut regs = Vec::new();
+        for i in iter {
+            if let OffsetOrPop::Pop(reg) = i {
+                regs.push(reg);
+            } else {
+                return None;
+            }
+        }
+
+        if regs.is_empty() && rule.sp_offset_by_8 == 0 {
+            Some(UnwindRuleX86_64::JustReturn)
+        } else if rule.set_registers(&regs) {
+            Some(UnwindRuleX86_64::OffsetSpAndPopRegisters(rule))
+        } else {
+            None
+        }
+    }
+
+    /// Return the initial stack pointer offset, in bytes.
+    pub fn sp_offset(&self) -> u64 {
+        self.sp_offset_by_8 as u64 * 8
+    }
+
+    /// Return the ordered set of registers to pop.
+    pub fn registers(&self) -> Vec<Reg> {
+        use Reg::*;
+
+        let mut regs = vec![RBX, RBP, RDI, RSI, R12, R13, R14, R15];
+        let mut r = self.registers;
+        let mut n: u16 = 8;
+        while r != 0 {
+            let index = r % n;
+            if index != 0 {
+                regs[(8 - n as usize)..].swap(index as usize, 0);
+            }
+            r /= n;
+            n -= 1;
+        }
+        regs.truncate(8 - n as usize);
+        regs
+    }
+
+    /// Set the ordered registers to pop. Returns true if the registers can be stored.
+    pub fn set_registers(&mut self, registers: &[Reg]) -> bool {
+        if registers.len() > 8 {
+            return false;
+        }
+
+        use Reg::*;
+
+        let mut r: u16 = 0;
+        let mut reg_order = vec![RBX, RBP, RDI, RSI, R12, R13, R14, R15];
+
+        let mut n: u16 = 0;
+        let mut scale: u16 = 1;
+        for reg in registers {
+            let Some(index) = reg_order[n as usize..].iter().position(|r| r == reg) else {
+                return false;
+            };
+            if index as u16 != 0 {
+                reg_order[n as usize..].swap(index as usize, 0);
+            }
+            r += index as u16 * scale;
+            scale *= 8 - n;
+            n += 1;
+        }
+        self.registers = r;
+        true
+    }
 }
 
 impl UnwindRule for UnwindRuleX86_64 {
@@ -153,6 +254,18 @@ impl UnwindRule for UnwindRuleX86_64 {
 
                 (new_sp, new_bp)
             }
+            UnwindRuleX86_64::OffsetSpAndPopRegisters(r) => {
+                let sp = regs.sp();
+                let mut sp = sp
+                    .checked_add(r.sp_offset())
+                    .ok_or(Error::IntegerOverflow)?;
+                for reg in r.registers() {
+                    let value = read_stack(sp).map_err(|_| Error::CouldNotReadStack(sp))?;
+                    sp = sp.checked_add(8).ok_or(Error::IntegerOverflow)?;
+                    regs.set(reg, value);
+                }
+                (sp.checked_add(8).ok_or(Error::IntegerOverflow)?, regs.bp())
+            }
         };
         let return_address =
             read_stack(new_sp - 8).map_err(|_| Error::CouldNotReadStack(new_sp - 8))?;
@@ -223,5 +336,18 @@ mod test {
         assert_eq!(res, Err(Error::IntegerOverflow));
         let res = UnwindRuleX86_64::UseFramePointer.exec(true, &mut regs, &mut read_stack);
         assert_eq!(res, Err(Error::IntegerOverflow));
+    }
+
+    #[test]
+    fn register_compression() {
+        use super::Reg::*;
+        let mut v = UnwindRuleOffsetSpAndPopRegisters::default();
+
+        let regs = vec![RSI, R12, R15, R14, RBX];
+
+        assert!(!v.set_registers(&[RAX]));
+        assert!(!v.set_registers(&[RSI, RSI]));
+        assert!(v.set_registers(&regs));
+        assert_eq!(v.registers(), regs);
     }
 }

@@ -1,4 +1,9 @@
-use super::{arch::ArchX86_64, unwind_rule::UnwindRuleX86_64, unwindregs::Reg};
+use super::UnwindRuleOffsetSpAndPopRegisters;
+use super::{
+    arch::ArchX86_64,
+    unwind_rule::{OffsetOrPop, UnwindRuleX86_64},
+    unwindregs::Reg,
+};
 use crate::arch::Arch;
 use crate::pe::{PeSections, PeUnwinderError, PeUnwinding};
 use crate::unwind_result::UnwindResult;
@@ -6,7 +11,7 @@ use std::ops::ControlFlow;
 
 use pe_unwind_info::x86_64::{
     FunctionEpilogInstruction, FunctionEpilogParser, FunctionTableEntries, Register, UnwindInfo,
-    UnwindInfoTrailer, UnwindState,
+    UnwindInfoTrailer, UnwindOperation, UnwindState,
 };
 
 struct State<'a, F> {
@@ -56,6 +61,38 @@ fn convert_pe_register(r: Register) -> Reg {
     }
 }
 
+impl From<&'_ FunctionEpilogInstruction> for OffsetOrPop {
+    fn from(value: &'_ FunctionEpilogInstruction) -> Self {
+        match value {
+            FunctionEpilogInstruction::AddSP(offset) => {
+                if let Ok(v) = (offset / 8).try_into() {
+                    OffsetOrPop::OffsetBy8(v)
+                } else {
+                    OffsetOrPop::None
+                }
+            }
+            FunctionEpilogInstruction::Pop(reg) => OffsetOrPop::Pop(convert_pe_register(*reg)),
+            _ => OffsetOrPop::None,
+        }
+    }
+}
+
+impl From<&'_ UnwindOperation> for OffsetOrPop {
+    fn from(value: &'_ UnwindOperation) -> Self {
+        match value {
+            UnwindOperation::UnStackAlloc(offset) => {
+                if let Ok(v) = (offset / 8).try_into() {
+                    OffsetOrPop::OffsetBy8(v)
+                } else {
+                    OffsetOrPop::None
+                }
+            }
+            UnwindOperation::PopNonVolatile(reg) => OffsetOrPop::Pop(convert_pe_register(*reg)),
+            _ => OffsetOrPop::None,
+        }
+    }
+}
+
 impl PeUnwinding for ArchX86_64 {
     fn unwind_frame<F, D>(
         sections: PeSections<D>,
@@ -68,7 +105,7 @@ impl PeUnwinding for ArchX86_64 {
         D: std::ops::Deref<Target = [u8]>,
     {
         let entries = FunctionTableEntries::parse(sections.pdata);
-        let Some(mut function) = entries.lookup(address) else {
+        let Some(function) = entries.lookup(address) else {
             return Ok(UnwindResult::ExecRule(UnwindRuleX86_64::JustReturn));
         };
 
@@ -76,67 +113,103 @@ impl PeUnwinding for ArchX86_64 {
             read_stack(addr).map_err(|()| PeUnwinderError::MissingStackData(Some(addr)))
         };
 
-        let offset = address - function.begin_address.get();
-        let mut is_chained = false;
-        loop {
-            let unwind_info_address = function.unwind_info_address.get();
-            let unwind_info =
-                UnwindInfo::parse(sections.unwind_info_memory_at_rva(unwind_info_address)?)
-                    .ok_or(PeUnwinderError::UnwindInfoParseError)?;
+        let unwind_info_address = function.unwind_info_address.get();
+        let unwind_info =
+            UnwindInfo::parse(sections.unwind_info_memory_at_rva(unwind_info_address)?)
+                .ok_or(PeUnwinderError::UnwindInfoParseError)?;
 
-            if !is_chained {
-                // Check whether the address is in the function epilog. If so, we need to
-                // simulate the remaining epilog instructions (unwind codes don't account for
-                // unwinding from the epilog).
-                let bytes = (function.end_address.get() - address) as usize;
-                let instruction = &sections.text_memory_at_rva(address)?[..bytes];
-                let mut epilog_parser = FunctionEpilogParser::new();
-                if let Some(epilog_instructions) =
-                    epilog_parser.is_function_epilog(instruction, unwind_info.frame_register())
-                {
-                    for instruction in epilog_instructions.iter() {
-                        match instruction {
-                            FunctionEpilogInstruction::AddSP(offset) => {
-                                let rsp = regs.get(Reg::RSP);
-                                regs.set(Reg::RSP, rsp + *offset as u64);
-                            }
-                            FunctionEpilogInstruction::AddSPFromFP(offset) => {
-                                let fp = unwind_info
-                                    .frame_register()
-                                    .expect("invalid fp register offset");
-                                let fp = convert_pe_register(fp);
-                                let fp = regs.get(fp);
-                                regs.set(Reg::RSP, fp + *offset as u64);
-                            }
-                            FunctionEpilogInstruction::Pop(reg) => {
-                                let rsp = regs.get(Reg::RSP);
-                                let val = read_stack_err(read_stack, rsp)?;
-                                regs.set(convert_pe_register(*reg), val);
-                                regs.set(Reg::RSP, rsp + 8);
-                            }
-                        }
-                    }
-                    break;
-                }
-            }
-
-            let mut state = State { regs, read_stack };
-            for (_, op) in unwind_info
-                .unwind_operations()
-                .skip_while(|(o, _)| !is_chained && *o as u32 > offset)
+        // Check whether the address is in the function epilog. If so, we need to
+        // simulate the remaining epilog instructions (unwind codes don't account for
+        // unwinding from the epilog). We only need to check this for the first unwind info (if
+        // there are chained infos).
+        let bytes = (function.end_address.get() - address) as usize;
+        let instruction = &sections.text_memory_at_rva(address)?[..bytes];
+        let mut epilog_parser = FunctionEpilogParser::new();
+        if let Some(epilog_instructions) =
+            epilog_parser.is_function_epilog(instruction, unwind_info.frame_register())
+        {
+            // If the epilog is an optional AddSP followed by Pops, we can return a cache
+            // rule.
+            if let Some(rule) =
+                UnwindRuleOffsetSpAndPopRegisters::for_operations(epilog_instructions.iter())
             {
-                if let ControlFlow::Break(ra) = unwind_info
-                    .resolve_operation(&mut state, &op)
-                    .ok_or(PeUnwinderError::MissingStackData(None))?
-                {
-                    return Ok(UnwindResult::Uncacheable(ra));
+                return Ok(UnwindResult::ExecRule(rule));
+            }
+
+            for instruction in epilog_instructions.iter() {
+                match instruction {
+                    FunctionEpilogInstruction::AddSP(offset) => {
+                        let rsp = regs.get(Reg::RSP);
+                        regs.set(Reg::RSP, rsp + *offset as u64);
+                    }
+                    FunctionEpilogInstruction::AddSPFromFP(offset) => {
+                        let fp = unwind_info
+                            .frame_register()
+                            .expect("invalid fp register offset");
+                        let fp = convert_pe_register(fp);
+                        let fp = regs.get(fp);
+                        regs.set(Reg::RSP, fp + *offset as u64);
+                    }
+                    FunctionEpilogInstruction::Pop(reg) => {
+                        let rsp = regs.get(Reg::RSP);
+                        let val = read_stack_err(read_stack, rsp)?;
+                        regs.set(convert_pe_register(*reg), val);
+                        regs.set(Reg::RSP, rsp + 8);
+                    }
                 }
             }
-            if let Some(UnwindInfoTrailer::ChainedUnwindInfo { chained }) = unwind_info.trailer() {
-                is_chained = true;
-                function = chained;
+
+            let rsp = regs.get(Reg::RSP);
+            let ra = read_stack_err(read_stack, rsp)?;
+            regs.set(Reg::RSP, rsp + 8);
+
+            return Ok(UnwindResult::Uncacheable(ra));
+        }
+
+        // Get all chained UnwindInfo and resolve errors when collecting.
+        let chained_info = std::iter::successors(Some(Ok(unwind_info)), |info| {
+            let Ok(info) = info else {
+                return None;
+            };
+            if let Some(UnwindInfoTrailer::ChainedUnwindInfo { chained }) = info.trailer() {
+                let unwind_info_address = chained.unwind_info_address.get();
+                Some(
+                    sections
+                        .unwind_info_memory_at_rva(unwind_info_address)
+                        .and_then(|data| {
+                            UnwindInfo::parse(data).ok_or(PeUnwinderError::UnwindInfoParseError)
+                        }),
+                )
             } else {
-                break;
+                None
+            }
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+        // Get all operations across chained UnwindInfo. The first should be filtered to only those
+        // operations which are before the offset in the function.
+        let offset = address - function.begin_address.get();
+        let operations = chained_info.into_iter().enumerate().flat_map(|(i, info)| {
+            info.unwind_operations()
+                .skip_while(move |(o, _)| i == 0 && *o as u32 > offset)
+                .map(|(_, op)| op)
+        });
+
+        // We need to collect operations to first check (without losing ownership) whether an
+        // unwind rule can be returned.
+        let operations = operations.collect::<Vec<_>>();
+        if let Some(rule) = UnwindRuleOffsetSpAndPopRegisters::for_operations(operations.iter()) {
+            return Ok(UnwindResult::ExecRule(rule));
+        }
+
+        // Resolve operations to get the return address.
+        let mut state = State { regs, read_stack };
+        for op in operations {
+            if let ControlFlow::Break(ra) = unwind_info
+                .resolve_operation(&mut state, &op)
+                .ok_or(PeUnwinderError::MissingStackData(None))?
+            {
+                return Ok(UnwindResult::Uncacheable(ra));
             }
         }
 
