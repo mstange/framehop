@@ -387,8 +387,8 @@ impl<
             ModuleUnwindDataInternal::CompactUnwindInfoAndEhFrame {
                 unwind_info,
                 eh_frame,
-                stubs,
-                stub_helper,
+                stubs_svma: stubs,
+                stub_helper_svma: stub_helper,
                 base_addresses,
                 text_data,
             } => {
@@ -547,8 +547,8 @@ enum ModuleUnwindDataInternal<D: Deref<Target = [u8]>> {
     CompactUnwindInfoAndEhFrame {
         unwind_info: D,
         eh_frame: Option<Arc<D>>,
-        stubs: Option<Range<u64>>,
-        stub_helper: Option<Range<u64>>,
+        stubs_svma: Option<Range<u64>>,
+        stub_helper_svma: Option<Range<u64>>,
         base_addresses: crate::dwarf::BaseAddresses,
         text_data: Option<TextByteData<D>>,
     },
@@ -588,28 +588,37 @@ impl<D: Deref<Target = [u8]>> ModuleUnwindDataInternal<D> {
             let eh_frame = section_info.section_data(b"__eh_frame");
             let stubs = section_info.section_svma_range(b"__stubs");
             let stub_helper = section_info.section_svma_range(b"__stub_helper");
-            const TEXT_SECTIONS: &[&[u8]] = &[b"__text", b".text"];
+            // Get the bytes of the executable code (instructions).
+            //
+            // In mach-O objects, executable code is stored in the `__TEXT` segment, which contains
+            // multiple executable sections such as `__text`, `__stubs`, and `__stub_helper`. If we
+            // don't have the full `__TEXT` segment contents, we can fall back to the contents of
+            // just the `__text` section.
             let text_data = section_info
                 .segment_data(b"__TEXT")
                 .zip(section_info.segment_file_range(b"__TEXT"))
                 .or_else(|| {
-                    TEXT_SECTIONS.iter().find_map(|name| {
-                        section_info
-                            .section_data(name)
-                            .zip(section_info.section_file_range(name))
-                    })
+                    section_info
+                        .section_data(b"__text")
+                        .zip(section_info.section_file_range(b"__text"))
                 })
                 .map(|(bytes, svma_range)| TextByteData { bytes, svma_range });
             ModuleUnwindDataInternal::CompactUnwindInfoAndEhFrame {
                 unwind_info,
                 eh_frame: eh_frame.map(Arc::new),
-                stubs,
-                stub_helper,
+                stubs_svma: stubs,
+                stub_helper_svma: stub_helper,
                 base_addresses: base_addresses_for_sections(section_info),
                 text_data,
             }
-        } else if let Some(eh_frame) = section_info.section_data(b".eh_frame") {
-            if let Some(eh_frame_hdr) = section_info.section_data(b".eh_frame_hdr") {
+        } else if let Some(eh_frame) = section_info
+            .section_data(b".eh_frame")
+            .or_else(|| section_info.section_data(b"__eh_frame"))
+        {
+            if let Some(eh_frame_hdr) = section_info
+                .section_data(b".eh_frame_hdr")
+                .or_else(|| section_info.section_data(b"__eh_frame_hdr"))
+            {
                 ModuleUnwindDataInternal::EhFrameHdrAndEhFrame {
                     eh_frame_hdr,
                     eh_frame: Arc::new(eh_frame),
