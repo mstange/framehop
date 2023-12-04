@@ -66,7 +66,7 @@ Eventually I'd like to use framehop as a replacement for Lul in the Gecko profil
 
 ```rust
 use framehop::aarch64::{CacheAarch64, UnwindRegsAarch64, UnwinderAarch64};
-use framehop::{FrameAddress, Module, ModuleSvmaInfo, ModuleUnwindData, TextByteData};
+use framehop::{ExplicitModuleSectionInfo, FrameAddress, Module};
 
 let mut cache = CacheAarch64::<_>::new();
 let mut unwinder = UnwinderAarch64::new();
@@ -75,21 +75,20 @@ let module = Module::new(
     "mybinary".to_string(),
     0x1003fc000..0x100634000,
     0x1003fc000,
-    ModuleSvmaInfo {
+    ExplicitModuleSectionInfo {
         base_svma: 0x100000000,
-        text: Some(0x100000b64..0x1001d2d18),
-        text_env: None,
-        stubs: Some(0x1001d2d18..0x1001d309c),
-        stub_helper: Some(0x1001d309c..0x1001d3438),
-        eh_frame: Some(0x100237f80..0x100237ffc),
-        eh_frame_hdr: None,
-        got: Some(0x100238000..0x100238010),
+        text_svma: Some(0x100000b64..0x1001d2d18),
+        text: Some(vec![/* __text */]),
+        stubs_svma: Some(0x1001d2d18..0x1001d309c),
+        stub_helper_svma: Some(0x1001d309c..0x1001d3438),
+        got_svma: Some(0x100238000..0x100238010),
+        unwind_info: Some(vec![/* __unwind_info */]),
+        eh_frame_svma: Some(0x100237f80..0x100237ffc),
+        eh_frame: Some(vec![/* __eh_frame */]),
+        text_segment_file_range: Some(0x1003fc000..0x100634000),
+        text_segment: Some(vec![/* __TEXT */]),
+        ..Default::default()
     },
-    ModuleUnwindData::CompactUnwindInfoAndEhFrame(vec![/* __unwind_info */], None),
-    Some(TextByteData::new(
-        vec![/* __TEXT */],
-        0x1003fc000..0x100634000,
-    )),
 );
 unwinder.add_module(module);
 

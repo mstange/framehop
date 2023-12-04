@@ -50,7 +50,7 @@
 //! ```
 //! use std::ops::Range;
 //! use framehop::aarch64::{CacheAarch64, UnwindRegsAarch64, UnwinderAarch64};
-//! use framehop::{ExplicitModuleSectionInfo, FrameAddress, Module, ModuleSectionInfo};
+//! use framehop::{ExplicitModuleSectionInfo, FrameAddress, Module};
 //!
 //! let mut cache = CacheAarch64::<_>::new();
 //! let mut unwinder = UnwinderAarch64::new();
