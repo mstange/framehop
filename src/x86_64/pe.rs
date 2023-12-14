@@ -1,4 +1,3 @@
-use super::UnwindRuleOffsetSpAndPopRegisters;
 use super::{
     arch::ArchX86_64,
     unwind_rule::{OffsetOrPop, UnwindRuleX86_64},
@@ -131,7 +130,7 @@ impl PeUnwinding for ArchX86_64 {
             // If the epilog is an optional AddSP followed by Pops, we can return a cache
             // rule.
             if let Some(rule) =
-                UnwindRuleOffsetSpAndPopRegisters::for_operations(epilog_instructions.iter())
+                UnwindRuleX86_64::for_sequence_of_offset_or_pop(epilog_instructions.iter())
             {
                 return Ok(UnwindResult::ExecRule(rule));
             }
@@ -198,7 +197,7 @@ impl PeUnwinding for ArchX86_64 {
         // We need to collect operations to first check (without losing ownership) whether an
         // unwind rule can be returned.
         let operations = operations.collect::<Vec<_>>();
-        if let Some(rule) = UnwindRuleOffsetSpAndPopRegisters::for_operations(operations.iter()) {
+        if let Some(rule) = UnwindRuleX86_64::for_sequence_of_offset_or_pop(operations.iter()) {
             return Ok(UnwindResult::ExecRule(rule));
         }
 

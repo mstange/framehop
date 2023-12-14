@@ -4,6 +4,7 @@ mod dwarf;
 mod instruction_analysis;
 mod macho;
 mod pe;
+mod register_ordering;
 mod unwind_rule;
 mod unwinder;
 mod unwindregs;
