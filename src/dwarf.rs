@@ -394,5 +394,6 @@ where
             // TODO: Find out what the architectural rules for x86_64 and for aarch64 are, if any.
             None
         }
+        _ => None
     }
 }
