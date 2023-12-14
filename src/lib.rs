@@ -120,6 +120,7 @@ mod dwarf;
 mod error;
 mod instruction_analysis;
 mod macho;
+mod pe;
 mod rule_cache;
 mod unwind_result;
 mod unwind_rule;
