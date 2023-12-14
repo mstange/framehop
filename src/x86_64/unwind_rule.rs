@@ -2,6 +2,7 @@ use super::unwindregs::{Reg, UnwindRegsX86_64};
 use crate::add_signed::checked_add_signed;
 use crate::error::Error;
 use crate::unwind_rule::UnwindRule;
+use arrayvec::ArrayVec;
 
 /// For all of these: return address is *(new_sp - 8)
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -23,6 +24,9 @@ pub enum UnwindRuleX86_64 {
     /// This supports the common case of pushed callee-saved registers followed by a stack
     /// allocation. Up to 8 registers can be stored, which covers all callee-saved registers (aside
     /// from RSP which is implicit).
+    ///
+    /// The registers are stored in a separate compressed ordering to facilitate restoring register
+    /// values if desired. If not for this we could simply store the total offset.
     OffsetSpAndPopRegisters(UnwindRuleOffsetSpAndPopRegisters),
 }
 
@@ -39,6 +43,17 @@ pub enum OffsetOrPop {
 }
 
 impl UnwindRuleOffsetSpAndPopRegisters {
+    const ENCODE_REGISTERS: [Reg; 8] = [
+        Reg::RBX,
+        Reg::RBP,
+        Reg::RDI,
+        Reg::RSI,
+        Reg::R12,
+        Reg::R13,
+        Reg::R14,
+        Reg::R15,
+    ];
+
     /// Get the rule which represents the given operations, if possible.
     pub fn for_operations<I, T>(iter: I) -> Option<UnwindRuleX86_64>
     where
@@ -51,10 +66,13 @@ impl UnwindRuleOffsetSpAndPopRegisters {
             rule.sp_offset_by_8 = *offset;
             iter.next();
         }
-        let mut regs = Vec::new();
+
+        let mut regs = ArrayVec::<Reg, 8>::new();
         for i in iter {
             if let OffsetOrPop::Pop(reg) = i {
-                regs.push(reg);
+                // If try_push errors we've exceeded the number of supported registers: there's no
+                // way to encode these operations as an unwind rule.
+                regs.try_push(reg).ok()?;
             } else {
                 return None;
             }
@@ -75,10 +93,8 @@ impl UnwindRuleOffsetSpAndPopRegisters {
     }
 
     /// Return the ordered set of registers to pop.
-    pub fn registers(&self) -> Vec<Reg> {
-        use Reg::*;
-
-        let mut regs = vec![RBX, RBP, RDI, RSI, R12, R13, R14, R15];
+    pub fn registers(&self) -> ArrayVec<Reg, 8> {
+        let mut regs: ArrayVec<Reg, 8> = Self::ENCODE_REGISTERS.into();
         let mut r = self.registers;
         let mut n: u16 = 8;
         while r != 0 {
@@ -95,14 +111,12 @@ impl UnwindRuleOffsetSpAndPopRegisters {
 
     /// Set the ordered registers to pop. Returns true if the registers can be stored.
     pub fn set_registers(&mut self, registers: &[Reg]) -> bool {
-        if registers.len() > 8 {
+        if registers.len() > Self::ENCODE_REGISTERS.len() {
             return false;
         }
 
-        use Reg::*;
-
         let mut r: u16 = 0;
-        let mut reg_order = vec![RBX, RBP, RDI, RSI, R12, R13, R14, R15];
+        let mut reg_order: ArrayVec<Reg, 8> = Self::ENCODE_REGISTERS.into();
 
         let mut n: u16 = 0;
         let mut scale: u16 = 1;
@@ -343,11 +357,11 @@ mod test {
         use super::Reg::*;
         let mut v = UnwindRuleOffsetSpAndPopRegisters::default();
 
-        let regs = vec![RSI, R12, R15, R14, RBX];
+        let regs = [RSI, R12, R15, R14, RBX];
 
         assert!(!v.set_registers(&[RAX]));
         assert!(!v.set_registers(&[RSI, RSI]));
         assert!(v.set_registers(&regs));
-        assert_eq!(v.registers(), regs);
+        assert_eq!(v.registers().as_slice(), regs);
     }
 }

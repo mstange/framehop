@@ -10,7 +10,7 @@ use crate::instruction_analysis::InstructionAnalysis;
 use crate::macho::{
     CompactUnwindInfoUnwinder, CompactUnwindInfoUnwinding, CuiUnwindResult, TextBytes,
 };
-use crate::pe::PeUnwinding;
+use crate::pe::{DataAtRvaRange, PeUnwinding};
 use crate::rule_cache::CacheResult;
 use crate::unwind_result::UnwindResult;
 use crate::unwind_rule::UnwindRule;
@@ -595,9 +595,9 @@ enum ModuleUnwindDataInternal<D: Deref<Target = [u8]>> {
     /// Used with PE binaries (Windows).
     PeUnwindInfo {
         pdata: D,
-        rdata: Option<(Range<u32>, D)>,
-        xdata: Option<(Range<u32>, D)>,
-        text: Option<(Range<u32>, D)>,
+        rdata: Option<DataAtRvaRange<D>>,
+        xdata: Option<DataAtRvaRange<D>>,
+        text: Option<DataAtRvaRange<D>>,
     },
     /// No unwind information is used. Unwinding in this module will use a fallback rule
     /// (usually frame pointer unwinding).
@@ -637,15 +637,14 @@ impl<D: Deref<Target = [u8]>> ModuleUnwindDataInternal<D> {
             }
         } else if let Some(pdata) = section_info.section_data(b".pdata") {
             let mut range_and_data = |name| {
-                section_info
-                    .section_svma_range(name)
-                    .and_then(|range| {
-                        Some(Range {
-                            start: (range.start - section_info.base_svma()).try_into().ok()?,
-                            end: (range.end - section_info.base_svma()).try_into().ok()?,
-                        })
+                let rva_range = section_info.section_svma_range(name).and_then(|range| {
+                    Some(Range {
+                        start: (range.start - section_info.base_svma()).try_into().ok()?,
+                        end: (range.end - section_info.base_svma()).try_into().ok()?,
                     })
-                    .zip(section_info.section_data(name))
+                })?;
+                let data = section_info.section_data(name)?;
+                Some(DataAtRvaRange { data, rva_range })
             };
             ModuleUnwindDataInternal::PeUnwindInfo {
                 pdata,

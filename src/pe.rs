@@ -15,11 +15,25 @@ pub enum PeUnwinderError {
     Aarch64Unsupported,
 }
 
+/// Data and the related RVA range within the binary.
+///
+/// This is only used by PE unwinding.
+///
+/// Type arguments:
+///  - `D`: The type for unwind section data. This allows carrying owned data on the
+///    module, e.g. `Vec<u8>`. But it could also be a wrapper around mapped memory from
+///    a file or a different process, for example. It just needs to provide a slice of
+///    bytes via its `Deref` implementation.
+pub struct DataAtRvaRange<D> {
+    pub data: D,
+    pub rva_range: Range<u32>,
+}
+
 pub struct PeSections<'a, D> {
     pub pdata: &'a D,
-    pub rdata: Option<&'a (Range<u32>, D)>,
-    pub xdata: Option<&'a (Range<u32>, D)>,
-    pub text: Option<&'a (Range<u32>, D)>,
+    pub rdata: Option<&'a DataAtRvaRange<D>>,
+    pub xdata: Option<&'a DataAtRvaRange<D>>,
+    pub text: Option<&'a DataAtRvaRange<D>>,
 }
 
 impl<'a, D> PeSections<'a, D>
@@ -41,11 +55,11 @@ where
 }
 
 fn memory_at_rva<D: std::ops::Deref<Target = [u8]>>(
-    (range, data): &(Range<u32>, D),
+    DataAtRvaRange { data, rva_range }: &DataAtRvaRange<D>,
     address: u32,
 ) -> Option<&[u8]> {
-    if range.contains(&address) {
-        let offset = address - range.start;
+    if rva_range.contains(&address) {
+        let offset = address - rva_range.start;
         Some(&data[(offset as usize)..])
     } else {
         None
