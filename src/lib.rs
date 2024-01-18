@@ -2,13 +2,13 @@
 //!
 //! Framehop is a stack frame unwinder written in 100% Rust. It produces high quality stacks at high speed, on multiple platforms and architectures, without an expensive pre-processing step for unwind information. This makes it suitable for sampling profilers.
 //!
-//! It currently supports unwinding x86_64 and aarch64, with unwind information formats commonly used on macOS, Linux and Android.
+//! It currently supports unwinding x86_64 and aarch64, with unwind information formats commonly used on Windows, macOS, Linux and Android.
 //!
 //! You give framehop register values, stack memory and unwind data, and framehop produces a list of return addresses.
 //!
 //! Framehop can be used in the following scenarios:
 //!
-//!  - Live unwinding of a remote process. This is how [`perfrecord`](https://github.com/mstange/perfrecord/) uses it.
+//!  - Live unwinding of a remote process. This is how [`samply`](https://github.com/mstange/samply/) uses it.
 //!  - Offline unwinding from saved registers and stack bytes, even on a different machine, a different OS, or a different CPU architecture.
 //!  - Live unwinding inside the same process. This is currently unproven, but should work as long as you can do heap allocation before sampling, in order to allocate a cache and to update the list of modules. The actual unwinding does not require any heap allocation and should work even inside a signal handler, as long as you use `MustNotAllocateDuringUnwind`.
 //!
@@ -26,6 +26,7 @@
 //!    - Apple's Compact Unwinding Format, in `__unwind_info` (macOS)
 //!    - DWARF CFI in `.eh_frame` (using `.eh_frame_hdr` as an index, if available)
 //!    - DWARF CFI in `.debug_frame`
+//!    - PE unwind info in `.pdata`, `.rdata` and `.xdata` (for Windows x86_64)
 //!  - It supports correct unwinding even when the program is interrupted inside a function prologue or epilogue. On macOS, it has to analyze assembly instructions in order to do this.
 //!  - On x86_64 and aarch64, it falls back to frame pointer unwinding if it cannot find unwind information for an address.
 //!  - It caches the unwind rule for each address in a fixed-size cache, so that repeated unwinding from the same address is even faster.

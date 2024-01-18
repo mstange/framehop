@@ -5,7 +5,7 @@
 
 Framehop is a stack frame unwinder written in 100% Rust. It produces high quality stacks at high speed, on multiple platforms and architectures, without an expensive pre-processing step for unwind information. This makes it suitable for sampling profilers.
 
-It currently supports unwinding x86_64 and aarch64, with unwind information formats commonly used on macOS, Linux and Android.
+It currently supports unwinding x86_64 and aarch64, with unwind information formats commonly used on Windows, macOS, Linux and Android.
 
 You give framehop register values, stack memory and unwind data, and framehop produces a list of return addresses.
 
@@ -29,6 +29,7 @@ In turn, framehop solves the following problems:
    - Apple's Compact Unwinding Format, in `__unwind_info` (macOS)
    - DWARF CFI in `.eh_frame` (using `.eh_frame_hdr` as an index, if available)
    - DWARF CFI in `.debug_frame`
+   - PE unwind info in `.pdata`, `.rdata` and `.xdata` (for Windows x86_64)
  - It supports correct unwinding even when the program is interrupted inside a function prologue or epilogue. On macOS, it has to analyze assembly instructions in order to do this.
  - On x86_64 and aarch64, it falls back to frame pointer unwinding if it cannot find unwind information for an address.
  - It caches the unwind rule for each address in a fixed-size cache, so that repeated unwinding from the same address is even faster.
@@ -60,7 +61,7 @@ Framehop is still a work in progress. Its API is subject to change. The API chur
 
 That said, framehop works remarkably well on the supported platforms, and is definitely worth a try if you can stomach the frequent API breakages. Please file issues if you run into any trouble or have suggestions.
 
-Eventually I'd like to use framehop as a replacement for Lul in the Gecko profiler (Firefox's built-in profiler). For that we'll also want to add x86 support (for 32 bit Linux), EHABI / EXIDX support (for 32 bit ARM Android), and Windows support.
+Eventually I'd like to use framehop as a replacement for Lul in the Gecko profiler (Firefox's built-in profiler). For that we'll also want to add x86 support (for 32 bit Windows and Linux) and EHABI / EXIDX support (for 32 bit ARM Android).
 
 ## Example
 
