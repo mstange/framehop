@@ -17,7 +17,7 @@ gimli = "0.28.1"
 object = { version = "0.32", optional = true }
 thiserror = "1.0.56"
 macho-unwind-info = "0.4.0"
-pe-unwind-info = "0.1.1"
+pe-unwind-info = "0.2.1"
 fallible-iterator = "0.3.0"
 arrayvec = "0.7.4"
 

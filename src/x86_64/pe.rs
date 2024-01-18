@@ -9,8 +9,8 @@ use crate::unwind_result::UnwindResult;
 use std::ops::ControlFlow;
 
 use pe_unwind_info::x86_64::{
-    FunctionEpilogInstruction, FunctionEpilogParser, FunctionTableEntries, Register, UnwindInfo,
-    UnwindInfoTrailer, UnwindOperation, UnwindState,
+    FunctionEpilogInstruction, FunctionTableEntries, Register, UnwindInfo, UnwindInfoTrailer,
+    UnwindOperation, UnwindState,
 };
 
 struct State<'a, F> {
@@ -123,9 +123,8 @@ impl PeUnwinding for ArchX86_64 {
         // there are chained infos).
         let bytes = (function.end_address.get() - address) as usize;
         let instruction = &sections.text_memory_at_rva(address)?[..bytes];
-        let mut epilog_parser = FunctionEpilogParser::new();
-        if let Some(epilog_instructions) =
-            epilog_parser.is_function_epilog(instruction, unwind_info.frame_register())
+        if let Ok(epilog_instructions) =
+            FunctionEpilogInstruction::parse_sequence(instruction, unwind_info.frame_register())
         {
             // If the epilog is an optional AddSP followed by Pops, we can return a cache
             // rule.
