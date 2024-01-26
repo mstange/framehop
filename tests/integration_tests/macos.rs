@@ -92,7 +92,7 @@ fn test_root_doc_comment() {
             stub_helper_svma: Some(0x1001d309c..0x1001d3438),
             eh_frame_svma: Some(0x100237f80..0x100237ffc),
             got_svma: Some(0x100238000..0x100238010),
-            text_segment_file_range: Some(0x1003fc000..0x100634000),
+            text_segment_svma: Some(0x1003fc000..0x100634000),
             text_segment: Some(vec![]),
             ..Default::default()
         },

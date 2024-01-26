@@ -395,7 +395,8 @@ impl<
             } => {
                 // eprintln!("unwinding with cui and eh_frame in module {}", module.name);
                 let text_bytes = text_data.as_ref().and_then(|data| {
-                    let offset_from_base = u32::try_from(data.svma_range.start).ok()?;
+                    let offset_from_base =
+                        u32::try_from(data.svma_range.start.checked_sub(module.base_svma)?).ok()?;
                     Some(TextBytes::new(offset_from_base, &data.bytes[..]))
                 });
                 let stubs_range = if let Some(stubs_range) = stubs {
@@ -618,15 +619,19 @@ impl<D: Deref<Target = [u8]>> ModuleUnwindDataInternal<D> {
             // multiple executable sections such as `__text`, `__stubs`, and `__stub_helper`. If we
             // don't have the full `__TEXT` segment contents, we can fall back to the contents of
             // just the `__text` section.
-            let text_data = section_info
-                .segment_data(b"__TEXT")
-                .zip(section_info.segment_file_range(b"__TEXT"))
-                .or_else(|| {
-                    section_info
-                        .section_data(b"__text")
-                        .zip(section_info.section_file_range(b"__text"))
-                })
-                .map(|(bytes, svma_range)| TextByteData { bytes, svma_range });
+            let text_data = if let (Some(bytes), Some(svma_range)) = (
+                section_info.segment_data(b"__TEXT"),
+                section_info.segment_svma_range(b"__TEXT"),
+            ) {
+                Some(TextByteData { bytes, svma_range })
+            } else if let (Some(bytes), Some(svma_range)) = (
+                section_info.section_data(b"__text"),
+                section_info.section_svma_range(b"__text"),
+            ) {
+                Some(TextByteData { bytes, svma_range })
+            } else {
+                None
+            };
             ModuleUnwindDataInternal::CompactUnwindInfoAndEhFrame {
                 unwind_info,
                 eh_frame: eh_frame.map(Arc::new),
@@ -763,14 +768,11 @@ pub trait ModuleSectionInfo<D> {
     /// Get the given section's memory range, as stated in the module.
     fn section_svma_range(&mut self, name: &[u8]) -> Option<Range<u64>>;
 
-    /// Get the given section's file range in the module.
-    fn section_file_range(&mut self, name: &[u8]) -> Option<Range<u64>>;
-
     /// Get the given section's data.
     fn section_data(&mut self, name: &[u8]) -> Option<D>;
 
-    /// Get the given segment's file range in the module.
-    fn segment_file_range(&mut self, _name: &[u8]) -> Option<Range<u64>> {
+    /// Get the given segment's memory range, as stated in the module.
+    fn segment_svma_range(&mut self, _name: &[u8]) -> Option<Range<u64>> {
         None
     }
 
@@ -804,7 +806,7 @@ pub struct ExplicitModuleSectionInfo<D> {
     /// This is used to detect whether we need to do instruction analysis for an address.
     pub text_svma: Option<Range<u64>>,
     /// The data of the `__text` or `.text` section. This is where most of the compiled code is
-    /// stored.
+    /// stored. For mach-O binaries, this does not need to be supplied if `text_segment` is supplied.
     ///
     /// This is used to handle function prologues and epilogues in some cases.
     pub text: Option<D>,
@@ -844,11 +846,9 @@ pub struct ExplicitModuleSectionInfo<D> {
     pub eh_frame_hdr: Option<D>,
     /// The data of the `.debug_frame` section. The related address range is not needed.
     pub debug_frame: Option<D>,
-    /// The file range of the `__TEXT` segment of mach-O binaries, or the `__text` section if the
-    /// segment is unavailable.
-    pub text_segment_file_range: Option<Range<u64>>,
-    /// The data of the `__TEXT` segment of mach-O binaries, or the `__text` section if the segment
-    /// is unavailable.
+    /// The address range of the `__TEXT` segment of mach-O binaries, if available.
+    pub text_segment_svma: Option<Range<u64>>,
+    /// The data of the `__TEXT` segment of mach-O binaries, if available.
     pub text_segment: Option<D>,
 }
 
@@ -871,9 +871,6 @@ where
             _ => None,
         }
     }
-    fn section_file_range(&mut self, _name: &[u8]) -> Option<Range<u64>> {
-        None
-    }
     fn section_data(&mut self, name: &[u8]) -> Option<D> {
         match name {
             b"__text" | b".text" => self.text.take(),
@@ -884,9 +881,9 @@ where
             _ => None,
         }
     }
-    fn segment_file_range(&mut self, name: &[u8]) -> Option<Range<u64>> {
+    fn segment_svma_range(&mut self, name: &[u8]) -> Option<Range<u64>> {
         match name {
-            b"__TEXT" => self.text_segment_file_range.take(),
+            b"__TEXT" => self.text_segment_svma.take(),
             _ => None,
         }
     }
@@ -926,21 +923,14 @@ mod object {
             Some(section.address()..section.address() + section.size())
         }
 
-        fn section_file_range(&mut self, name: &[u8]) -> Option<Range<u64>> {
-            let section = self.section_by_name_bytes(name)?;
-            let (start, size) = section.file_range()?;
-            Some(start..start + size)
-        }
-
         fn section_data(&mut self, name: &[u8]) -> Option<D> {
             let section = self.section_by_name_bytes(name)?;
             section.data().ok().map(|data| data.into())
         }
 
-        fn segment_file_range(&mut self, name: &[u8]) -> Option<Range<u64>> {
+        fn segment_svma_range(&mut self, name: &[u8]) -> Option<Range<u64>> {
             let segment = self.segments().find(|s| s.name_bytes() == Ok(Some(name)))?;
-            let (start, size) = segment.file_range();
-            Some(start..start + size)
+            Some(segment.address()..segment.address() + segment.size())
         }
 
         fn segment_data(&mut self, name: &[u8]) -> Option<D> {
