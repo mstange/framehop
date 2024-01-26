@@ -70,7 +70,7 @@
 //!         unwind_info: Some(vec![/* __unwind_info */]),
 //!         eh_frame_svma: Some(0x100237f80..0x100237ffc),
 //!         eh_frame: Some(vec![/* __eh_frame */]),
-//!         text_segment_file_range: Some(0x1003fc000..0x100634000),
+//!         text_segment_svma: Some(0x1003fc000..0x100634000),
 //!         text_segment: Some(vec![/* __TEXT */]),
 //!         ..Default::default()
 //!     },
