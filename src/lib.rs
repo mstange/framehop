@@ -127,6 +127,10 @@ mod unwind_result;
 mod unwind_rule;
 mod unwinder;
 
+#[cfg(feature = "object")]
+/// Re-export of the objcet crate.
+pub use object;
+
 /// Types for unwinding on the aarch64 CPU architecture.
 pub mod aarch64;
 /// Types for unwinding on the x86_64 CPU architecture.
