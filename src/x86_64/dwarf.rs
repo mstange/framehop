@@ -99,18 +99,18 @@ fn translate_into_unwind_rule<R: gimli::Reader>(
 ) -> Result<UnwindRuleX86_64, ConversionError> {
     match ra_rule {
         RegisterRule::Undefined => {
-            // This is normal. Return address is [CFA-8].
+            // No return address. This means that we've reached the end of the stack.
+            return Ok(UnwindRuleX86_64::EndOfStack);
         }
-        RegisterRule::Offset(offset) => {
-            if *offset == -8 {
-                // Weirdly explicit, but also ok.
-            } else {
-                // Not ok.
-                return Err(ConversionError::ReturnAddressRuleWithUnexpectedOffset);
-            }
+        RegisterRule::Offset(offset) if *offset == -8 => {
+            // This is normal case. Return address is [CFA-8].
+        }
+        RegisterRule::Offset(_) => {
+            // Unsupported, will have to use the slow path.
+            return Err(ConversionError::ReturnAddressRuleWithUnexpectedOffset);
         }
         _ => {
-            // Somebody's being extra. Go down the slow path.
+            // Unsupported, will have to use the slow path.
             return Err(ConversionError::ReturnAddressRuleWasWeird);
         }
     }

@@ -8,12 +8,15 @@ use arrayvec::ArrayVec;
 /// For all of these: return address is *(new_sp - 8)
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UnwindRuleX86_64 {
+    EndOfStack,
     /// (sp, bp) = (sp + 8, bp)
     JustReturn,
     /// (sp, bp) = if is_first_frame (sp + 8, bp) else (bp + 16, *bp)
     JustReturnIfFirstFrameOtherwiseFp,
     /// (sp, bp) = (sp + 8x, bp)
-    OffsetSp { sp_offset_by_8: u16 },
+    OffsetSp {
+        sp_offset_by_8: u16,
+    },
     /// (sp, bp) = (sp + 8x, *(sp + 8y))
     OffsetSpAndRestoreBp {
         sp_offset_by_8: u16,
@@ -124,6 +127,7 @@ impl UnwindRule for UnwindRuleX86_64 {
     {
         let sp = regs.sp();
         let (new_sp, new_bp) = match self {
+            UnwindRuleX86_64::EndOfStack => return Ok(None),
             UnwindRuleX86_64::JustReturn => {
                 let new_sp = sp.checked_add(8).ok_or(Error::IntegerOverflow)?;
                 (new_sp, regs.bp())

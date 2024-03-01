@@ -376,3 +376,62 @@ fn test_libc_syscall_no_fde() {
     assert_eq!(regs.sp(), 0x338);
     assert_eq!(regs.bp(), 0x348);
 }
+
+#[test]
+fn test_root_func() {
+    let mut cache = CacheX86_64::<_>::new();
+    let mut unwinder = UnwinderX86_64::new();
+    common::add_object(
+        &mut unwinder,
+        &Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("fixtures/linux/x86_64/nofp/release-firefox-bin"),
+        0x0,
+    );
+
+    // _start:
+    // 88cc9  xor   ebp, ebp
+    // 88ccb  mov   r9, rdx
+    // 88cce  pop   rsi
+    // 88ccf  mov   rdx, rsp
+    // 88cd2  and   rsp, 0xfffffffffffffff0
+    // 88cd6  push  rax
+    // 88cd7  push  rsp
+    // 88cd8  lea   r8, qword [__libc_csu_fini]
+    // 88cdf  lea   rcx, qword [__libc_csu_init]
+    // 88ce6  lea   rdi, qword [sub_88de0]
+    // 88ced  call  j___libc_start_main
+    // 88cf2  hlt                                  ; <-- callee return address
+    //
+    // DWARF CFI:
+    //
+    // 00000018 00000014 0000001c FDE cie=00000000 pc=00088cc9...00088cf3
+    // Format:       DWARF32
+    // DW_CFA_nop:
+    // DW_CFA_nop:
+    // DW_CFA_nop:
+    // DW_CFA_nop:
+    // DW_CFA_nop:
+    // DW_CFA_nop:
+    // DW_CFA_nop:
+    //
+    // 0x88cc9: CFA=RSP+8: RIP=undefined
+
+    // sp = 0x1000
+    let mut read_stack = |addr| {
+        if addr >= 0x1000 {
+            Ok(0x123456)
+        } else {
+            Err(())
+        }
+    };
+
+    // Unwinding should stop immediately and not even read from the stack.
+    let mut regs = UnwindRegsX86_64::new(0x88cf2, 0x1000, 0xbeef);
+    let res = unwinder.unwind_frame(
+        FrameAddress::from_return_address(0x88cf2).unwrap(),
+        &mut regs,
+        &mut cache,
+        &mut read_stack,
+    );
+    assert_eq!(res, Ok(None));
+}
