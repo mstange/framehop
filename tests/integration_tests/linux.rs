@@ -55,7 +55,7 @@ fn test_plt_cfa_expr() {
             &mut cache,
             &mut read_stack,
         );
-        assert_eq!(res, Ok(Some(0x123456)));
+        assert_eq!(res, Ok(FrameAddress::from_return_address(0x123456)));
         assert_eq!(regs.sp(), 0x38);
         assert_eq!(regs.bp(), 0x345);
     }
@@ -117,7 +117,10 @@ fn test_pthread_cfa_expr() {
         &mut cache,
         &mut read_stack,
     );
-    assert_eq!(res, Ok(Some(0x7f54b14fc000 + 0x9436)));
+    assert_eq!(
+        res,
+        Ok(FrameAddress::from_return_address(0x7f54b14fc000 + 0x9436))
+    );
     assert_eq!(regs.sp(), 0x10);
     assert_eq!(regs.bp(), 0x120);
 
@@ -127,7 +130,10 @@ fn test_pthread_cfa_expr() {
         &mut cache,
         &mut read_stack,
     );
-    assert_eq!(res, Ok(Some(0x7f54b14fc000 + 0x8c2c)));
+    assert_eq!(
+        res,
+        Ok(FrameAddress::from_return_address(0x7f54b14fc000 + 0x8c2c))
+    );
     assert_eq!(regs.sp(), 0x90);
     assert_eq!(regs.bp(), 0x120);
 
@@ -139,7 +145,7 @@ fn test_pthread_cfa_expr() {
         &mut cache,
         &mut read_stack,
     );
-    assert_eq!(res, Ok(Some(0xbe7042)));
+    assert_eq!(res, Ok(FrameAddress::from_return_address(0xbe7042)));
     assert_eq!(regs.sp(), 0x130);
     assert_eq!(regs.bp(), 0x1234);
 }
@@ -170,7 +176,7 @@ fn test_no_eh_frame_hdr() {
         &mut cache,
         &mut |addr| stack.get((addr / 8) as usize).cloned().ok_or(()),
     );
-    assert_eq!(res, Ok(Some(0x1234)));
+    assert_eq!(res, Ok(FrameAddress::from_return_address(0x1234)));
     assert_eq!(regs.sp(), 0x50);
     assert_eq!(regs.fp(), 0x70);
     assert_eq!(regs.lr(), 0x1234);
@@ -184,7 +190,7 @@ fn test_no_eh_frame_hdr() {
         &mut cache,
         &mut |addr| stack.get((addr / 8) as usize).cloned().ok_or(()),
     );
-    assert_eq!(res, Ok(Some(0x1234)));
+    assert_eq!(res, Ok(FrameAddress::from_return_address(0x1234)));
     assert_eq!(regs.sp(), 0x50);
     assert_eq!(regs.fp(), 0x70);
     assert_eq!(regs.lr(), 0x1234);
@@ -196,7 +202,7 @@ fn test_no_eh_frame_hdr() {
         &mut cache,
         &mut |addr| stack.get((addr / 8) as usize).cloned().ok_or(()),
     );
-    assert_eq!(res, Ok(Some(0x1234)));
+    assert_eq!(res, Ok(FrameAddress::from_return_address(0x1234)));
     assert_eq!(regs.sp(), 0x50);
     assert_eq!(regs.fp(), 0x70);
     assert_eq!(regs.lr(), 0x1234);
@@ -208,7 +214,7 @@ fn test_no_eh_frame_hdr() {
         &mut cache,
         &mut |addr| stack.get((addr / 8) as usize).cloned().ok_or(()),
     );
-    assert_eq!(res, Ok(Some(0x5b4)));
+    assert_eq!(res, Ok(FrameAddress::from_return_address(0x5b4)));
     assert_eq!(regs.sp(), 0x40);
     assert_eq!(regs.fp(), 0x40);
     assert_eq!(regs.lr(), 0x5b4);
@@ -220,7 +226,7 @@ fn test_no_eh_frame_hdr() {
         &mut cache,
         &mut |addr| stack.get((addr / 8) as usize).cloned().ok_or(()),
     );
-    assert_eq!(res, Ok(Some(0x5b4)));
+    assert_eq!(res, Ok(FrameAddress::from_return_address(0x5b4)));
     assert_eq!(regs.sp(), 0x40);
     assert_eq!(regs.fp(), 0x40);
     assert_eq!(regs.lr(), 0x5b4);
@@ -232,7 +238,7 @@ fn test_no_eh_frame_hdr() {
         &mut cache,
         &mut |addr| stack.get((addr / 8) as usize).cloned().ok_or(()),
     );
-    assert_eq!(res, Ok(Some(0x5b4)));
+    assert_eq!(res, Ok(FrameAddress::from_return_address(0x5b4)));
     assert_eq!(regs.sp(), 0x40);
     assert_eq!(regs.fp(), 0x40);
     assert_eq!(regs.lr(), 0x5b4);
@@ -242,7 +248,7 @@ fn test_no_eh_frame_hdr() {
         &mut cache,
         &mut |addr| stack.get((addr / 8) as usize).cloned().ok_or(()),
     );
-    assert_eq!(res, Ok(Some(0x1234)));
+    assert_eq!(res, Ok(FrameAddress::from_return_address(0x1234)));
     assert_eq!(regs.sp(), 0x50);
     assert_eq!(regs.fp(), 0x70);
     assert_eq!(regs.lr(), 0x1234);
@@ -254,7 +260,7 @@ fn test_no_eh_frame_hdr() {
         &mut cache,
         &mut |addr| stack.get((addr / 8) as usize).cloned().ok_or(()),
     );
-    assert_eq!(res, Ok(Some(0x1234)));
+    assert_eq!(res, Ok(FrameAddress::from_return_address(0x1234)));
     assert_eq!(regs.sp(), 0x50);
     assert_eq!(regs.fp(), 0x70);
     assert_eq!(regs.lr(), 0x1234);
@@ -317,7 +323,7 @@ fn test_epilogue_bp_already_popped() {
         &mut cache,
         &mut read_stack,
     );
-    assert_eq!(res, Ok(Some(0x123456)));
+    assert_eq!(res, Ok(FrameAddress::from_return_address(0x123456)));
     assert_eq!(regs.sp(), 0x338);
     assert_eq!(regs.bp(), 0x348);
 }
@@ -372,7 +378,7 @@ fn test_libc_syscall_no_fde() {
         &mut cache,
         &mut read_stack,
     );
-    assert_eq!(res, Ok(Some(0x123456)));
+    assert_eq!(res, Ok(FrameAddress::from_return_address(0x123456)));
     assert_eq!(regs.sp(), 0x338);
     assert_eq!(regs.bp(), 0x348);
 }
