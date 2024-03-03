@@ -7,6 +7,7 @@ impl PeUnwinding for ArchAarch64 {
         _sections: PeSections<D>,
         _address: u32,
         _regs: &mut Self::UnwindRegs,
+        _is_first_frame: bool,
         _read_stack: &mut F,
     ) -> Result<UnwindResult<Self::UnwindRule>, PeUnwinderError>
     where

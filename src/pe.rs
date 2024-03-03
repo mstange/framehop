@@ -71,6 +71,7 @@ pub trait PeUnwinding: Arch {
         sections: PeSections<D>,
         address: u32,
         regs: &mut Self::UnwindRegs,
+        is_first_frame: bool,
         read_stack: &mut F,
     ) -> Result<UnwindResult<Self::UnwindRule>, PeUnwinderError>
     where

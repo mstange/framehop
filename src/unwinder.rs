@@ -66,7 +66,7 @@ pub trait Unwinder {
         regs: &mut Self::UnwindRegs,
         cache: &mut Self::Cache,
         read_stack: &mut F,
-    ) -> Result<Option<u64>, Error>
+    ) -> Result<Option<FrameAddress>, Error>
     where
         F: FnMut(u64) -> Result<u64, ()>;
 
@@ -164,8 +164,6 @@ impl<'u, 'c, 'r, U: Unwinder + ?Sized, F: FnMut(u64) -> Result<u64, ()>>
         };
         match next {
             Some(return_address) => {
-                let return_address = FrameAddress::from_return_address(return_address)
-                    .ok_or(Error::ReturnAddressIsNull)?;
                 self.state = UnwindIteratorState::Unwinding(return_address);
                 Ok(Some(return_address))
             }
@@ -308,7 +306,7 @@ impl<
         cache: &mut Cache<D, A::UnwindRule, P>,
         read_stack: &mut F,
         callback: G,
-    ) -> Result<Option<u64>, Error>
+    ) -> Result<Option<FrameAddress>, Error>
     where
         F: FnMut(u64) -> Result<u64, ()>,
         G: FnOnce(
@@ -327,7 +325,9 @@ impl<
             .lookup(lookup_address, self.modules_generation)
         {
             CacheResult::Hit(unwind_rule) => {
-                return unwind_rule.exec(is_first_frame, regs, read_stack);
+                return Ok(unwind_rule
+                    .exec(is_first_frame, regs, read_stack)?
+                    .and_then(FrameAddress::from_return_address));
             }
             CacheResult::Miss(handle) => handle,
         };
@@ -345,9 +345,7 @@ impl<
                     read_stack,
                 ) {
                     Ok(UnwindResult::ExecRule(rule)) => rule,
-                    Ok(UnwindResult::Uncacheable(return_address)) => {
-                        return Ok(Some(return_address))
-                    }
+                    Ok(UnwindResult::Uncacheable(return_address)) => return Ok(return_address),
                     Err(_err) => {
                         // eprintln!("Unwinder error: {}", err);
                         A::UnwindRule::fallback_rule()
@@ -356,7 +354,9 @@ impl<
             }
         };
         cache.rule_cache.insert(cache_handle, unwind_rule);
-        unwind_rule.exec(is_first_frame, regs, read_stack)
+        Ok(unwind_rule
+            .exec(is_first_frame, regs, read_stack)?
+            .and_then(FrameAddress::from_return_address))
     }
 
     pub fn unwind_frame<F>(
@@ -365,7 +365,7 @@ impl<
         regs: &mut A::UnwindRegs,
         cache: &mut Cache<D, A::UnwindRule, P>,
         read_stack: &mut F,
-    ) -> Result<Option<u64>, Error>
+    ) -> Result<Option<FrameAddress>, Error>
     where
         F: FnMut(u64) -> Result<u64, ()>,
     {
@@ -538,6 +538,7 @@ impl<
                 },
                 rel_lookup_address,
                 regs,
+                is_first_frame,
                 read_stack,
             )?,
             ModuleUnwindDataInternal::None => return Err(UnwinderError::NoModuleUnwindData),

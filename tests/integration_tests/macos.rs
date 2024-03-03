@@ -44,7 +44,10 @@ fn test_basic() {
         &mut cache,
         &mut read_stack,
     );
-    assert_eq!(res, Ok(Some(0x1003fc000 + 0xe4830)));
+    assert_eq!(
+        res,
+        Ok(FrameAddress::from_return_address(0x1003fc000 + 0xe4830))
+    );
     assert_eq!(regs.sp(), 0x10);
     let res = unwinder.unwind_frame(
         FrameAddress::from_return_address(0x1003fc000 + 0xe4830).unwrap(),
@@ -52,7 +55,10 @@ fn test_basic() {
         &mut cache,
         &mut read_stack,
     );
-    assert_eq!(res, Ok(Some(0x1003fc000 + 0x100dc4)));
+    assert_eq!(
+        res,
+        Ok(FrameAddress::from_return_address(0x1003fc000 + 0x100dc4))
+    );
     assert_eq!(regs.sp(), 0x30);
     assert_eq!(regs.fp(), 0x40);
     let res = unwinder.unwind_frame(
@@ -61,7 +67,10 @@ fn test_basic() {
         &mut cache,
         &mut read_stack,
     );
-    assert_eq!(res, Ok(Some(0x1003fc000 + 0x12ca28)));
+    assert_eq!(
+        res,
+        Ok(FrameAddress::from_return_address(0x1003fc000 + 0x12ca28))
+    );
     assert_eq!(regs.sp(), 0x50);
     assert_eq!(regs.fp(), 0x70);
     let res = unwinder.unwind_frame(
@@ -253,7 +262,10 @@ fn test_epilogue() {
             &mut read_stack,
         );
         // The result after unwinding should always be the same.
-        assert_eq!(res, Ok(Some(0x1003fc000 + 0xe4830)));
+        assert_eq!(
+            res,
+            Ok(FrameAddress::from_return_address(0x1003fc000 + 0xe4830))
+        );
         assert_eq!(regs.sp(), 0x50);
         assert_eq!(regs.fp(), 0x70);
     };
@@ -348,7 +360,7 @@ fn test_prologue_nofp() {
             &mut |addr| stack.get((addr / 8) as usize).cloned().ok_or(()),
         );
         // The result after unwinding should always be the same.
-        assert_eq!(res, Ok(Some(0xe4830)));
+        assert_eq!(res, Ok(FrameAddress::from_return_address(0xe4830)));
         assert_eq!(regs.sp(), 0x140);
         assert_eq!(regs.fp(), 0x1e0);
     };
@@ -449,7 +461,7 @@ fn test_prologue_fp() {
             &mut |addr| stack.get((addr / 8) as usize).cloned().ok_or(()),
         );
         // The result after unwinding should always be the same.
-        assert_eq!(res, Ok(Some(0x10030)));
+        assert_eq!(res, Ok(FrameAddress::from_return_address(0x10030)));
         assert_eq!(regs.sp(), 0x140);
         assert_eq!(regs.fp(), 0x10029);
     };
@@ -494,7 +506,7 @@ fn test_prologue_fp_2() {
         &mut cache,
         &mut |addr| stack.get((addr / 8) as usize).cloned().ok_or(()),
     );
-    assert_eq!(res, Ok(Some(0x10030)));
+    assert_eq!(res, Ok(FrameAddress::from_return_address(0x10030)));
     assert_eq!(regs.sp(), 0x80);
     assert_eq!(regs.fp(), 0x10029);
 }
@@ -546,7 +558,7 @@ fn test_prologue_epilogue_x86_64_fp() {
             &mut |addr| stack.get((addr / 8) as usize).cloned().ok_or(()),
         );
         // The result after unwinding should always be the same.
-        assert_eq!(res, Ok(Some(0x12345)));
+        assert_eq!(res, Ok(FrameAddress::from_return_address(0x12345)));
         assert_eq!(regs.sp(), 0x140);
         assert_eq!(regs.bp(), 0x160);
     };
@@ -646,7 +658,7 @@ fn test_prologue_epilogue_tail_call_x86_64_nofp() {
             &mut |addr| stack.get((addr / 8) as usize).cloned().ok_or(()),
         );
         // The result after unwinding should always be the same.
-        assert_eq!(res, Ok(Some(0x12345)));
+        assert_eq!(res, Ok(FrameAddress::from_return_address(0x12345)));
         assert_eq!(regs.sp(), 0x100);
         assert_eq!(regs.bp(), 0x120);
     };
@@ -743,7 +755,7 @@ fn test_prologue_epilogue_rbp_x86_64_nofp() {
             &mut |addr| stack.get((addr / 8) as usize).cloned().ok_or(()),
         );
         // The result after unwinding should always be the same.
-        assert_eq!(res, Ok(Some(0x12345)));
+        assert_eq!(res, Ok(FrameAddress::from_return_address(0x12345)));
         assert_eq!(regs.sp(), 0x100);
         assert_eq!(regs.bp(), 0x120);
     };
@@ -842,7 +854,7 @@ fn test_frameless_indirect_x86_64_nofp() {
         &mut cache,
         &mut |addr| s.get((addr / 8) as usize).cloned().ok_or(()),
     );
-    assert_eq!(res, Ok(Some(0x12345)));
+    assert_eq!(res, Ok(FrameAddress::from_return_address(0x12345)));
     assert_eq!(regs.sp(), 0x1000);
     assert_eq!(regs.bp(), 0x1020);
 }
@@ -897,7 +909,7 @@ fn test_uncovered_x86_64_fp() {
         &mut cache,
         &mut |addr| s.get((addr / 8) as usize).cloned().ok_or(()),
     );
-    assert_eq!(res, Ok(Some(0x12345)));
+    assert_eq!(res, Ok(FrameAddress::from_return_address(0x12345)));
     assert_eq!(regs.sp(), 0x100);
     assert_eq!(regs.bp(), 0x120);
 
@@ -909,7 +921,7 @@ fn test_uncovered_x86_64_fp() {
         &mut cache,
         &mut |addr| s.get((addr / 8) as usize).cloned().ok_or(()),
     );
-    assert_eq!(res, Ok(Some(0x12345)));
+    assert_eq!(res, Ok(FrameAddress::from_return_address(0x12345)));
     assert_eq!(regs.sp(), 0x100);
     assert_eq!(regs.bp(), 0x120);
 }
@@ -940,7 +952,7 @@ fn test_prologue_x86_64_sub_with_32_bit_immediate() {
         &mut cache,
         &mut |addr| s.get((addr / 8) as usize).cloned().ok_or(()),
     );
-    assert_eq!(res, Ok(Some(0x12345)));
+    assert_eq!(res, Ok(FrameAddress::from_return_address(0x12345)));
     assert_eq!(regs.sp(), 0x200);
     assert_eq!(regs.bp(), 0x220);
 }
@@ -971,7 +983,7 @@ fn test_stubs_x86_64() {
         &mut cache,
         &mut |addr| s.get((addr / 8) as usize).cloned().ok_or(()),
     );
-    assert_eq!(res, Ok(Some(0x12345)));
+    assert_eq!(res, Ok(FrameAddress::from_return_address(0x12345)));
     assert_eq!(regs.sp(), 0x100);
     assert_eq!(regs.bp(), 0x120);
 }
@@ -1004,7 +1016,7 @@ fn test_stubs_x86_64_xul() {
         &mut cache,
         &mut |addr| s.get((addr / 8) as usize).cloned().ok_or(()),
     );
-    assert_eq!(res, Ok(Some(0x12345)));
+    assert_eq!(res, Ok(FrameAddress::from_return_address(0x12345)));
     assert_eq!(regs.sp(), 0x100);
     assert_eq!(regs.bp(), 0x120);
 }
@@ -1058,7 +1070,7 @@ fn test_go_zdebug_frame() {
         &mut cache,
         &mut |addr| stack.get((addr / 8) as usize).cloned().ok_or(()),
     );
-    assert_eq!(res, Ok(Some(0x1234)));
+    assert_eq!(res, Ok(FrameAddress::from_return_address(0x1234)));
     assert_eq!(regs.sp(), 0x50);
     assert_eq!(regs.fp(), 0x70);
     assert_eq!(regs.lr(), 0x1234);
@@ -1071,7 +1083,7 @@ fn test_go_zdebug_frame() {
         &mut cache,
         &mut |addr| stack.get((addr / 8) as usize).cloned().ok_or(()),
     );
-    assert_eq!(res, Ok(Some(0x1234)));
+    assert_eq!(res, Ok(FrameAddress::from_return_address(0x1234)));
     assert_eq!(regs.sp(), 0x50);
     assert_eq!(regs.fp(), 0x70);
     assert_eq!(regs.lr(), 0x1234);
@@ -1084,7 +1096,7 @@ fn test_go_zdebug_frame() {
         &mut cache,
         &mut |addr| stack.get((addr / 8) as usize).cloned().ok_or(()),
     );
-    assert_eq!(res, Ok(Some(0x1234)));
+    assert_eq!(res, Ok(FrameAddress::from_return_address(0x1234)));
     assert_eq!(regs.sp(), 0x50);
     // assert_eq!(regs.fp(), 0x70); // Go debug_frame does not say how to restore fp
     assert_eq!(regs.lr(), 0x1234);
@@ -1096,7 +1108,7 @@ fn test_go_zdebug_frame() {
         &mut cache,
         &mut |addr| stack.get((addr / 8) as usize).cloned().ok_or(()),
     );
-    assert_eq!(res, Ok(Some(0x1234)));
+    assert_eq!(res, Ok(FrameAddress::from_return_address(0x1234)));
     assert_eq!(regs.sp(), 0x50);
     // assert_eq!(regs.fp(), 0x70);
     assert_eq!(regs.lr(), 0x1234);
@@ -1108,7 +1120,7 @@ fn test_go_zdebug_frame() {
         &mut cache,
         &mut |addr| stack.get((addr / 8) as usize).cloned().ok_or(()),
     );
-    assert_eq!(res, Ok(Some(0x1234)));
+    assert_eq!(res, Ok(FrameAddress::from_return_address(0x1234)));
     assert_eq!(regs.sp(), 0x50);
     // assert_eq!(regs.fp(), 0x70);
     assert_eq!(regs.lr(), 0x1234);

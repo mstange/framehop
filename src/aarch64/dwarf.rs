@@ -11,6 +11,7 @@ use crate::dwarf::{
     eval_cfa_rule, eval_register_rule, ConversionError, DwarfUnwindRegs, DwarfUnwinderError,
     DwarfUnwinding,
 };
+use crate::FrameAddress;
 
 impl DwarfUnwindRegs for UnwindRegsAarch64 {
     fn get(&self, register: Register) -> Option<u64> {
@@ -79,7 +80,9 @@ impl DwarfUnwinding for ArchAarch64 {
         regs.set_sp(cfa);
         regs.set_lr(lr);
 
-        Ok(UnwindResult::Uncacheable(lr))
+        Ok(UnwindResult::Uncacheable(
+            FrameAddress::from_return_address(lr),
+        ))
     }
 
     fn rule_if_uncovered_by_fde() -> Self::UnwindRule {

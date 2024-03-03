@@ -54,7 +54,7 @@ impl<D: Deref<Target = [u8]>, P: AllocationPolicy<D>> Unwinder for UnwinderAarch
         regs: &mut UnwindRegsAarch64,
         cache: &mut CacheAarch64<D, P>,
         read_stack: &mut F,
-    ) -> Result<Option<u64>, Error>
+    ) -> Result<Option<FrameAddress>, Error>
     where
         F: FnMut(u64) -> Result<u64, ()>,
     {

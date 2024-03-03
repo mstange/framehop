@@ -9,6 +9,7 @@ use crate::dwarf::{
     DwarfUnwinding,
 };
 use crate::unwind_result::UnwindResult;
+use crate::FrameAddress;
 
 impl DwarfUnwindRegs for UnwindRegsX86_64 {
     fn get(&self, register: Register) -> Option<u64> {
@@ -74,7 +75,9 @@ impl DwarfUnwinding for ArchX86_64 {
         regs.set_bp(new_bp);
         regs.set_sp(cfa);
 
-        Ok(UnwindResult::Uncacheable(return_address))
+        Ok(UnwindResult::Uncacheable(
+            FrameAddress::from_return_address(return_address),
+        ))
     }
 
     fn rule_if_uncovered_by_fde() -> Self::UnwindRule {
