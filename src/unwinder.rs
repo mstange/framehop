@@ -538,6 +538,7 @@ impl<
                 },
                 rel_lookup_address,
                 regs,
+                is_first_frame,
                 read_stack,
             )?,
             ModuleUnwindDataInternal::None => return Err(UnwinderError::NoModuleUnwindData),

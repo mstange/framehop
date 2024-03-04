@@ -97,6 +97,7 @@ impl PeUnwinding for ArchX86_64 {
         sections: PeSections<D>,
         address: u32,
         regs: &mut Self::UnwindRegs,
+        is_first_frame: bool,
         read_stack: &mut F,
     ) -> Result<UnwindResult<Self::UnwindRule>, PeUnwinderError>
     where
@@ -117,51 +118,53 @@ impl PeUnwinding for ArchX86_64 {
             UnwindInfo::parse(sections.unwind_info_memory_at_rva(unwind_info_address)?)
                 .ok_or(PeUnwinderError::UnwindInfoParseError)?;
 
-        // Check whether the address is in the function epilog. If so, we need to
-        // simulate the remaining epilog instructions (unwind codes don't account for
-        // unwinding from the epilog). We only need to check this for the first unwind info (if
-        // there are chained infos).
-        let bytes = (function.end_address.get() - address) as usize;
-        let instruction = &sections.text_memory_at_rva(address)?[..bytes];
-        if let Ok(epilog_instructions) =
-            FunctionEpilogInstruction::parse_sequence(instruction, unwind_info.frame_register())
-        {
-            // If the epilog is an optional AddSP followed by Pops, we can return a cache
-            // rule.
-            if let Some(rule) =
-                UnwindRuleX86_64::for_sequence_of_offset_or_pop(epilog_instructions.iter())
+        if is_first_frame {
+            // Check whether the address is in the function epilog. If so, we need to
+            // simulate the remaining epilog instructions (unwind codes don't account for
+            // unwinding from the epilog). We only need to check this for the first unwind info (if
+            // there are chained infos).
+            let bytes = (function.end_address.get() - address) as usize;
+            let instruction = &sections.text_memory_at_rva(address)?[..bytes];
+            if let Ok(epilog_instructions) =
+                FunctionEpilogInstruction::parse_sequence(instruction, unwind_info.frame_register())
             {
-                return Ok(UnwindResult::ExecRule(rule));
-            }
+                // If the epilog is an optional AddSP followed by Pops, we can return a cache
+                // rule.
+                if let Some(rule) =
+                    UnwindRuleX86_64::for_sequence_of_offset_or_pop(epilog_instructions.iter())
+                {
+                    return Ok(UnwindResult::ExecRule(rule));
+                }
 
-            for instruction in epilog_instructions.iter() {
-                match instruction {
-                    FunctionEpilogInstruction::AddSP(offset) => {
-                        let rsp = regs.get(Reg::RSP);
-                        regs.set(Reg::RSP, rsp + *offset as u64);
-                    }
-                    FunctionEpilogInstruction::AddSPFromFP(offset) => {
-                        let fp = unwind_info
-                            .frame_register()
-                            .expect("invalid fp register offset");
-                        let fp = convert_pe_register(fp);
-                        let fp = regs.get(fp);
-                        regs.set(Reg::RSP, fp + *offset as u64);
-                    }
-                    FunctionEpilogInstruction::Pop(reg) => {
-                        let rsp = regs.get(Reg::RSP);
-                        let val = read_stack_err(read_stack, rsp)?;
-                        regs.set(convert_pe_register(*reg), val);
-                        regs.set(Reg::RSP, rsp + 8);
+                for instruction in epilog_instructions.iter() {
+                    match instruction {
+                        FunctionEpilogInstruction::AddSP(offset) => {
+                            let rsp = regs.get(Reg::RSP);
+                            regs.set(Reg::RSP, rsp + *offset as u64);
+                        }
+                        FunctionEpilogInstruction::AddSPFromFP(offset) => {
+                            let fp = unwind_info
+                                .frame_register()
+                                .expect("invalid fp register offset");
+                            let fp = convert_pe_register(fp);
+                            let fp = regs.get(fp);
+                            regs.set(Reg::RSP, fp + *offset as u64);
+                        }
+                        FunctionEpilogInstruction::Pop(reg) => {
+                            let rsp = regs.get(Reg::RSP);
+                            let val = read_stack_err(read_stack, rsp)?;
+                            regs.set(convert_pe_register(*reg), val);
+                            regs.set(Reg::RSP, rsp + 8);
+                        }
                     }
                 }
+
+                let rsp = regs.get(Reg::RSP);
+                let ra = read_stack_err(read_stack, rsp)?;
+                regs.set(Reg::RSP, rsp + 8);
+
+                return Ok(UnwindResult::Uncacheable(ra));
             }
-
-            let rsp = regs.get(Reg::RSP);
-            let ra = read_stack_err(read_stack, rsp)?;
-            regs.set(Reg::RSP, rsp + 8);
-
-            return Ok(UnwindResult::Uncacheable(ra));
         }
 
         // Get all chained UnwindInfo and resolve errors when collecting.
