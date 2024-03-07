@@ -200,11 +200,7 @@ fn next_global_modules_generation() -> u16 {
     GLOBAL_MODULES_GENERATION.fetch_add(1, Ordering::Relaxed)
 }
 
-pub struct UnwinderInternal<
-    D: Deref<Target = [u8]>,
-    A: Arch + DwarfUnwinding + CompactUnwindInfoUnwinding + PeUnwinding + InstructionAnalysis,
-    P: AllocationPolicy<D>,
-> {
+pub struct UnwinderInternal<D, A, P> {
     /// sorted by avma_range.start
     modules: Vec<Module<D>>,
     /// Incremented every time modules is changed.
@@ -213,27 +209,28 @@ pub struct UnwinderInternal<
     _allocation_policy: PhantomData<P>,
 }
 
-impl<
-        D: Deref<Target = [u8]>,
-        A: Arch + DwarfUnwinding + CompactUnwindInfoUnwinding + PeUnwinding + InstructionAnalysis,
-        P: AllocationPolicy<D>,
-    > Default for UnwinderInternal<D, A, P>
-{
+impl<D, A, P> Default for UnwinderInternal<D, A, P> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<
-        D: Deref<Target = [u8]>,
-        A: Arch + DwarfUnwinding + CompactUnwindInfoUnwinding + PeUnwinding + InstructionAnalysis,
-        P: AllocationPolicy<D>,
-    > Clone for UnwinderInternal<D, A, P>
-{
+impl<D, A, P> Clone for UnwinderInternal<D, A, P> {
     fn clone(&self) -> Self {
         Self {
             modules: self.modules.clone(),
             modules_generation: self.modules_generation,
+            _arch: PhantomData,
+            _allocation_policy: PhantomData,
+        }
+    }
+}
+
+impl<D, A, P> UnwinderInternal<D, A, P> {
+    pub fn new() -> Self {
+        Self {
+            modules: Vec::new(),
+            modules_generation: next_global_modules_generation(),
             _arch: PhantomData,
             _allocation_policy: PhantomData,
         }
@@ -246,15 +243,6 @@ impl<
         P: AllocationPolicy<D>,
     > UnwinderInternal<D, A, P>
 {
-    pub fn new() -> Self {
-        Self {
-            modules: Vec::new(),
-            modules_generation: next_global_modules_generation(),
-            _arch: PhantomData,
-            _allocation_policy: PhantomData,
-        }
-    }
-
     pub fn add_module(&mut self, module: Module<D>) {
         let insertion_index = match self
             .modules
@@ -575,7 +563,7 @@ impl<
 ///    module, e.g. `Vec<u8>`. But it could also be a wrapper around mapped memory from
 ///    a file or a different process, for example. It just needs to provide a slice of
 ///    bytes via its `Deref` implementation.
-enum ModuleUnwindDataInternal<D: Deref<Target = [u8]>> {
+enum ModuleUnwindDataInternal<D> {
     /// Used on macOS, with mach-O binaries. Compact unwind info is in the `__unwind_info`
     /// section and is sometimes supplemented with DWARF CFI information in the `__eh_frame`
     /// section. `__stubs` and `__stub_helper` ranges are used by the unwinder.
@@ -713,7 +701,7 @@ impl<D: Deref<Target = [u8]>> ModuleUnwindDataInternal<D> {
 }
 
 // Manually derive Clone due to https://github.com/rust-lang/rust/issues/26925
-impl<D: Deref<Target = [u8]>> Clone for ModuleUnwindDataInternal<D> {
+impl<D> Clone for ModuleUnwindDataInternal<D> {
     fn clone(&self) -> Self {
         match self {
             Self::CompactUnwindInfoAndEhFrame {
@@ -791,12 +779,12 @@ impl<D: Deref<Target = [u8]>> Clone for ModuleUnwindDataInternal<D> {
 ///    module, e.g. `Vec<u8>`. But it could also be a wrapper around mapped memory from
 ///    a file or a different process, for example. It just needs to provide a slice of
 ///    bytes via its `Deref` implementation.
-struct TextByteData<D: Deref<Target = [u8]>> {
+struct TextByteData<D> {
     pub bytes: Arc<D>,
     pub svma_range: Range<u64>,
 }
 
-impl<D: Deref<Target = [u8]>> Clone for TextByteData<D> {
+impl<D> Clone for TextByteData<D> {
     fn clone(&self) -> Self {
         Self {
             bytes: self.bytes.clone(),
@@ -818,7 +806,7 @@ impl<D: Deref<Target = [u8]>> Clone for TextByteData<D> {
 ///    module, e.g. `Vec<u8>`. But it could also be a wrapper around mapped memory from
 ///    a file or a different process, for example. It just needs to provide a slice of
 ///    bytes via its `Deref` implementation.
-pub struct Module<D: Deref<Target = [u8]>> {
+pub struct Module<D> {
     /// The name or file path of the module. Unused, it's just there for easier debugging.
     #[allow(unused)]
     name: String,
@@ -1050,7 +1038,7 @@ impl<D: Deref<Target = [u8]>> Module<D> {
     }
 }
 
-impl<D: Deref<Target = [u8]>> Clone for Module<D> {
+impl<D> Clone for Module<D> {
     fn clone(&self) -> Self {
         Self {
             name: self.name.clone(),
