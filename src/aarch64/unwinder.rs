@@ -24,6 +24,12 @@ impl<D: Deref<Target = [u8]>, P: AllocationPolicy<D>> Default for UnwinderAarch6
     }
 }
 
+impl<D: Deref<Target = [u8]>, P: AllocationPolicy<D>> Clone for UnwinderAarch64<D, P> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+
 impl<D: Deref<Target = [u8]>, P: AllocationPolicy<D>> UnwinderAarch64<D, P> {
     /// Create an unwinder for a process.
     pub fn new() -> Self {

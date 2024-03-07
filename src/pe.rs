@@ -1,5 +1,5 @@
 use crate::{arch::Arch, unwind_result::UnwindResult};
-use std::ops::Range;
+use std::{ops::Range, sync::Arc};
 
 #[derive(thiserror::Error, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PeUnwinderError {
@@ -25,8 +25,18 @@ pub enum PeUnwinderError {
 ///    a file or a different process, for example. It just needs to provide a slice of
 ///    bytes via its `Deref` implementation.
 pub struct DataAtRvaRange<D> {
-    pub data: D,
+    pub data: Arc<D>,
     pub rva_range: Range<u32>,
+}
+
+// Manually derive Clone due to https://github.com/rust-lang/rust/issues/26925
+impl<D> Clone for DataAtRvaRange<D> {
+    fn clone(&self) -> Self {
+        Self {
+            data: self.data.clone(),
+            rva_range: self.rva_range.clone(),
+        }
+    }
 }
 
 pub struct PeSections<'a, D> {

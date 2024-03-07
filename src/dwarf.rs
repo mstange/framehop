@@ -216,6 +216,7 @@ pub enum DwarfCfiIndexError {
 
 /// A binary search table for eh_frame FDEs. We generate this whenever a module
 /// without eh_frame_hdr is added.
+#[derive(Clone)]
 pub struct DwarfCfiIndex {
     /// Contains the initial address for every FDE, relative to the base address.
     /// This vector is sorted so that it can be used for binary search.

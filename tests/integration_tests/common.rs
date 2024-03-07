@@ -1,4 +1,4 @@
-use std::{borrow::Cow, io::Read, ops::Range, path::Path};
+use std::{borrow::Cow, io::Read, ops::Range, path::Path, sync::Arc};
 
 use object::{Object, ObjectSection, ObjectSegment};
 
@@ -26,12 +26,12 @@ where
             Some(section.address()..section.address() + section.size())
         }
 
-        fn section_data(&mut self, name: &[u8]) -> Option<Vec<u8>> {
+        fn section_data(&mut self, name: &[u8]) -> Option<Arc<Vec<u8>>> {
             match self.0.section_by_name_bytes(name) {
-                Some(section) => section.data().ok().map(|data| data.to_owned()),
+                Some(section) => section.data().ok().map(|data| Arc::new(data.to_owned())),
                 None if name == b".debug_frame" => {
                     let section = self.0.section_by_name_bytes(b"__zdebug_frame")?;
-                    get_uncompressed_section_data(&section).map(|d| d.into_owned())
+                    get_uncompressed_section_data(&section).map(|d| Arc::new(d.into_owned()))
                 }
                 None => None,
             }
@@ -45,12 +45,12 @@ where
             Some(segment.address()..segment.address() + segment.size())
         }
 
-        fn segment_data(&mut self, name: &[u8]) -> Option<Vec<u8>> {
+        fn segment_data(&mut self, name: &[u8]) -> Option<Arc<Vec<u8>>> {
             let segment = self
                 .0
                 .segments()
                 .find(|s| s.name_bytes() == Ok(Some(name)))?;
-            segment.data().ok().map(|data| data.to_owned())
+            segment.data().ok().map(|data| Arc::new(data.to_owned()))
         }
     }
 
