@@ -13,7 +13,7 @@ repository = "https://github.com/mstange/framehop/"
 exclude = ["/.github", "/.vscode", "/tests", "/fixtures", "/big-fixtures"]
 
 [dependencies]
-gimli = "0.28.1"
+gimli = { git = "https://github.com/philipc/gimli", branch = "issue-701" }
 object = { version = "0.32", optional = true }
 thiserror = "1.0.56"
 macho-unwind-info = "0.4.0"

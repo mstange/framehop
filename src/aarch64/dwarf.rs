@@ -1,6 +1,5 @@
 use gimli::{
-    AArch64, CfaRule, Encoding, EvaluationStorage, Reader, Register, RegisterRule,
-    UnwindContextStorage, UnwindTableRow,
+    AArch64, CfaRule, Encoding, EvaluationStorage, Reader, ReaderOffset, Register, RegisterRule, UnwindContextStorage, UnwindSection, UnwindTableRow
 };
 
 use super::{arch::ArchAarch64, unwind_rule::UnwindRuleAarch64, unwindregs::UnwindRegsAarch64};
@@ -25,7 +24,8 @@ impl DwarfUnwindRegs for UnwindRegsAarch64 {
 
 impl DwarfUnwinding for ArchAarch64 {
     fn unwind_frame<F, R, S>(
-        unwind_info: &UnwindTableRow<R, S>,
+        section: &impl UnwindSection<R>,
+        unwind_info: &UnwindTableRow<R::Offset, S>,
         encoding: Encoding,
         regs: &mut Self::UnwindRegs,
         is_first_frame: bool,
@@ -34,7 +34,7 @@ impl DwarfUnwinding for ArchAarch64 {
     where
         F: FnMut(u64) -> Result<u64, ()>,
         R: Reader,
-        S: UnwindContextStorage<R> + EvaluationStorage<R>,
+        S: UnwindContextStorage<R::Offset> + EvaluationStorage<R>,
     {
         let cfa_rule = unwind_info.cfa();
         let fp_rule = unwind_info.register(AArch64::X29);
@@ -48,7 +48,7 @@ impl DwarfUnwinding for ArchAarch64 {
             }
         }
 
-        let cfa = eval_cfa_rule::<R, _, S>(cfa_rule, encoding, regs)
+        let cfa = eval_cfa_rule::<R, _, S>(section, cfa_rule, encoding, regs)
             .ok_or(DwarfUnwinderError::CouldNotRecoverCfa)?;
 
         let lr = regs.lr();
@@ -59,18 +59,18 @@ impl DwarfUnwinding for ArchAarch64 {
             if cfa <= sp {
                 return Err(DwarfUnwinderError::StackPointerMovedBackwards);
             }
-            let fp = eval_register_rule::<R, F, _, S>(fp_rule, cfa, encoding, fp, regs, read_stack)
+            let fp = eval_register_rule::<R, F, _, S>(section, fp_rule, cfa, encoding, fp, regs, read_stack)
                 .ok_or(DwarfUnwinderError::CouldNotRecoverFramePointer)?;
-            let lr = eval_register_rule::<R, F, _, S>(lr_rule, cfa, encoding, lr, regs, read_stack)
+            let lr = eval_register_rule::<R, F, _, S>(section, lr_rule, cfa, encoding, lr, regs, read_stack)
                 .ok_or(DwarfUnwinderError::CouldNotRecoverReturnAddress)?;
             (fp, lr)
         } else {
             // For the first frame, be more lenient when encountering errors.
             // TODO: Find evidence of what this gives us. I think on macOS the prologue often has Unknown register rules
             // and we only encounter prologues for the first frame.
-            let fp = eval_register_rule::<R, F, _, S>(fp_rule, cfa, encoding, fp, regs, read_stack)
+            let fp = eval_register_rule::<R, F, _, S>(section, fp_rule, cfa, encoding, fp, regs, read_stack)
                 .unwrap_or(fp);
-            let lr = eval_register_rule::<R, F, _, S>(lr_rule, cfa, encoding, lr, regs, read_stack)
+            let lr = eval_register_rule::<R, F, _, S>(section, lr_rule, cfa, encoding, lr, regs, read_stack)
                 .unwrap_or(lr);
             (fp, lr)
         };
@@ -87,8 +87,8 @@ impl DwarfUnwinding for ArchAarch64 {
     }
 }
 
-fn register_rule_to_cfa_offset<R: gimli::Reader>(
-    rule: &RegisterRule<R>,
+fn register_rule_to_cfa_offset<RO: ReaderOffset>(
+    rule: &RegisterRule<RO>,
 ) -> Result<Option<i64>, ConversionError> {
     match *rule {
         RegisterRule::Undefined | RegisterRule::SameValue => Ok(None),
@@ -97,10 +97,10 @@ fn register_rule_to_cfa_offset<R: gimli::Reader>(
     }
 }
 
-fn translate_into_unwind_rule<R: gimli::Reader>(
-    cfa_rule: &CfaRule<R>,
-    fp_rule: &RegisterRule<R>,
-    lr_rule: &RegisterRule<R>,
+fn translate_into_unwind_rule<RO: ReaderOffset>(
+    cfa_rule: &CfaRule<RO>,
+    fp_rule: &RegisterRule<RO>,
+    lr_rule: &RegisterRule<RO>,
 ) -> Result<UnwindRuleAarch64, ConversionError> {
     match cfa_rule {
         CfaRule::RegisterAndOffset { register, offset } => match *register {
