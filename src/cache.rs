@@ -11,7 +11,7 @@ pub use crate::rule_cache::CacheStats;
 /// A trait which lets you opt into allocation-free unwinding. The two implementations of
 /// this trait are [`MustNotAllocateDuringUnwind`] and [`MayAllocateDuringUnwind`].
 pub trait AllocationPolicy<D: Deref<Target = [u8]>> {
-    type GimliStorage: gimli::UnwindContextStorage<ArcDataReader<D>>
+    type GimliStorage: gimli::UnwindContextStorage<usize>
         + gimli::EvaluationStorage<ArcDataReader<D>>;
 }
 
@@ -29,9 +29,9 @@ pub struct MustNotAllocateDuringUnwind;
 #[doc(hidden)]
 pub struct StoreOnStack;
 
-impl<R: gimli::Reader> gimli::UnwindContextStorage<R> for StoreOnStack {
-    type Rules = [(gimli::Register, gimli::RegisterRule<R>); 192];
-    type Stack = [gimli::UnwindTableRow<R, Self>; 4];
+impl<RO: gimli::ReaderOffset> gimli::UnwindContextStorage<RO> for StoreOnStack {
+    type Rules = [(gimli::Register, gimli::RegisterRule<RO>); 192];
+    type Stack = [gimli::UnwindTableRow<RO, Self>; 4];
 }
 
 impl<R: gimli::Reader> gimli::EvaluationStorage<R> for StoreOnStack {
@@ -66,7 +66,7 @@ pub struct Cache<
     R: UnwindRule,
     P: AllocationPolicy<D> = MayAllocateDuringUnwind,
 > {
-    pub(crate) gimli_unwind_context: Box<gimli::UnwindContext<ArcDataReader<D>, P::GimliStorage>>,
+    pub(crate) gimli_unwind_context: Box<gimli::UnwindContext<usize, P::GimliStorage>>,
     pub(crate) rule_cache: RuleCache<R>,
 }
 

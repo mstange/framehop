@@ -1,6 +1,6 @@
 use gimli::{
-    CfaRule, Encoding, EvaluationStorage, Reader, Register, RegisterRule, UnwindContextStorage,
-    UnwindTableRow, X86_64,
+    CfaRule, Encoding, EvaluationStorage, Reader, ReaderOffset, Register, RegisterRule,
+    UnwindContextStorage, UnwindSection, UnwindTableRow, X86_64,
 };
 
 use super::{arch::ArchX86_64, unwind_rule::UnwindRuleX86_64, unwindregs::UnwindRegsX86_64};
@@ -23,7 +23,8 @@ impl DwarfUnwindRegs for UnwindRegsX86_64 {
 
 impl DwarfUnwinding for ArchX86_64 {
     fn unwind_frame<F, R, S>(
-        unwind_info: &UnwindTableRow<R, S>,
+        section: &impl UnwindSection<R>,
+        unwind_info: &UnwindTableRow<R::Offset, S>,
         encoding: Encoding,
         regs: &mut Self::UnwindRegs,
         is_first_frame: bool,
@@ -32,7 +33,7 @@ impl DwarfUnwinding for ArchX86_64 {
     where
         F: FnMut(u64) -> Result<u64, ()>,
         R: Reader,
-        S: UnwindContextStorage<R> + EvaluationStorage<R>,
+        S: UnwindContextStorage<R::Offset> + EvaluationStorage<R>,
     {
         let cfa_rule = unwind_info.cfa();
         let bp_rule = unwind_info.register(X86_64::RBP);
@@ -46,22 +47,25 @@ impl DwarfUnwinding for ArchX86_64 {
             }
         }
 
-        let cfa = eval_cfa_rule::<R, _, S>(cfa_rule, encoding, regs)
+        let cfa = eval_cfa_rule::<R, _, S>(section, cfa_rule, encoding, regs)
             .ok_or(DwarfUnwinderError::CouldNotRecoverCfa)?;
 
         let ip = regs.ip();
         let bp = regs.bp();
         let sp = regs.sp();
 
-        let new_bp = eval_register_rule::<R, F, _, S>(bp_rule, cfa, encoding, bp, regs, read_stack)
-            .unwrap_or(bp);
+        let new_bp =
+            eval_register_rule::<R, F, _, S>(section, bp_rule, cfa, encoding, bp, regs, read_stack)
+                .unwrap_or(bp);
 
-        let return_address =
-            match eval_register_rule::<R, F, _, S>(ra_rule, cfa, encoding, ip, regs, read_stack) {
-                Some(ra) => ra,
-                None => read_stack(cfa - 8)
-                    .map_err(|_| DwarfUnwinderError::CouldNotRecoverReturnAddress)?,
-            };
+        let return_address = match eval_register_rule::<R, F, _, S>(
+            section, ra_rule, cfa, encoding, ip, regs, read_stack,
+        ) {
+            Some(ra) => ra,
+            None => {
+                read_stack(cfa - 8).map_err(|_| DwarfUnwinderError::CouldNotRecoverReturnAddress)?
+            }
+        };
 
         if cfa == sp && return_address == ip {
             return Err(DwarfUnwinderError::DidNotAdvance);
@@ -82,8 +86,8 @@ impl DwarfUnwinding for ArchX86_64 {
     }
 }
 
-fn register_rule_to_cfa_offset<R: gimli::Reader>(
-    rule: &RegisterRule<R>,
+fn register_rule_to_cfa_offset<RO: ReaderOffset>(
+    rule: &RegisterRule<RO>,
 ) -> Result<Option<i64>, ConversionError> {
     match *rule {
         RegisterRule::Undefined | RegisterRule::SameValue => Ok(None),
@@ -92,10 +96,10 @@ fn register_rule_to_cfa_offset<R: gimli::Reader>(
     }
 }
 
-fn translate_into_unwind_rule<R: gimli::Reader>(
-    cfa_rule: &CfaRule<R>,
-    bp_rule: &RegisterRule<R>,
-    ra_rule: &RegisterRule<R>,
+fn translate_into_unwind_rule<RO: ReaderOffset>(
+    cfa_rule: &CfaRule<RO>,
+    bp_rule: &RegisterRule<RO>,
+    ra_rule: &RegisterRule<RO>,
 ) -> Result<UnwindRuleX86_64, ConversionError> {
     match ra_rule {
         RegisterRule::Undefined => {

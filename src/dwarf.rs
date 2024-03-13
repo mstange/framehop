@@ -58,7 +58,8 @@ pub enum ConversionError {
 
 pub trait DwarfUnwinding: Arch {
     fn unwind_frame<F, R, S>(
-        unwind_info: &UnwindTableRow<R, S>,
+        section: &impl UnwindSection<R>,
+        unwind_info: &UnwindTableRow<R::Offset, S>,
         encoding: Encoding,
         regs: &mut Self::UnwindRegs,
         is_first_frame: bool,
@@ -67,7 +68,7 @@ pub trait DwarfUnwinding: Arch {
     where
         F: FnMut(u64) -> Result<u64, ()>,
         R: Reader,
-        S: UnwindContextStorage<R> + EvaluationStorage<R>;
+        S: UnwindContextStorage<R::Offset> + EvaluationStorage<R>;
 
     fn rule_if_uncovered_by_fde() -> Self::UnwindRule;
 }
@@ -77,24 +78,33 @@ pub enum UnwindSectionType {
     DebugFrame,
 }
 
-pub struct DwarfUnwinder<'a, R: Reader, A: DwarfUnwinding + ?Sized, S: UnwindContextStorage<R>> {
+pub struct DwarfUnwinder<
+    'a,
+    R: Reader,
+    A: DwarfUnwinding + ?Sized,
+    S: UnwindContextStorage<R::Offset>,
+> {
     unwind_section_data: R,
     unwind_section_type: UnwindSectionType,
     eh_frame_hdr: Option<ParsedEhFrameHdr<EndianSlice<'a, R::Endian>>>,
-    unwind_context: &'a mut UnwindContext<R, S>,
+    unwind_context: &'a mut UnwindContext<R::Offset, S>,
     base_svma: u64,
     bases: BaseAddresses,
     _arch: PhantomData<A>,
 }
 
-impl<'a, R: Reader, A: DwarfUnwinding, S: UnwindContextStorage<R> + EvaluationStorage<R>>
-    DwarfUnwinder<'a, R, A, S>
+impl<
+        'a,
+        R: Reader,
+        A: DwarfUnwinding,
+        S: UnwindContextStorage<R::Offset> + EvaluationStorage<R>,
+    > DwarfUnwinder<'a, R, A, S>
 {
     pub fn new(
         unwind_section_data: R,
         unwind_section_type: UnwindSectionType,
         eh_frame_hdr_data: Option<&'a [u8]>,
-        unwind_context: &'a mut UnwindContext<R, S>,
+        unwind_context: &'a mut UnwindContext<R::Offset, S>,
         bases: BaseAddresses,
         base_svma: u64,
     ) -> Self {
@@ -141,31 +151,50 @@ impl<'a, R: Reader, A: DwarfUnwinding, S: UnwindContextStorage<R> + EvaluationSt
     {
         let lookup_svma = self.base_svma + rel_lookup_address as u64;
         let unwind_section_data = self.unwind_section_data.clone();
-        let unwind_info = match self.unwind_section_type {
+        match self.unwind_section_type {
             UnwindSectionType::EhFrame => {
                 let mut eh_frame = EhFrame::from(unwind_section_data);
                 eh_frame.set_address_size(8);
-                self.unwind_info_for_fde(eh_frame, lookup_svma, fde_offset)
+                let unwind_info = self.unwind_info_for_fde(&eh_frame, lookup_svma, fde_offset);
+                if let Err(DwarfUnwinderError::UnwindInfoForAddressFailed(_)) = unwind_info {
+                    return Ok(UnwindResult::ExecRule(A::rule_if_uncovered_by_fde()));
+                }
+                let (unwind_info, encoding) = unwind_info?;
+                A::unwind_frame::<F, R, S>(
+                    &eh_frame,
+                    unwind_info,
+                    encoding,
+                    regs,
+                    is_first_frame,
+                    read_stack,
+                )
             }
             UnwindSectionType::DebugFrame => {
                 let mut debug_frame = DebugFrame::from(unwind_section_data);
                 debug_frame.set_address_size(8);
-                self.unwind_info_for_fde(debug_frame, lookup_svma, fde_offset)
+                let unwind_info = self.unwind_info_for_fde(&debug_frame, lookup_svma, fde_offset);
+                if let Err(DwarfUnwinderError::UnwindInfoForAddressFailed(_)) = unwind_info {
+                    return Ok(UnwindResult::ExecRule(A::rule_if_uncovered_by_fde()));
+                }
+                let (unwind_info, encoding) = unwind_info?;
+                A::unwind_frame::<F, R, S>(
+                    &debug_frame,
+                    unwind_info,
+                    encoding,
+                    regs,
+                    is_first_frame,
+                    read_stack,
+                )
             }
-        };
-        if let Err(DwarfUnwinderError::UnwindInfoForAddressFailed(_)) = unwind_info {
-            return Ok(UnwindResult::ExecRule(A::rule_if_uncovered_by_fde()));
         }
-        let (unwind_info, encoding) = unwind_info?;
-        A::unwind_frame::<F, R, S>(unwind_info, encoding, regs, is_first_frame, read_stack)
     }
 
     fn unwind_info_for_fde<US: UnwindSection<R>>(
         &mut self,
-        unwind_section: US,
+        unwind_section: &US,
         lookup_svma: u64,
         fde_offset: u32,
-    ) -> Result<(&UnwindTableRow<R, S>, Encoding), DwarfUnwinderError> {
+    ) -> Result<(&UnwindTableRow<R::Offset, S>, Encoding), DwarfUnwinderError> {
         let fde = unwind_section.fde_from_offset(
             &self.bases,
             US::Offset::from(R::Offset::from_u32(fde_offset)),
@@ -175,7 +204,7 @@ impl<'a, R: Reader, A: DwarfUnwinding, S: UnwindContextStorage<R> + EvaluationSt
         let encoding = fde.cie().encoding();
         let unwind_info: &UnwindTableRow<_, _> = fde
             .unwind_info_for_address(
-                &unwind_section,
+                unwind_section,
                 &self.bases,
                 self.unwind_context,
                 lookup_svma,
@@ -325,7 +354,8 @@ pub trait DwarfUnwindRegs {
 }
 
 pub fn eval_cfa_rule<R: Reader, UR: DwarfUnwindRegs, S: EvaluationStorage<R>>(
-    rule: &CfaRule<R>,
+    section: &impl UnwindSection<R>,
+    rule: &CfaRule<R::Offset>,
     encoding: Encoding,
     regs: &UR,
 ) -> Option<u64> {
@@ -334,7 +364,10 @@ pub fn eval_cfa_rule<R: Reader, UR: DwarfUnwindRegs, S: EvaluationStorage<R>>(
             let val = regs.get(*register)?;
             u64::try_from(i64::try_from(val).ok()?.checked_add(*offset)?).ok()
         }
-        CfaRule::Expression(expr) => eval_expr::<R, UR, S>(expr.clone(), encoding, regs),
+        CfaRule::Expression(expr) => {
+            let expr = expr.get(section).ok()?;
+            eval_expr::<R, UR, S>(expr, encoding, regs)
+        }
     }
 }
 
@@ -364,7 +397,8 @@ fn eval_expr<R: Reader, UR: DwarfUnwindRegs, S: EvaluationStorage<R>>(
 }
 
 pub fn eval_register_rule<R, F, UR, S>(
-    rule: RegisterRule<R>,
+    section: &impl UnwindSection<R>,
+    rule: RegisterRule<R::Offset>,
     cfa: u64,
     encoding: Encoding,
     val: u64,
@@ -390,10 +424,14 @@ where
         }
         RegisterRule::Register(register) => regs.get(register),
         RegisterRule::Expression(expr) => {
+            let expr = expr.get(section).ok()?;
             let val = eval_expr::<R, UR, S>(expr, encoding, regs)?;
             read_stack(val).ok()
         }
-        RegisterRule::ValExpression(expr) => eval_expr::<R, UR, S>(expr, encoding, regs),
+        RegisterRule::ValExpression(expr) => {
+            let expr = expr.get(section).ok()?;
+            eval_expr::<R, UR, S>(expr, encoding, regs)
+        }
         RegisterRule::Architectural => {
             // Unimplemented
             // TODO: Find out what the architectural rules for x86_64 and for aarch64 are, if any.
