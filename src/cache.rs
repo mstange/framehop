@@ -1,18 +1,14 @@
-use core::ops::Deref;
-
 use alloc::boxed::Box;
 
 use crate::{rule_cache::RuleCache, unwind_rule::UnwindRule};
-
-use super::arcdata::ArcDataReader;
 
 pub use crate::rule_cache::CacheStats;
 
 /// A trait which lets you opt into allocation-free unwinding. The two implementations of
 /// this trait are [`MustNotAllocateDuringUnwind`] and [`MayAllocateDuringUnwind`].
-pub trait AllocationPolicy<D: Deref<Target = [u8]>> {
-    type GimliStorage: gimli::UnwindContextStorage<usize>
-        + gimli::EvaluationStorage<ArcDataReader<D>>;
+pub trait AllocationPolicy {
+    type GimliUnwindContextStorage<R: gimli::ReaderOffset>: gimli::UnwindContextStorage<R>;
+    type GimliEvaluationStorage<R: gimli::Reader>: gimli::EvaluationStorage<R>;
 }
 
 /// Require allocation-free unwinding. This is one of the two [`AllocationPolicy`]
@@ -40,8 +36,9 @@ impl<R: gimli::Reader> gimli::EvaluationStorage<R> for StoreOnStack {
     type Result = [gimli::Piece<R>; 1];
 }
 
-impl<D: Deref<Target = [u8]>> AllocationPolicy<D> for MustNotAllocateDuringUnwind {
-    type GimliStorage = StoreOnStack;
+impl AllocationPolicy for MustNotAllocateDuringUnwind {
+    type GimliUnwindContextStorage<R: gimli::ReaderOffset> = StoreOnStack;
+    type GimliEvaluationStorage<R: gimli::Reader> = StoreOnStack;
 }
 
 /// Allow allocation during unwinding. This is one of the two [`AllocationPolicy`]
@@ -50,8 +47,9 @@ impl<D: Deref<Target = [u8]>> AllocationPolicy<D> for MustNotAllocateDuringUnwin
 /// This is the preferred policy because it saves memory and places no limitations on
 /// DWARF CFI evaluation.
 pub struct MayAllocateDuringUnwind;
-impl<D: Deref<Target = [u8]>> AllocationPolicy<D> for MayAllocateDuringUnwind {
-    type GimliStorage = gimli::StoreOnHeap;
+impl AllocationPolicy for MayAllocateDuringUnwind {
+    type GimliUnwindContextStorage<R: gimli::ReaderOffset> = gimli::StoreOnHeap;
+    type GimliEvaluationStorage<R: gimli::Reader> = gimli::StoreOnHeap;
 }
 
 /// The unwinder cache. This needs to be created upfront before unwinding. During
@@ -61,16 +59,13 @@ impl<D: Deref<Target = [u8]>> AllocationPolicy<D> for MayAllocateDuringUnwind {
 ///
 /// The cache stores unwind rules for addresses it has seen before, and it stores the
 /// unwind context which gimli needs for DWARF CFI evaluation.
-pub struct Cache<
-    D: Deref<Target = [u8]>,
-    R: UnwindRule,
-    P: AllocationPolicy<D> = MayAllocateDuringUnwind,
-> {
-    pub(crate) gimli_unwind_context: Box<gimli::UnwindContext<usize, P::GimliStorage>>,
+pub struct Cache<R: UnwindRule, P: AllocationPolicy = MayAllocateDuringUnwind> {
+    pub(crate) gimli_unwind_context:
+        Box<gimli::UnwindContext<usize, P::GimliUnwindContextStorage<usize>>>,
     pub(crate) rule_cache: RuleCache<R>,
 }
 
-impl<D: Deref<Target = [u8]>, R: UnwindRule, P: AllocationPolicy<D>> Cache<D, R, P> {
+impl<R: UnwindRule, P: AllocationPolicy> Cache<R, P> {
     pub fn new() -> Self {
         Self {
             gimli_unwind_context: Box::new(gimli::UnwindContext::new_in()),
@@ -79,7 +74,7 @@ impl<D: Deref<Target = [u8]>, R: UnwindRule, P: AllocationPolicy<D>> Cache<D, R,
     }
 }
 
-impl<D: Deref<Target = [u8]>, R: UnwindRule, P: AllocationPolicy<D>> Default for Cache<D, R, P> {
+impl<R: UnwindRule, P: AllocationPolicy> Default for Cache<R, P> {
     fn default() -> Self {
         Self::new()
     }

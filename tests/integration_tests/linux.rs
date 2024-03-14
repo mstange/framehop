@@ -9,7 +9,7 @@ use super::common;
 
 #[test]
 fn test_plt_cfa_expr() {
-    let mut cache = CacheX86_64::<_>::new();
+    let mut cache = CacheX86_64::new();
     let mut unwinder = UnwinderX86_64::new();
     common::add_object(
         &mut unwinder,

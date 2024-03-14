@@ -1,16 +1,21 @@
-use core::ops::Deref;
-
 use super::unwind_rule::*;
 use crate::cache::*;
 
 /// The unwinder cache type for [`UnwinderAarch64`](super::UnwinderAarch64).
-pub struct CacheAarch64<D: Deref<Target = [u8]>, P: AllocationPolicy<D> = MayAllocateDuringUnwind>(
-    pub Cache<D, UnwindRuleAarch64, P>,
+pub struct CacheAarch64<P: AllocationPolicy = MayAllocateDuringUnwind>(
+    pub Cache<UnwindRuleAarch64, P>,
 );
 
-impl<D: Deref<Target = [u8]>, P: AllocationPolicy<D>> CacheAarch64<D, P> {
+impl CacheAarch64<MayAllocateDuringUnwind> {
     /// Create a new cache.
     pub fn new() -> Self {
+        Self(Cache::new())
+    }
+}
+
+impl<P: AllocationPolicy> CacheAarch64<P> {
+    /// Create a new cache.
+    pub fn new_in() -> Self {
         Self(Cache::new())
     }
 
@@ -20,8 +25,8 @@ impl<D: Deref<Target = [u8]>, P: AllocationPolicy<D>> CacheAarch64<D, P> {
     }
 }
 
-impl<D: Deref<Target = [u8]>, P: AllocationPolicy<D>> Default for CacheAarch64<D, P> {
+impl<P: AllocationPolicy> Default for CacheAarch64<P> {
     fn default() -> Self {
-        Self::new()
+        Self::new_in()
     }
 }

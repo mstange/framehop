@@ -22,9 +22,9 @@ impl DwarfUnwindRegs for UnwindRegsX86_64 {
 }
 
 impl DwarfUnwinding for ArchX86_64 {
-    fn unwind_frame<F, R, S>(
+    fn unwind_frame<F, R, UCS, ES>(
         section: &impl UnwindSection<R>,
-        unwind_info: &UnwindTableRow<R::Offset, S>,
+        unwind_info: &UnwindTableRow<R::Offset, UCS>,
         encoding: Encoding,
         regs: &mut Self::UnwindRegs,
         is_first_frame: bool,
@@ -33,7 +33,8 @@ impl DwarfUnwinding for ArchX86_64 {
     where
         F: FnMut(u64) -> Result<u64, ()>,
         R: Reader,
-        S: UnwindContextStorage<R::Offset> + EvaluationStorage<R>,
+        UCS: UnwindContextStorage<R::Offset>,
+        ES: EvaluationStorage<R>,
     {
         let cfa_rule = unwind_info.cfa();
         let bp_rule = unwind_info.register(X86_64::RBP);
@@ -47,18 +48,19 @@ impl DwarfUnwinding for ArchX86_64 {
             }
         }
 
-        let cfa = eval_cfa_rule::<R, _, S>(section, cfa_rule, encoding, regs)
+        let cfa = eval_cfa_rule::<R, _, ES>(section, cfa_rule, encoding, regs)
             .ok_or(DwarfUnwinderError::CouldNotRecoverCfa)?;
 
         let ip = regs.ip();
         let bp = regs.bp();
         let sp = regs.sp();
 
-        let new_bp =
-            eval_register_rule::<R, F, _, S>(section, bp_rule, cfa, encoding, bp, regs, read_stack)
-                .unwrap_or(bp);
+        let new_bp = eval_register_rule::<R, F, _, ES>(
+            section, bp_rule, cfa, encoding, bp, regs, read_stack,
+        )
+        .unwrap_or(bp);
 
-        let return_address = match eval_register_rule::<R, F, _, S>(
+        let return_address = match eval_register_rule::<R, F, _, ES>(
             section, ra_rule, cfa, encoding, ip, regs, read_stack,
         ) {
             Some(ra) => ra,

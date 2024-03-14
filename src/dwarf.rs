@@ -57,9 +57,9 @@ pub enum ConversionError {
 }
 
 pub trait DwarfUnwinding: Arch {
-    fn unwind_frame<F, R, S>(
+    fn unwind_frame<F, R, UCS, ES>(
         section: &impl UnwindSection<R>,
-        unwind_info: &UnwindTableRow<R::Offset, S>,
+        unwind_info: &UnwindTableRow<R::Offset, UCS>,
         encoding: Encoding,
         regs: &mut Self::UnwindRegs,
         is_first_frame: bool,
@@ -68,7 +68,8 @@ pub trait DwarfUnwinding: Arch {
     where
         F: FnMut(u64) -> Result<u64, ()>,
         R: Reader,
-        S: UnwindContextStorage<R::Offset> + EvaluationStorage<R>;
+        UCS: UnwindContextStorage<R::Offset>,
+        ES: EvaluationStorage<R>;
 
     fn rule_if_uncovered_by_fde() -> Self::UnwindRule;
 }
@@ -82,29 +83,25 @@ pub struct DwarfUnwinder<
     'a,
     R: Reader,
     A: DwarfUnwinding + ?Sized,
-    S: UnwindContextStorage<R::Offset>,
+    UCS: UnwindContextStorage<R::Offset>,
 > {
     unwind_section_data: R,
     unwind_section_type: UnwindSectionType,
     eh_frame_hdr: Option<ParsedEhFrameHdr<EndianSlice<'a, R::Endian>>>,
-    unwind_context: &'a mut UnwindContext<R::Offset, S>,
+    unwind_context: &'a mut UnwindContext<R::Offset, UCS>,
     base_svma: u64,
     bases: BaseAddresses,
     _arch: PhantomData<A>,
 }
 
-impl<
-        'a,
-        R: Reader,
-        A: DwarfUnwinding,
-        S: UnwindContextStorage<R::Offset> + EvaluationStorage<R>,
-    > DwarfUnwinder<'a, R, A, S>
+impl<'a, R: Reader, A: DwarfUnwinding, UCS: UnwindContextStorage<R::Offset>>
+    DwarfUnwinder<'a, R, A, UCS>
 {
     pub fn new(
         unwind_section_data: R,
         unwind_section_type: UnwindSectionType,
         eh_frame_hdr_data: Option<&'a [u8]>,
-        unwind_context: &'a mut UnwindContext<R::Offset, S>,
+        unwind_context: &'a mut UnwindContext<R::Offset, UCS>,
         bases: BaseAddresses,
         base_svma: u64,
     ) -> Self {
@@ -138,7 +135,7 @@ impl<
         fde_offset.0.into_u64().try_into().ok()
     }
 
-    pub fn unwind_frame_with_fde<F>(
+    pub fn unwind_frame_with_fde<F, ES>(
         &mut self,
         regs: &mut A::UnwindRegs,
         is_first_frame: bool,
@@ -148,6 +145,7 @@ impl<
     ) -> Result<UnwindResult<A::UnwindRule>, DwarfUnwinderError>
     where
         F: FnMut(u64) -> Result<u64, ()>,
+        ES: EvaluationStorage<R>,
     {
         let lookup_svma = self.base_svma + rel_lookup_address as u64;
         let unwind_section_data = self.unwind_section_data.clone();
@@ -160,7 +158,7 @@ impl<
                     return Ok(UnwindResult::ExecRule(A::rule_if_uncovered_by_fde()));
                 }
                 let (unwind_info, encoding) = unwind_info?;
-                A::unwind_frame::<F, R, S>(
+                A::unwind_frame::<F, R, UCS, ES>(
                     &eh_frame,
                     unwind_info,
                     encoding,
@@ -177,7 +175,7 @@ impl<
                     return Ok(UnwindResult::ExecRule(A::rule_if_uncovered_by_fde()));
                 }
                 let (unwind_info, encoding) = unwind_info?;
-                A::unwind_frame::<F, R, S>(
+                A::unwind_frame::<F, R, UCS, ES>(
                     &debug_frame,
                     unwind_info,
                     encoding,
@@ -194,7 +192,7 @@ impl<
         unwind_section: &US,
         lookup_svma: u64,
         fde_offset: u32,
-    ) -> Result<(&UnwindTableRow<R::Offset, S>, Encoding), DwarfUnwinderError> {
+    ) -> Result<(&UnwindTableRow<R::Offset, UCS>, Encoding), DwarfUnwinderError> {
         let fde = unwind_section.fde_from_offset(
             &self.bases,
             US::Offset::from(R::Offset::from_u32(fde_offset)),

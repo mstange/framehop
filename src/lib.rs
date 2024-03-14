@@ -116,7 +116,6 @@
 extern crate alloc;
 
 mod add_signed;
-mod arcdata;
 mod arch;
 mod cache;
 mod code_address;
@@ -148,7 +147,7 @@ pub use unwinder::{
 
 /// The unwinder cache for the native CPU architecture.
 #[cfg(target_arch = "aarch64")]
-pub type CacheNative<D, P> = aarch64::CacheAarch64<D, P>;
+pub type CacheNative<P> = aarch64::CacheAarch64<P>;
 /// The unwind registers type for the native CPU architecture.
 #[cfg(target_arch = "aarch64")]
 pub type UnwindRegsNative = aarch64::UnwindRegsAarch64;
@@ -158,7 +157,7 @@ pub type UnwinderNative<D, P> = aarch64::UnwinderAarch64<D, P>;
 
 /// The unwinder cache for the native CPU architecture.
 #[cfg(target_arch = "x86_64")]
-pub type CacheNative<D, P> = x86_64::CacheX86_64<D, P>;
+pub type CacheNative<P> = x86_64::CacheX86_64<P>;
 /// The unwind registers type for the native CPU architecture.
 #[cfg(target_arch = "x86_64")]
 pub type UnwindRegsNative = x86_64::UnwindRegsX86_64;
