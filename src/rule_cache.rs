@@ -1,20 +1,22 @@
 use crate::unwind_rule::UnwindRule;
 
+const CACHE_ENTRY_COUNT: usize = 509;
+
 pub struct RuleCache<R: UnwindRule> {
-    entries: Box<[Option<CacheEntry<R>>; 509]>,
+    entries: Box<[Option<CacheEntry<R>>; CACHE_ENTRY_COUNT]>,
     stats: CacheStats,
 }
 
 impl<R: UnwindRule> RuleCache<R> {
     pub fn new() -> Self {
         Self {
-            entries: Box::new([None; 509]),
+            entries: Box::new([None; CACHE_ENTRY_COUNT]),
             stats: CacheStats::new(),
         }
     }
 
     pub fn lookup(&mut self, address: u64, modules_generation: u16) -> CacheResult<R> {
-        let slot = (address % 509) as u16;
+        let slot = (address % (CACHE_ENTRY_COUNT as u64)) as u16;
         match &self.entries[slot as usize] {
             None => {
                 self.stats.miss_empty_slot_count += 1;
@@ -68,6 +70,11 @@ pub struct CacheHandle {
     address: u64,
     modules_generation: u16,
 }
+
+const _: () = assert!(
+    CACHE_ENTRY_COUNT as u64 <= u16::MAX as u64,
+    "u16 should be sufficient to store the cache slot index"
+);
 
 #[derive(Clone, Copy, Debug)]
 pub struct CacheEntry<R: UnwindRule> {
