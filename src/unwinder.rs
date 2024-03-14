@@ -1,5 +1,4 @@
 use alloc::string::String;
-use alloc::sync::Arc;
 use alloc::vec::Vec;
 use fallible_iterator::FallibleIterator;
 use gimli::{EndianSlice, LittleEndian};
@@ -438,19 +437,16 @@ impl<D: Deref<Target = [u8]>, A: Unwinding, P: AllocationPolicy> UnwinderInterna
                 match unwind_result {
                     CuiUnwindResult::ExecRule(rule) => UnwindResult::ExecRule(rule),
                     CuiUnwindResult::NeedDwarf(fde_offset) => {
-                        let eh_frame_data = match eh_frame {
-                            Some(data) => &***data,
-                            None => return Err(UnwinderError::NoDwarfData),
-                        };
-                        let mut dwarf_unwinder =
-                            DwarfUnwinder::<_, A, P::GimliUnwindContextStorage<_>>::new(
-                                EndianSlice::new(eh_frame_data, LittleEndian),
-                                UnwindSectionType::EhFrame,
-                                None,
-                                &mut cache.gimli_unwind_context,
-                                base_addresses.clone(),
-                                module.base_svma,
-                            );
+                        let eh_frame_data =
+                            eh_frame.as_deref().ok_or(UnwinderError::NoDwarfData)?;
+                        let mut dwarf_unwinder = DwarfUnwinder::<_, A, _>::new(
+                            EndianSlice::new(eh_frame_data, LittleEndian),
+                            UnwindSectionType::EhFrame,
+                            None,
+                            &mut cache.gimli_unwind_context,
+                            base_addresses.clone(),
+                            module.base_svma,
+                        );
                         dwarf_unwinder.unwind_frame_with_fde::<_, P::GimliEvaluationStorage<_>>(
                             regs,
                             is_first_frame,
@@ -467,15 +463,14 @@ impl<D: Deref<Target = [u8]>, A: Unwinding, P: AllocationPolicy> UnwinderInterna
                 base_addresses,
             } => {
                 let eh_frame_hdr_data = &eh_frame_hdr[..];
-                let mut dwarf_unwinder =
-                    DwarfUnwinder::<_, A, P::GimliUnwindContextStorage<_>>::new(
-                        EndianSlice::new(eh_frame, LittleEndian),
-                        UnwindSectionType::EhFrame,
-                        Some(eh_frame_hdr_data),
-                        &mut cache.gimli_unwind_context,
-                        base_addresses.clone(),
-                        module.base_svma,
-                    );
+                let mut dwarf_unwinder = DwarfUnwinder::<_, A, _>::new(
+                    EndianSlice::new(eh_frame, LittleEndian),
+                    UnwindSectionType::EhFrame,
+                    Some(eh_frame_hdr_data),
+                    &mut cache.gimli_unwind_context,
+                    base_addresses.clone(),
+                    module.base_svma,
+                );
                 let fde_offset = dwarf_unwinder
                     .get_fde_offset_for_relative_address(rel_lookup_address)
                     .ok_or(UnwinderError::EhFrameHdrCouldNotFindAddress)?;
@@ -492,15 +487,14 @@ impl<D: Deref<Target = [u8]>, A: Unwinding, P: AllocationPolicy> UnwinderInterna
                 eh_frame,
                 base_addresses,
             } => {
-                let mut dwarf_unwinder =
-                    DwarfUnwinder::<_, A, P::GimliUnwindContextStorage<_>>::new(
-                        EndianSlice::new(eh_frame, LittleEndian),
-                        UnwindSectionType::EhFrame,
-                        None,
-                        &mut cache.gimli_unwind_context,
-                        base_addresses.clone(),
-                        module.base_svma,
-                    );
+                let mut dwarf_unwinder = DwarfUnwinder::<_, A, _>::new(
+                    EndianSlice::new(eh_frame, LittleEndian),
+                    UnwindSectionType::EhFrame,
+                    None,
+                    &mut cache.gimli_unwind_context,
+                    base_addresses.clone(),
+                    module.base_svma,
+                );
                 let fde_offset = index
                     .fde_offset_for_relative_address(rel_lookup_address)
                     .ok_or(UnwinderError::DwarfCfiIndexCouldNotFindAddress)?;
@@ -517,15 +511,14 @@ impl<D: Deref<Target = [u8]>, A: Unwinding, P: AllocationPolicy> UnwinderInterna
                 debug_frame,
                 base_addresses,
             } => {
-                let mut dwarf_unwinder =
-                    DwarfUnwinder::<_, A, P::GimliUnwindContextStorage<_>>::new(
-                        EndianSlice::new(debug_frame, LittleEndian),
-                        UnwindSectionType::DebugFrame,
-                        None,
-                        &mut cache.gimli_unwind_context,
-                        base_addresses.clone(),
-                        module.base_svma,
-                    );
+                let mut dwarf_unwinder = DwarfUnwinder::<_, A, _>::new(
+                    EndianSlice::new(debug_frame, LittleEndian),
+                    UnwindSectionType::DebugFrame,
+                    None,
+                    &mut cache.gimli_unwind_context,
+                    base_addresses.clone(),
+                    module.base_svma,
+                );
                 let fde_offset = index
                     .fde_offset_for_relative_address(rel_lookup_address)
                     .ok_or(UnwinderError::DwarfCfiIndexCouldNotFindAddress)?;
@@ -580,7 +573,7 @@ enum ModuleUnwindDataInternal<D: Deref<Target = [u8]>> {
     #[cfg(feature = "macho")]
     CompactUnwindInfoAndEhFrame {
         unwind_info: D,
-        eh_frame: Option<Arc<D>>,
+        eh_frame: Option<D>,
         stubs_svma: Option<Range<u64>>,
         stub_helper_svma: Option<Range<u64>>,
         base_addresses: crate::dwarf::BaseAddresses,
@@ -590,7 +583,7 @@ enum ModuleUnwindDataInternal<D: Deref<Target = [u8]>> {
     /// sections. Contains an index and DWARF CFI.
     EhFrameHdrAndEhFrame {
         eh_frame_hdr: D,
-        eh_frame: Arc<D>,
+        eh_frame: D,
         base_addresses: crate::dwarf::BaseAddresses,
     },
     /// Used with ELF binaries (Linux and friends), in the `.eh_frame` section. Contains
@@ -598,7 +591,7 @@ enum ModuleUnwindDataInternal<D: Deref<Target = [u8]>> {
     /// data type is added.
     DwarfCfiIndexAndEhFrame {
         index: DwarfCfiIndex,
-        eh_frame: Arc<D>,
+        eh_frame: D,
         base_addresses: crate::dwarf::BaseAddresses,
     },
     /// Used with ELF binaries (Linux and friends), in the `.debug_frame` section. Contains
@@ -606,7 +599,7 @@ enum ModuleUnwindDataInternal<D: Deref<Target = [u8]>> {
     /// data type is added.
     DwarfCfiIndexAndDebugFrame {
         index: DwarfCfiIndex,
-        debug_frame: Arc<D>,
+        debug_frame: D,
         base_addresses: crate::dwarf::BaseAddresses,
     },
     /// Used with PE binaries (Windows).
@@ -652,7 +645,7 @@ impl<D: Deref<Target = [u8]>> ModuleUnwindDataInternal<D> {
             };
             return ModuleUnwindDataInternal::CompactUnwindInfoAndEhFrame {
                 unwind_info,
-                eh_frame: eh_frame.map(Arc::new),
+                eh_frame,
                 stubs_svma: stubs,
                 stub_helper_svma: stub_helper,
                 base_addresses: base_addresses_for_sections(section_info),
@@ -690,14 +683,14 @@ impl<D: Deref<Target = [u8]>> ModuleUnwindDataInternal<D> {
             {
                 ModuleUnwindDataInternal::EhFrameHdrAndEhFrame {
                     eh_frame_hdr,
-                    eh_frame: Arc::new(eh_frame),
+                    eh_frame,
                     base_addresses: base_addresses_for_sections(section_info),
                 }
             } else {
                 match DwarfCfiIndex::try_new_eh_frame(&eh_frame, section_info) {
                     Ok(index) => ModuleUnwindDataInternal::DwarfCfiIndexAndEhFrame {
                         index,
-                        eh_frame: Arc::new(eh_frame),
+                        eh_frame,
                         base_addresses: base_addresses_for_sections(section_info),
                     },
                     Err(_) => ModuleUnwindDataInternal::None,
@@ -707,7 +700,7 @@ impl<D: Deref<Target = [u8]>> ModuleUnwindDataInternal<D> {
             match DwarfCfiIndex::try_new_debug_frame(&debug_frame, section_info) {
                 Ok(index) => ModuleUnwindDataInternal::DwarfCfiIndexAndDebugFrame {
                     index,
-                    debug_frame: Arc::new(debug_frame),
+                    debug_frame,
                     base_addresses: base_addresses_for_sections(section_info),
                 },
                 Err(_) => ModuleUnwindDataInternal::None,
