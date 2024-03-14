@@ -77,7 +77,7 @@ const _: () = assert!(
 );
 
 #[derive(Clone, Copy, Debug)]
-pub struct CacheEntry<R: UnwindRule> {
+struct CacheEntry<R: UnwindRule> {
     address: u64,
     modules_generation: u16,
     unwind_rule: R,
