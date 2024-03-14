@@ -31,7 +31,14 @@ pub enum UnwindRuleX86_64 {
     ///
     /// The registers are stored in a separate compressed ordering to facilitate restoring register
     /// values if desired. If not for this we could simply store the total offset.
-    OffsetSpAndPopRegisters(UnwindRuleOffsetSpAndPopRegisters),
+    OffsetSpAndPopRegisters {
+        /// The additional stack pointer offset to undo before popping the registers, divided by 8 bytes.
+        sp_offset_by_8: u16,
+        /// The number of registers to pop from the stack.
+        register_count: u8,
+        /// An encoded ordering of the callee-save registers to pop from the stack, see register_ordering.
+        encoded_registers_to_pop: u16,
+    },
 }
 
 pub enum OffsetOrPop {
@@ -69,37 +76,13 @@ impl UnwindRuleX86_64 {
         if regs.is_empty() && sp_offset_by_8 == 0 {
             Some(Self::JustReturn)
         } else {
-            let rule = UnwindRuleOffsetSpAndPopRegisters::try_new(sp_offset_by_8, &regs)?;
-            Some(Self::OffsetSpAndPopRegisters(rule))
+            let (register_count, encoded_registers_to_pop) = register_ordering::encode(&regs)?;
+            Some(Self::OffsetSpAndPopRegisters {
+                sp_offset_by_8,
+                register_count,
+                encoded_registers_to_pop,
+            })
         }
-    }
-}
-
-#[derive(Default, Clone, Copy, Debug, PartialEq, Eq)]
-pub struct UnwindRuleOffsetSpAndPopRegisters {
-    /// The additional stack pointer offset to undo before popping the registers, divided by 8 bytes.
-    pub sp_offset_by_8: u16,
-    /// An encoded ordering of the callee-save registers to pop from the stack, see register_ordering.
-    pub encoded_registers_to_pop: u16,
-}
-
-impl UnwindRuleOffsetSpAndPopRegisters {
-    pub fn try_new(sp_offset_by_8: u16, registers_to_pop: &[Reg]) -> Option<Self> {
-        let encoded_registers_to_pop = register_ordering::encode(registers_to_pop)?;
-        Some(Self {
-            sp_offset_by_8,
-            encoded_registers_to_pop,
-        })
-    }
-
-    /// Return the initial stack pointer offset, in bytes.
-    pub fn sp_offset(&self) -> u64 {
-        self.sp_offset_by_8 as u64 * 8
-    }
-
-    /// Return the ordered sequence of registers to pop.
-    pub fn registers_to_pop(&self) -> ArrayVec<Reg, 8> {
-        register_ordering::decode(self.encoded_registers_to_pop)
     }
 }
 
@@ -236,12 +219,16 @@ impl UnwindRule for UnwindRuleX86_64 {
 
                 (new_sp, new_bp)
             }
-            UnwindRuleX86_64::OffsetSpAndPopRegisters(r) => {
+            UnwindRuleX86_64::OffsetSpAndPopRegisters {
+                sp_offset_by_8,
+                register_count,
+                encoded_registers_to_pop,
+            } => {
                 let sp = regs.sp();
                 let mut sp = sp
-                    .checked_add(r.sp_offset())
+                    .checked_add(sp_offset_by_8 as u64 * 8)
                     .ok_or(Error::IntegerOverflow)?;
-                for reg in r.registers_to_pop() {
+                for reg in register_ordering::decode(register_count, encoded_registers_to_pop) {
                     let value = read_stack(sp).map_err(|_| Error::CouldNotReadStack(sp))?;
                     sp = sp.checked_add(8).ok_or(Error::IntegerOverflow)?;
                     regs.set(reg, value);
