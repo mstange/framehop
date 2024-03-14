@@ -15,26 +15,26 @@ use crate::FrameAddress;
 ///
 ///  - `D`: The type for unwind section data in the modules. See [`Module`].
 /// -  `P`: The [`AllocationPolicy`].
-pub struct UnwinderX86_64<D: Deref<Target = [u8]>, P: AllocationPolicy<D> = MayAllocateDuringUnwind>(
+pub struct UnwinderX86_64<D: Deref<Target = [u8]>, P: AllocationPolicy = MayAllocateDuringUnwind>(
     UnwinderInternal<D, ArchX86_64, P>,
 );
 
-impl<D: Deref<Target = [u8]>, P: AllocationPolicy<D>> Default for UnwinderX86_64<D, P> {
+impl<D: Deref<Target = [u8]>, P: AllocationPolicy> Default for UnwinderX86_64<D, P> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<D: Deref<Target = [u8]>, P: AllocationPolicy<D>> UnwinderX86_64<D, P> {
+impl<D: Deref<Target = [u8]>, P: AllocationPolicy> UnwinderX86_64<D, P> {
     /// Create an unwinder for a process.
     pub fn new() -> Self {
         Self(UnwinderInternal::new())
     }
 }
 
-impl<D: Deref<Target = [u8]>, P: AllocationPolicy<D>> Unwinder for UnwinderX86_64<D, P> {
+impl<D: Deref<Target = [u8]>, P: AllocationPolicy> Unwinder for UnwinderX86_64<D, P> {
     type UnwindRegs = UnwindRegsX86_64;
-    type Cache = CacheX86_64<D, P>;
+    type Cache = CacheX86_64<P>;
     type Module = Module<D>;
 
     fn add_module(&mut self, module: Module<D>) {
@@ -53,7 +53,7 @@ impl<D: Deref<Target = [u8]>, P: AllocationPolicy<D>> Unwinder for UnwinderX86_6
         &self,
         address: FrameAddress,
         regs: &mut UnwindRegsX86_64,
-        cache: &mut CacheX86_64<D, P>,
+        cache: &mut CacheX86_64<P>,
         read_stack: &mut F,
     ) -> Result<Option<u64>, Error>
     where

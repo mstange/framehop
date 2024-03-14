@@ -1,7 +1,6 @@
 use fallible_iterator::FallibleIterator;
-use gimli::{EndianReader, LittleEndian};
+use gimli::{EndianSlice, LittleEndian};
 
-use crate::arcdata::ArcData;
 use crate::arch::Arch;
 use crate::cache::{AllocationPolicy, Cache};
 use crate::dwarf::{DwarfCfiIndex, DwarfUnwinder, DwarfUnwinding, UnwindSectionType};
@@ -203,7 +202,7 @@ fn next_global_modules_generation() -> u16 {
 pub struct UnwinderInternal<
     D: Deref<Target = [u8]>,
     A: Arch + DwarfUnwinding + CompactUnwindInfoUnwinding + PeUnwinding + InstructionAnalysis,
-    P: AllocationPolicy<D>,
+    P: AllocationPolicy,
 > {
     /// sorted by avma_range.start
     modules: Vec<Module<D>>,
@@ -216,7 +215,7 @@ pub struct UnwinderInternal<
 impl<
         D: Deref<Target = [u8]>,
         A: Arch + DwarfUnwinding + CompactUnwindInfoUnwinding + PeUnwinding + InstructionAnalysis,
-        P: AllocationPolicy<D>,
+        P: AllocationPolicy,
     > Default for UnwinderInternal<D, A, P>
 {
     fn default() -> Self {
@@ -227,7 +226,7 @@ impl<
 impl<
         D: Deref<Target = [u8]>,
         A: Arch + DwarfUnwinding + CompactUnwindInfoUnwinding + PeUnwinding + InstructionAnalysis,
-        P: AllocationPolicy<D>,
+        P: AllocationPolicy,
     > UnwinderInternal<D, A, P>
 {
     pub fn new() -> Self {
@@ -305,7 +304,7 @@ impl<
         &self,
         address: FrameAddress,
         regs: &mut A::UnwindRegs,
-        cache: &mut Cache<D, A::UnwindRule, P>,
+        cache: &mut Cache<A::UnwindRule, P>,
         read_stack: &mut F,
         callback: G,
     ) -> Result<Option<u64>, Error>
@@ -316,7 +315,7 @@ impl<
             FrameAddress,
             u32,
             &mut A::UnwindRegs,
-            &mut Cache<D, A::UnwindRule, P>,
+            &mut Cache<A::UnwindRule, P>,
             &mut F,
         ) -> Result<UnwindResult<A::UnwindRule>, UnwinderError>,
     {
@@ -363,7 +362,7 @@ impl<
         &self,
         address: FrameAddress,
         regs: &mut A::UnwindRegs,
-        cache: &mut Cache<D, A::UnwindRule, P>,
+        cache: &mut Cache<A::UnwindRule, P>,
         read_stack: &mut F,
     ) -> Result<Option<u64>, Error>
     where
@@ -377,7 +376,7 @@ impl<
         address: FrameAddress,
         rel_lookup_address: u32,
         regs: &mut A::UnwindRegs,
-        cache: &mut Cache<D, A::UnwindRule, P>,
+        cache: &mut Cache<A::UnwindRule, P>,
         read_stack: &mut F,
     ) -> Result<UnwindResult<A::UnwindRule>, UnwinderError>
     where
@@ -427,18 +426,19 @@ impl<
                     CuiUnwindResult::ExecRule(rule) => UnwindResult::ExecRule(rule),
                     CuiUnwindResult::NeedDwarf(fde_offset) => {
                         let eh_frame_data = match eh_frame {
-                            Some(data) => ArcData(data.clone()),
+                            Some(data) => &***data,
                             None => return Err(UnwinderError::NoDwarfData),
                         };
-                        let mut dwarf_unwinder = DwarfUnwinder::<_, A, P::GimliStorage>::new(
-                            EndianReader::new(eh_frame_data, LittleEndian),
-                            UnwindSectionType::EhFrame,
-                            None,
-                            &mut cache.gimli_unwind_context,
-                            base_addresses.clone(),
-                            module.base_svma,
-                        );
-                        dwarf_unwinder.unwind_frame_with_fde(
+                        let mut dwarf_unwinder =
+                            DwarfUnwinder::<_, A, P::GimliUnwindContextStorage<_>>::new(
+                                EndianSlice::new(eh_frame_data, LittleEndian),
+                                UnwindSectionType::EhFrame,
+                                None,
+                                &mut cache.gimli_unwind_context,
+                                base_addresses.clone(),
+                                module.base_svma,
+                            );
+                        dwarf_unwinder.unwind_frame_with_fde::<_, P::GimliEvaluationStorage<_>>(
                             regs,
                             is_first_frame,
                             rel_lookup_address,
@@ -454,19 +454,19 @@ impl<
                 base_addresses,
             } => {
                 let eh_frame_hdr_data = &eh_frame_hdr[..];
-                let eh_frame_data = ArcData(eh_frame.clone());
-                let mut dwarf_unwinder = DwarfUnwinder::<_, A, P::GimliStorage>::new(
-                    EndianReader::new(eh_frame_data, LittleEndian),
-                    UnwindSectionType::EhFrame,
-                    Some(eh_frame_hdr_data),
-                    &mut cache.gimli_unwind_context,
-                    base_addresses.clone(),
-                    module.base_svma,
-                );
+                let mut dwarf_unwinder =
+                    DwarfUnwinder::<_, A, P::GimliUnwindContextStorage<_>>::new(
+                        EndianSlice::new(eh_frame, LittleEndian),
+                        UnwindSectionType::EhFrame,
+                        Some(eh_frame_hdr_data),
+                        &mut cache.gimli_unwind_context,
+                        base_addresses.clone(),
+                        module.base_svma,
+                    );
                 let fde_offset = dwarf_unwinder
                     .get_fde_offset_for_relative_address(rel_lookup_address)
                     .ok_or(UnwinderError::EhFrameHdrCouldNotFindAddress)?;
-                dwarf_unwinder.unwind_frame_with_fde(
+                dwarf_unwinder.unwind_frame_with_fde::<_, P::GimliEvaluationStorage<_>>(
                     regs,
                     is_first_frame,
                     rel_lookup_address,
@@ -479,19 +479,19 @@ impl<
                 eh_frame,
                 base_addresses,
             } => {
-                let eh_frame_data = ArcData(eh_frame.clone());
-                let mut dwarf_unwinder = DwarfUnwinder::<_, A, P::GimliStorage>::new(
-                    EndianReader::new(eh_frame_data, LittleEndian),
-                    UnwindSectionType::EhFrame,
-                    None,
-                    &mut cache.gimli_unwind_context,
-                    base_addresses.clone(),
-                    module.base_svma,
-                );
+                let mut dwarf_unwinder =
+                    DwarfUnwinder::<_, A, P::GimliUnwindContextStorage<_>>::new(
+                        EndianSlice::new(eh_frame, LittleEndian),
+                        UnwindSectionType::EhFrame,
+                        None,
+                        &mut cache.gimli_unwind_context,
+                        base_addresses.clone(),
+                        module.base_svma,
+                    );
                 let fde_offset = index
                     .fde_offset_for_relative_address(rel_lookup_address)
                     .ok_or(UnwinderError::DwarfCfiIndexCouldNotFindAddress)?;
-                dwarf_unwinder.unwind_frame_with_fde(
+                dwarf_unwinder.unwind_frame_with_fde::<_, P::GimliEvaluationStorage<_>>(
                     regs,
                     is_first_frame,
                     rel_lookup_address,
@@ -504,19 +504,19 @@ impl<
                 debug_frame,
                 base_addresses,
             } => {
-                let debug_frame_data = ArcData(debug_frame.clone());
-                let mut dwarf_unwinder = DwarfUnwinder::<_, A, P::GimliStorage>::new(
-                    EndianReader::new(debug_frame_data, LittleEndian),
-                    UnwindSectionType::DebugFrame,
-                    None,
-                    &mut cache.gimli_unwind_context,
-                    base_addresses.clone(),
-                    module.base_svma,
-                );
+                let mut dwarf_unwinder =
+                    DwarfUnwinder::<_, A, P::GimliUnwindContextStorage<_>>::new(
+                        EndianSlice::new(debug_frame, LittleEndian),
+                        UnwindSectionType::DebugFrame,
+                        None,
+                        &mut cache.gimli_unwind_context,
+                        base_addresses.clone(),
+                        module.base_svma,
+                    );
                 let fde_offset = index
                     .fde_offset_for_relative_address(rel_lookup_address)
                     .ok_or(UnwinderError::DwarfCfiIndexCouldNotFindAddress)?;
-                dwarf_unwinder.unwind_frame_with_fde(
+                dwarf_unwinder.unwind_frame_with_fde::<_, P::GimliEvaluationStorage<_>>(
                     regs,
                     is_first_frame,
                     rel_lookup_address,

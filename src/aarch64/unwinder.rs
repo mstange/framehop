@@ -13,27 +13,26 @@ use super::{ArchAarch64, CacheAarch64, UnwindRegsAarch64};
 ///
 ///  - `D`: The type for unwind section data in the modules. See [`Module`].
 /// -  `P`: The [`AllocationPolicy`].
-pub struct UnwinderAarch64<
-    D: Deref<Target = [u8]>,
-    P: AllocationPolicy<D> = MayAllocateDuringUnwind,
->(UnwinderInternal<D, ArchAarch64, P>);
+pub struct UnwinderAarch64<D: Deref<Target = [u8]>, P: AllocationPolicy = MayAllocateDuringUnwind>(
+    UnwinderInternal<D, ArchAarch64, P>,
+);
 
-impl<D: Deref<Target = [u8]>, P: AllocationPolicy<D>> Default for UnwinderAarch64<D, P> {
+impl<D: Deref<Target = [u8]>, P: AllocationPolicy> Default for UnwinderAarch64<D, P> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<D: Deref<Target = [u8]>, P: AllocationPolicy<D>> UnwinderAarch64<D, P> {
+impl<D: Deref<Target = [u8]>, P: AllocationPolicy> UnwinderAarch64<D, P> {
     /// Create an unwinder for a process.
     pub fn new() -> Self {
         Self(UnwinderInternal::new())
     }
 }
 
-impl<D: Deref<Target = [u8]>, P: AllocationPolicy<D>> Unwinder for UnwinderAarch64<D, P> {
+impl<D: Deref<Target = [u8]>, P: AllocationPolicy> Unwinder for UnwinderAarch64<D, P> {
     type UnwindRegs = UnwindRegsAarch64;
-    type Cache = CacheAarch64<D, P>;
+    type Cache = CacheAarch64<P>;
     type Module = Module<D>;
 
     fn add_module(&mut self, module: Module<D>) {
@@ -52,7 +51,7 @@ impl<D: Deref<Target = [u8]>, P: AllocationPolicy<D>> Unwinder for UnwinderAarch
         &self,
         address: FrameAddress,
         regs: &mut UnwindRegsAarch64,
-        cache: &mut CacheAarch64<D, P>,
+        cache: &mut CacheAarch64<P>,
         read_stack: &mut F,
     ) -> Result<Option<u64>, Error>
     where
