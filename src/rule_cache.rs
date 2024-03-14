@@ -122,3 +122,23 @@ impl CacheStats {
         self.miss_empty_slot_count + self.miss_wrong_modules_count + self.miss_wrong_address_count
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::{aarch64::UnwindRuleAarch64, x86_64::UnwindRuleX86_64};
+
+    use super::*;
+
+    // Ensure that the size of Option<CacheEntry<UnwindRuleX86_64>> doesn't change by accident.
+    #[test]
+    fn test_cache_entry_size() {
+        assert_eq!(
+            std::mem::size_of::<Option<CacheEntry<UnwindRuleX86_64>>>(),
+            16
+        );
+        assert_eq!(
+            std::mem::size_of::<Option<CacheEntry<UnwindRuleAarch64>>>(),
+            24 // <-- larger than we'd like
+        );
+    }
+}
