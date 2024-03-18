@@ -855,7 +855,7 @@ pub struct ExplicitModuleSectionInfo<D> {
 
 impl<D> ModuleSectionInfo<D> for ExplicitModuleSectionInfo<D>
 where
-    D: Deref<Target = [u8]>,
+    D: Deref<Target = [u8]> + Clone,
 {
     fn base_svma(&self) -> u64 {
         self.base_svma
@@ -863,34 +863,34 @@ where
 
     fn section_svma_range(&mut self, name: &[u8]) -> Option<Range<u64>> {
         match name {
-            b"__text" | b".text" => self.text_svma.take(),
-            b"__stubs" => self.stubs_svma.take(),
-            b"__stub_helper" => self.stub_helper_svma.take(),
-            b"__eh_frame" | b".eh_frame" => self.eh_frame_svma.take(),
-            b"__eh_frame_hdr" | b".eh_frame_hdr" => self.eh_frame_hdr_svma.take(),
-            b"__got" | b".got" => self.got_svma.take(),
+            b"__text" | b".text" => self.text_svma.clone(),
+            b"__stubs" => self.stubs_svma.clone(),
+            b"__stub_helper" => self.stub_helper_svma.clone(),
+            b"__eh_frame" | b".eh_frame" => self.eh_frame_svma.clone(),
+            b"__eh_frame_hdr" | b".eh_frame_hdr" => self.eh_frame_hdr_svma.clone(),
+            b"__got" | b".got" => self.got_svma.clone(),
             _ => None,
         }
     }
     fn section_data(&mut self, name: &[u8]) -> Option<D> {
         match name {
-            b"__text" | b".text" => self.text.take(),
-            b"__unwind_info" => self.unwind_info.take(),
-            b"__eh_frame" | b".eh_frame" => self.eh_frame.take(),
-            b"__eh_frame_hdr" | b".eh_frame_hdr" => self.eh_frame_hdr.take(),
-            b"__debug_frame" | b".debug_frame" => self.debug_frame.take(),
+            b"__text" | b".text" => self.text.clone(),
+            b"__unwind_info" => self.unwind_info.clone(),
+            b"__eh_frame" | b".eh_frame" => self.eh_frame.clone(),
+            b"__eh_frame_hdr" | b".eh_frame_hdr" => self.eh_frame_hdr.clone(),
+            b"__debug_frame" | b".debug_frame" => self.debug_frame.clone(),
             _ => None,
         }
     }
     fn segment_svma_range(&mut self, name: &[u8]) -> Option<Range<u64>> {
         match name {
-            b"__TEXT" => self.text_segment_svma.take(),
+            b"__TEXT" => self.text_segment_svma.clone(),
             _ => None,
         }
     }
     fn segment_data(&mut self, name: &[u8]) -> Option<D> {
         match name {
-            b"__TEXT" => self.text_segment.take(),
+            b"__TEXT" => self.text_segment.clone(),
             _ => None,
         }
     }
