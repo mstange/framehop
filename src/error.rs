@@ -3,7 +3,9 @@ use crate::macho::CompactUnwindInfoUnwinderError;
 use crate::pe::PeUnwinderError;
 
 /// The error type used in this crate.
-#[derive(thiserror::Error, Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "std", derive(thiserror::Error))]
+#[cfg_attr(not(feature = "std"), derive(thiserror_no_std::Error))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Error {
     #[error("Could not read stack memory at 0x{0:x}")]
     CouldNotReadStack(u64),
@@ -21,7 +23,9 @@ pub enum Error {
     ReturnAddressIsNull,
 }
 
-#[derive(thiserror::Error, Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "std", derive(thiserror::Error))]
+#[cfg_attr(not(feature = "std"), derive(thiserror_no_std::Error))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnwinderError {
     #[error("Compact Unwind Info unwinding failed: {0}")]
     CompactUnwindInfo(#[source] CompactUnwindInfoUnwinderError),

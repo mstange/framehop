@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use core::fmt::Debug;
 
 use crate::display_utils::HexNum;
 
@@ -78,7 +78,7 @@ impl UnwindRegsX86_64 {
 }
 
 impl Debug for UnwindRegsX86_64 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("UnwindRegsX86_64")
             .field("ip", &HexNum(self.ip()))
             .field("rax", &HexNum(self.get(Reg::RAX)))

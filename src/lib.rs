@@ -49,7 +49,7 @@
 //! ## Example
 //!
 //! ```
-//! use std::ops::Range;
+//! use core::ops::Range;
 //! use framehop::aarch64::{CacheAarch64, UnwindRegsAarch64, UnwinderAarch64};
 //! use framehop::{ExplicitModuleSectionInfo, FrameAddress, Module};
 //!
@@ -110,6 +110,10 @@
 //!     ]
 //! );
 //! ```
+
+#![cfg_attr(not(feature = "std"), no_std)]
+
+extern crate alloc;
 
 mod add_signed;
 mod arcdata;

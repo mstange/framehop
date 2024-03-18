@@ -1,4 +1,4 @@
-use std::num::NonZeroU64;
+use core::num::NonZeroU64;
 
 /// An absolute code address for a stack frame. Can either be taken directly from the
 /// instruction pointer ("program counter"), or from a return address.

@@ -1,7 +1,11 @@
-use crate::{arch::Arch, unwind_result::UnwindResult};
-use std::ops::Range;
+use alloc::format;
 
-#[derive(thiserror::Error, Clone, Copy, Debug, PartialEq, Eq)]
+use crate::{arch::Arch, unwind_result::UnwindResult};
+use core::ops::Range;
+
+#[cfg_attr(feature = "std", derive(thiserror::Error))]
+#[cfg_attr(not(feature = "std"), derive(thiserror_no_std::Error))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PeUnwinderError {
     #[error("failed to read unwind info memory at RVA {0:x}")]
     MissingUnwindInfoData(u32),
@@ -38,7 +42,7 @@ pub struct PeSections<'a, D> {
 
 impl<'a, D> PeSections<'a, D>
 where
-    D: std::ops::Deref<Target = [u8]>,
+    D: core::ops::Deref<Target = [u8]>,
 {
     pub fn unwind_info_memory_at_rva(&self, rva: u32) -> Result<&'a [u8], PeUnwinderError> {
         [&self.rdata, &self.xdata]
@@ -54,7 +58,7 @@ where
     }
 }
 
-fn memory_at_rva<D: std::ops::Deref<Target = [u8]>>(
+fn memory_at_rva<D: core::ops::Deref<Target = [u8]>>(
     DataAtRvaRange { data, rva_range }: &DataAtRvaRange<D>,
     address: u32,
 ) -> Option<&[u8]> {
@@ -76,5 +80,5 @@ pub trait PeUnwinding: Arch {
     ) -> Result<UnwindResult<Self::UnwindRule>, PeUnwinderError>
     where
         F: FnMut(u64) -> Result<u64, ()>,
-        D: std::ops::Deref<Target = [u8]>;
+        D: core::ops::Deref<Target = [u8]>;
 }

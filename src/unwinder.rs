@@ -1,3 +1,6 @@
+use alloc::string::String;
+use alloc::sync::Arc;
+use alloc::vec::Vec;
 use fallible_iterator::FallibleIterator;
 use gimli::{EndianReader, LittleEndian};
 
@@ -16,12 +19,9 @@ use crate::unwind_result::UnwindResult;
 use crate::unwind_rule::UnwindRule;
 use crate::FrameAddress;
 
-use std::marker::PhantomData;
-use std::sync::atomic::{AtomicU16, Ordering};
-use std::{
-    ops::{Deref, Range},
-    sync::Arc,
-};
+use core::marker::PhantomData;
+use core::ops::{Deref, Range};
+use core::sync::atomic::{AtomicU16, Ordering};
 
 /// Unwinder is the trait that each CPU architecture's concrete unwinder type implements.
 /// This trait's methods are what let you do the actual unwinding.
@@ -245,6 +245,7 @@ impl<
             .binary_search_by_key(&module.avma_range.start, |module| module.avma_range.start)
         {
             Ok(i) => {
+                #[cfg(feature = "std")]
                 eprintln!(
                     "Now we have two modules at the same start address 0x{:x}. This can't be good.",
                     module.avma_range.start
@@ -944,7 +945,7 @@ mod object {
 impl<D: Deref<Target = [u8]>> Module<D> {
     pub fn new(
         name: String,
-        avma_range: std::ops::Range<u64>,
+        avma_range: core::ops::Range<u64>,
         base_avma: u64,
         mut section_info: impl ModuleSectionInfo<D>,
     ) -> Self {
