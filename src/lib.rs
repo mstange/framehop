@@ -124,7 +124,9 @@ mod display_utils;
 mod dwarf;
 mod error;
 mod instruction_analysis;
+#[cfg(feature = "macho")]
 mod macho;
+#[cfg(feature = "pe")]
 mod pe;
 mod rule_cache;
 mod unwind_result;

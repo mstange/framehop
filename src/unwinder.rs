@@ -10,9 +10,12 @@ use crate::cache::{AllocationPolicy, Cache};
 use crate::dwarf::{DwarfCfiIndex, DwarfUnwinder, DwarfUnwinding, UnwindSectionType};
 use crate::error::{Error, UnwinderError};
 use crate::instruction_analysis::InstructionAnalysis;
+
+#[cfg(feature = "macho")]
 use crate::macho::{
     CompactUnwindInfoUnwinder, CompactUnwindInfoUnwinding, CuiUnwindResult, TextBytes,
 };
+#[cfg(feature = "pe")]
 use crate::pe::{DataAtRvaRange, PeUnwinding};
 use crate::rule_cache::CacheResult;
 use crate::unwind_result::UnwindResult;
@@ -200,11 +203,27 @@ fn next_global_modules_generation() -> u16 {
     GLOBAL_MODULES_GENERATION.fetch_add(1, Ordering::Relaxed)
 }
 
-pub struct UnwinderInternal<
-    D: Deref<Target = [u8]>,
-    A: Arch + DwarfUnwinding + CompactUnwindInfoUnwinding + PeUnwinding + InstructionAnalysis,
-    P: AllocationPolicy<D>,
-> {
+cfg_if::cfg_if! {
+    if #[cfg(all(feature = "macho", feature = "pe"))] {
+        pub trait Unwinding:
+            Arch + DwarfUnwinding + InstructionAnalysis + CompactUnwindInfoUnwinding + PeUnwinding {}
+        impl<T: Arch + DwarfUnwinding + InstructionAnalysis + CompactUnwindInfoUnwinding + PeUnwinding>
+            Unwinding for T {}
+    } else if #[cfg(feature = "macho")] {
+        pub trait Unwinding:
+            Arch + DwarfUnwinding + InstructionAnalysis + CompactUnwindInfoUnwinding {}
+        impl<T: Arch + DwarfUnwinding + InstructionAnalysis + CompactUnwindInfoUnwinding> Unwinding for T {}
+    } else if #[cfg(feature = "pe")] {
+        pub trait Unwinding:
+            Arch + DwarfUnwinding + InstructionAnalysis  + PeUnwinding {}
+        impl<T: Arch + DwarfUnwinding + InstructionAnalysis + PeUnwinding> Unwinding for T {}
+    } else {
+        pub trait Unwinding: Arch + DwarfUnwinding + InstructionAnalysis {}
+        impl<T: Arch + DwarfUnwinding + InstructionAnalysis> Unwinding for T {}
+    }
+}
+
+pub struct UnwinderInternal<D: Deref<Target = [u8]>, A: Unwinding, P: AllocationPolicy<D>> {
     /// sorted by avma_range.start
     modules: Vec<Module<D>>,
     /// Incremented every time modules is changed.
@@ -213,23 +232,15 @@ pub struct UnwinderInternal<
     _allocation_policy: PhantomData<P>,
 }
 
-impl<
-        D: Deref<Target = [u8]>,
-        A: Arch + DwarfUnwinding + CompactUnwindInfoUnwinding + PeUnwinding + InstructionAnalysis,
-        P: AllocationPolicy<D>,
-    > Default for UnwinderInternal<D, A, P>
+impl<D: Deref<Target = [u8]>, A: Unwinding, P: AllocationPolicy<D>> Default
+    for UnwinderInternal<D, A, P>
 {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<
-        D: Deref<Target = [u8]>,
-        A: Arch + DwarfUnwinding + CompactUnwindInfoUnwinding + PeUnwinding + InstructionAnalysis,
-        P: AllocationPolicy<D>,
-    > UnwinderInternal<D, A, P>
-{
+impl<D: Deref<Target = [u8]>, A: Unwinding, P: AllocationPolicy<D>> UnwinderInternal<D, A, P> {
     pub fn new() -> Self {
         Self {
             modules: Vec::new(),
@@ -386,6 +397,7 @@ impl<
     {
         let is_first_frame = !address.is_return_address();
         let unwind_result = match &module.unwind_data {
+            #[cfg(feature = "macho")]
             ModuleUnwindDataInternal::CompactUnwindInfoAndEhFrame {
                 unwind_info,
                 eh_frame,
@@ -525,6 +537,7 @@ impl<
                     read_stack,
                 )?
             }
+            #[cfg(feature = "pe")]
             ModuleUnwindDataInternal::PeUnwindInfo {
                 pdata,
                 rdata,
@@ -564,6 +577,7 @@ enum ModuleUnwindDataInternal<D: Deref<Target = [u8]>> {
     /// Used on macOS, with mach-O binaries. Compact unwind info is in the `__unwind_info`
     /// section and is sometimes supplemented with DWARF CFI information in the `__eh_frame`
     /// section. `__stubs` and `__stub_helper` ranges are used by the unwinder.
+    #[cfg(feature = "macho")]
     CompactUnwindInfoAndEhFrame {
         unwind_info: D,
         eh_frame: Option<Arc<D>>,
@@ -596,6 +610,7 @@ enum ModuleUnwindDataInternal<D: Deref<Target = [u8]>> {
         base_addresses: crate::dwarf::BaseAddresses,
     },
     /// Used with PE binaries (Windows).
+    #[cfg(feature = "pe")]
     PeUnwindInfo {
         pdata: D,
         rdata: Option<DataAtRvaRange<D>>,
@@ -611,6 +626,7 @@ impl<D: Deref<Target = [u8]>> ModuleUnwindDataInternal<D> {
     fn new(section_info: &mut impl ModuleSectionInfo<D>) -> Self {
         use crate::dwarf::base_addresses_for_sections;
 
+        #[cfg(feature = "macho")]
         if let Some(unwind_info) = section_info.section_data(b"__unwind_info") {
             let eh_frame = section_info.section_data(b"__eh_frame");
             let stubs = section_info.section_svma_range(b"__stubs");
@@ -634,15 +650,18 @@ impl<D: Deref<Target = [u8]>> ModuleUnwindDataInternal<D> {
             } else {
                 None
             };
-            ModuleUnwindDataInternal::CompactUnwindInfoAndEhFrame {
+            return ModuleUnwindDataInternal::CompactUnwindInfoAndEhFrame {
                 unwind_info,
                 eh_frame: eh_frame.map(Arc::new),
                 stubs_svma: stubs,
                 stub_helper_svma: stub_helper,
                 base_addresses: base_addresses_for_sections(section_info),
                 text_data,
-            }
-        } else if let Some(pdata) = section_info.section_data(b".pdata") {
+            };
+        }
+
+        #[cfg(feature = "pe")]
+        if let Some(pdata) = section_info.section_data(b".pdata") {
             let mut range_and_data = |name| {
                 let rva_range = section_info.section_svma_range(name).and_then(|range| {
                     Some(Range {
@@ -653,13 +672,15 @@ impl<D: Deref<Target = [u8]>> ModuleUnwindDataInternal<D> {
                 let data = section_info.section_data(name)?;
                 Some(DataAtRvaRange { data, rva_range })
             };
-            ModuleUnwindDataInternal::PeUnwindInfo {
+            return ModuleUnwindDataInternal::PeUnwindInfo {
                 pdata,
                 rdata: range_and_data(b".rdata"),
                 xdata: range_and_data(b".xdata"),
                 text: range_and_data(b".text"),
-            }
-        } else if let Some(eh_frame) = section_info
+            };
+        }
+
+        if let Some(eh_frame) = section_info
             .section_data(b".eh_frame")
             .or_else(|| section_info.section_data(b"__eh_frame"))
         {
@@ -714,6 +735,7 @@ impl<D: Deref<Target = [u8]>> ModuleUnwindDataInternal<D> {
 ///    module, e.g. `Vec<u8>`. But it could also be a wrapper around mapped memory from
 ///    a file or a different process, for example. It just needs to provide a slice of
 ///    bytes via its `Deref` implementation.
+#[cfg(feature = "macho")]
 struct TextByteData<D: Deref<Target = [u8]>> {
     pub bytes: D,
     pub svma_range: Range<u64>,

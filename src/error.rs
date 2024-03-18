@@ -1,5 +1,7 @@
 use crate::dwarf::DwarfUnwinderError;
+#[cfg(feature = "macho")]
 use crate::macho::CompactUnwindInfoUnwinderError;
+#[cfg(feature = "pe")]
 use crate::pe::PeUnwinderError;
 
 /// The error type used in this crate.
@@ -27,15 +29,18 @@ pub enum Error {
 #[cfg_attr(not(feature = "std"), derive(thiserror_no_std::Error))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnwinderError {
+    #[cfg(feature = "macho")]
     #[error("Compact Unwind Info unwinding failed: {0}")]
     CompactUnwindInfo(#[source] CompactUnwindInfoUnwinderError),
 
     #[error("DWARF unwinding failed: {0}")]
     Dwarf(#[from] DwarfUnwinderError),
 
+    #[cfg(feature = "pe")]
     #[error("PE unwinding failed: {0}")]
     Pe(#[from] PeUnwinderError),
 
+    #[cfg(feature = "macho")]
     #[error("__unwind_info referred to DWARF FDE but we do not have __eh_frame data")]
     NoDwarfData,
 
@@ -49,6 +54,7 @@ pub enum UnwinderError {
     DwarfCfiIndexCouldNotFindAddress,
 }
 
+#[cfg(feature = "macho")]
 impl From<CompactUnwindInfoUnwinderError> for UnwinderError {
     fn from(e: CompactUnwindInfoUnwinderError) -> Self {
         match e {
