@@ -1,5 +1,6 @@
-use std::marker::PhantomData;
+use core::marker::PhantomData;
 
+use alloc::vec::Vec;
 use gimli::{
     CfaRule, CieOrFde, DebugFrame, EhFrame, EhFrameHdr, Encoding, EndianSlice, Evaluation,
     EvaluationResult, EvaluationStorage, Expression, LittleEndian, Location, ParsedEhFrameHdr,
@@ -11,7 +12,9 @@ pub(crate) use gimli::BaseAddresses;
 
 use crate::{arch::Arch, unwind_result::UnwindResult, ModuleSectionInfo};
 
-#[derive(thiserror::Error, Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "std", derive(thiserror::Error))]
+#[cfg_attr(not(feature = "std"), derive(thiserror_no_std::Error))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DwarfUnwinderError {
     #[error("Could not get the FDE for the supplied offset: {0}")]
     FdeFromOffsetFailed(#[source] gimli::Error),
@@ -199,7 +202,9 @@ pub(crate) fn base_addresses_for_sections<D>(
         .set_got(start_addr(&[b"__got", b".got"]))
 }
 
-#[derive(thiserror::Error, Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "std", derive(thiserror::Error))]
+#[cfg_attr(not(feature = "std"), derive(thiserror_no_std::Error))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DwarfCfiIndexError {
     #[error("EhFrame processing failed: {0}")]
     Gimli(#[from] gimli::Error),

@@ -12,7 +12,7 @@ impl PeUnwinding for ArchAarch64 {
     ) -> Result<UnwindResult<Self::UnwindRule>, PeUnwinderError>
     where
         F: FnMut(u64) -> Result<u64, ()>,
-        D: std::ops::Deref<Target = [u8]>,
+        D: core::ops::Deref<Target = [u8]>,
     {
         Err(PeUnwinderError::Aarch64Unsupported)
     }

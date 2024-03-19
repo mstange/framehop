@@ -1,6 +1,6 @@
 use crate::error::Error;
 
-pub trait UnwindRule: Copy + std::fmt::Debug {
+pub trait UnwindRule: Copy + core::fmt::Debug {
     type UnwindRegs;
 
     fn exec<F>(

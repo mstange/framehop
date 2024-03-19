@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use core::fmt::Debug;
 
 use crate::display_utils::HexNum;
 
@@ -137,7 +137,7 @@ impl UnwindRegsAarch64 {
 }
 
 impl Debug for UnwindRegsAarch64 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("UnwindRegsAarch64")
             .field("lr", &HexNum(self.lr))
             .field("sp", &HexNum(self.sp))

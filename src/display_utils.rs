@@ -1,9 +1,9 @@
-use std::fmt::{Binary, Debug, LowerHex};
+use core::fmt::{Binary, Debug, LowerHex};
 
 pub struct HexNum<N: LowerHex>(pub N);
 
 impl<N: LowerHex> Debug for HexNum<N> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         LowerHex::fmt(&self.0, f)
     }
 }
@@ -11,7 +11,7 @@ impl<N: LowerHex> Debug for HexNum<N> {
 pub struct BinNum<N: Binary>(pub N);
 
 impl<N: Binary> Debug for BinNum<N> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         Binary::fmt(&self.0, f)
     }
 }

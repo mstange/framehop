@@ -1,10 +1,12 @@
-use std::marker::PhantomData;
+use core::marker::PhantomData;
 
 use crate::dwarf::DwarfUnwinderError;
 use crate::{arch::Arch, unwind_rule::UnwindRule};
 use macho_unwind_info::UnwindInfo;
 
-#[derive(thiserror::Error, Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "std", derive(thiserror::Error))]
+#[cfg_attr(not(feature = "std"), derive(thiserror_no_std::Error))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CompactUnwindInfoUnwinderError {
     #[error("Bad __unwind_info format: {0}")]
     BadFormat(#[from] macho_unwind_info::Error),

@@ -14,7 +14,7 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Build
       run: cargo build --verbose
@@ -22,5 +22,18 @@ jobs:
       run: cargo test --verbose
     - name: Check formatting
       run: cargo fmt -- --check --verbose
+    # clippy all features, we use `hack` below to confirm each feature works
     - name: Clippy
-      run: cargo clippy --verbose -- -Dwarnings
+      run: cargo clippy --verbose --all-features -- -Dwarnings
+
+  hack:
+    # cargo-hack checks combinations of feature flags to ensure that features are all additive
+    # which is required for feature unification
+    runs-on: ubuntu-latest
+    name: check features
+    steps:
+      - uses: actions/checkout@v4
+      - name: cargo install cargo-hack
+        uses: taiki-e/install-action@cargo-hack
+      - name: cargo hack
+        run: cargo hack --feature-powerset check

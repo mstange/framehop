@@ -1,4 +1,6 @@
-use std::ops::Deref;
+use core::ops::Deref;
+
+use alloc::boxed::Box;
 
 use crate::{rule_cache::RuleCache, unwind_rule::UnwindRule};
 

@@ -1,4 +1,5 @@
-use std::{fmt::Debug, ops::Deref, sync::Arc};
+use alloc::sync::Arc;
+use core::{fmt::Debug, ops::Deref};
 
 pub type ArcDataReader<D> = gimli::EndianReader<gimli::LittleEndian, ArcData<D>>;
 
@@ -19,7 +20,7 @@ impl<D: Deref<Target = [u8]>> Clone for ArcData<D> {
 }
 
 impl<D: Deref<Target = [u8]>> Debug for ArcData<D> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_tuple("ArcData").field(&self.0.as_ptr()).finish()
     }
 }

@@ -2,7 +2,9 @@ mod arch;
 mod cache;
 mod dwarf;
 mod instruction_analysis;
+#[cfg(feature = "macho")]
 mod macho;
+#[cfg(feature = "pe")]
 mod pe;
 mod register_ordering;
 mod unwind_rule;

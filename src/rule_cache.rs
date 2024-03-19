@@ -1,3 +1,5 @@
+use alloc::boxed::Box;
+
 use crate::unwind_rule::UnwindRule;
 
 const CACHE_ENTRY_COUNT: usize = 509;
@@ -133,11 +135,11 @@ mod tests {
     #[test]
     fn test_cache_entry_size() {
         assert_eq!(
-            std::mem::size_of::<Option<CacheEntry<UnwindRuleX86_64>>>(),
+            core::mem::size_of::<Option<CacheEntry<UnwindRuleX86_64>>>(),
             16
         );
         assert_eq!(
-            std::mem::size_of::<Option<CacheEntry<UnwindRuleAarch64>>>(),
+            core::mem::size_of::<Option<CacheEntry<UnwindRuleAarch64>>>(),
             24 // <-- larger than we'd like
         );
     }
