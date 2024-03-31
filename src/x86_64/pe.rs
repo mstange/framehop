@@ -6,8 +6,9 @@ use super::{
 use crate::arch::Arch;
 use crate::pe::{PeSections, PeUnwinderError, PeUnwinding};
 use crate::unwind_result::UnwindResult;
-use std::ops::ControlFlow;
+use core::ops::ControlFlow;
 
+use alloc::vec::Vec;
 use pe_unwind_info::x86_64::{
     FunctionEpilogInstruction, FunctionTableEntries, Register, UnwindInfo, UnwindInfoTrailer,
     UnwindOperation, UnwindState,
@@ -102,7 +103,7 @@ impl PeUnwinding for ArchX86_64 {
     ) -> Result<UnwindResult<Self::UnwindRule>, PeUnwinderError>
     where
         F: FnMut(u64) -> Result<u64, ()>,
-        D: std::ops::Deref<Target = [u8]>,
+        D: core::ops::Deref<Target = [u8]>,
     {
         let entries = FunctionTableEntries::parse(sections.pdata);
         let Some(function) = entries.lookup(address) else {
@@ -168,7 +169,7 @@ impl PeUnwinding for ArchX86_64 {
         }
 
         // Get all chained UnwindInfo and resolve errors when collecting.
-        let chained_info = std::iter::successors(Some(Ok(unwind_info)), |info| {
+        let chained_info = core::iter::successors(Some(Ok(unwind_info)), |info| {
             let Ok(info) = info else {
                 return None;
             };

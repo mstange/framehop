@@ -1,4 +1,4 @@
-use std::ops::Deref;
+use core::ops::Deref;
 
 use super::arch::ArchX86_64;
 use super::cache::CacheX86_64;

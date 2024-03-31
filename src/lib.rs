@@ -49,7 +49,7 @@
 //! ## Example
 //!
 //! ```
-//! use std::ops::Range;
+//! use core::ops::Range;
 //! use framehop::aarch64::{CacheAarch64, UnwindRegsAarch64, UnwinderAarch64};
 //! use framehop::{ExplicitModuleSectionInfo, FrameAddress, Module};
 //!
@@ -111,6 +111,10 @@
 //! );
 //! ```
 
+#![cfg_attr(not(feature = "std"), no_std)]
+
+extern crate alloc;
+
 mod add_signed;
 mod arcdata;
 mod arch;
@@ -120,7 +124,9 @@ mod display_utils;
 mod dwarf;
 mod error;
 mod instruction_analysis;
+#[cfg(feature = "macho")]
 mod macho;
+#[cfg(feature = "pe")]
 mod pe;
 mod rule_cache;
 mod unwind_result;
