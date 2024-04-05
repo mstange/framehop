@@ -1036,6 +1036,18 @@ impl<D: Deref<Target = [u8]>> Module<D> {
             unwind_data,
         }
     }
+
+    pub fn avma_range(&self) -> std::ops::Range<u64> {
+        self.avma_range.clone()
+    }
+
+    pub fn base_avma(&self) -> u64 {
+        self.base_avma
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
 }
 
 impl<D> Clone for Module<D> {
