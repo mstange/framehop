@@ -237,6 +237,17 @@ impl<D, A, P> Default for UnwinderInternal<D, A, P> {
     }
 }
 
+impl<D, A, P> Clone for UnwinderInternal<D, A, P> {
+    fn clone(&self) -> Self {
+        Self {
+            modules: self.modules.clone(),
+            modules_generation: self.modules_generation,
+            _arch: PhantomData,
+            _allocation_policy: PhantomData,
+        }
+    }
+}
+
 impl<D, A, P> UnwinderInternal<D, A, P> {
     pub fn new() -> Self {
         Self {
@@ -761,6 +772,18 @@ pub struct Module<D> {
     base_svma: u64,
     /// The unwind data that should be used for unwinding addresses from this module.
     unwind_data: Arc<ModuleUnwindDataInternal<D>>,
+}
+
+impl<D> Clone for Module<D> {
+    fn clone(&self) -> Self {
+        Self {
+            name: self.name.clone(),
+            avma_range: self.avma_range.clone(),
+            base_avma: self.base_avma,
+            base_svma: self.base_svma,
+            unwind_data: self.unwind_data.clone(),
+        }
+    }
 }
 
 /// Information about a module's sections (and segments).

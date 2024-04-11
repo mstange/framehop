@@ -21,6 +21,12 @@ impl<D, P> Default for UnwinderAarch64<D, P> {
     }
 }
 
+impl<D, P> Clone for UnwinderAarch64<D, P> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+
 impl<D, P> UnwinderAarch64<D, P> {
     /// Create an unwinder for a process.
     pub fn new() -> Self {

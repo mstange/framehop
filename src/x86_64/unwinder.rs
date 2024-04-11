@@ -23,6 +23,12 @@ impl<D, P> Default for UnwinderX86_64<D, P> {
     }
 }
 
+impl<D, P> Clone for UnwinderX86_64<D, P> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+
 impl<D, P> UnwinderX86_64<D, P> {
     /// Create an unwinder for a process.
     pub fn new() -> Self {
