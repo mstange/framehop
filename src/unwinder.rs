@@ -221,7 +221,7 @@ cfg_if::cfg_if! {
     }
 }
 
-pub struct UnwinderInternal<D: Deref<Target = [u8]>, A: Unwinding, P: AllocationPolicy> {
+pub struct UnwinderInternal<D, A, P> {
     /// sorted by avma_range.start
     modules: Vec<Module<D>>,
     /// Incremented every time modules is changed.
@@ -230,15 +230,13 @@ pub struct UnwinderInternal<D: Deref<Target = [u8]>, A: Unwinding, P: Allocation
     _allocation_policy: PhantomData<P>,
 }
 
-impl<D: Deref<Target = [u8]>, A: Unwinding, P: AllocationPolicy> Default
-    for UnwinderInternal<D, A, P>
-{
+impl<D, A, P> Default for UnwinderInternal<D, A, P> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<D: Deref<Target = [u8]>, A: Unwinding, P: AllocationPolicy> UnwinderInternal<D, A, P> {
+impl<D, A, P> UnwinderInternal<D, A, P> {
     pub fn new() -> Self {
         Self {
             modules: Vec::new(),
@@ -247,7 +245,9 @@ impl<D: Deref<Target = [u8]>, A: Unwinding, P: AllocationPolicy> UnwinderInterna
             _allocation_policy: PhantomData,
         }
     }
+}
 
+impl<D: Deref<Target = [u8]>, A: Unwinding, P: AllocationPolicy> UnwinderInternal<D, A, P> {
     pub fn add_module(&mut self, module: Module<D>) {
         let insertion_index = match self
             .modules
@@ -566,7 +566,7 @@ impl<D: Deref<Target = [u8]>, A: Unwinding, P: AllocationPolicy> UnwinderInterna
 ///    module, e.g. `Vec<u8>`. But it could also be a wrapper around mapped memory from
 ///    a file or a different process, for example. It just needs to provide a slice of
 ///    bytes via its `Deref` implementation.
-enum ModuleUnwindDataInternal<D: Deref<Target = [u8]>> {
+enum ModuleUnwindDataInternal<D> {
     /// Used on macOS, with mach-O binaries. Compact unwind info is in the `__unwind_info`
     /// section and is sometimes supplemented with DWARF CFI information in the `__eh_frame`
     /// section. `__stubs` and `__stub_helper` ranges are used by the unwinder.
@@ -729,7 +729,7 @@ impl<D: Deref<Target = [u8]>> ModuleUnwindDataInternal<D> {
 ///    a file or a different process, for example. It just needs to provide a slice of
 ///    bytes via its `Deref` implementation.
 #[cfg(feature = "macho")]
-struct TextByteData<D: Deref<Target = [u8]>> {
+struct TextByteData<D> {
     pub bytes: D,
     pub svma_range: Range<u64>,
 }
@@ -747,7 +747,7 @@ struct TextByteData<D: Deref<Target = [u8]>> {
 ///    module, e.g. `Vec<u8>`. But it could also be a wrapper around mapped memory from
 ///    a file or a different process, for example. It just needs to provide a slice of
 ///    bytes via its `Deref` implementation.
-pub struct Module<D: Deref<Target = [u8]>> {
+pub struct Module<D> {
     /// The name or file path of the module. Unused, it's just there for easier debugging.
     #[allow(unused)]
     name: String,

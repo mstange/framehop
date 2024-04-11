@@ -13,17 +13,15 @@ use super::{ArchAarch64, CacheAarch64, UnwindRegsAarch64};
 ///
 ///  - `D`: The type for unwind section data in the modules. See [`Module`].
 /// -  `P`: The [`AllocationPolicy`].
-pub struct UnwinderAarch64<D: Deref<Target = [u8]>, P: AllocationPolicy = MayAllocateDuringUnwind>(
-    UnwinderInternal<D, ArchAarch64, P>,
-);
+pub struct UnwinderAarch64<D, P = MayAllocateDuringUnwind>(UnwinderInternal<D, ArchAarch64, P>);
 
-impl<D: Deref<Target = [u8]>, P: AllocationPolicy> Default for UnwinderAarch64<D, P> {
+impl<D, P> Default for UnwinderAarch64<D, P> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<D: Deref<Target = [u8]>, P: AllocationPolicy> UnwinderAarch64<D, P> {
+impl<D, P> UnwinderAarch64<D, P> {
     /// Create an unwinder for a process.
     pub fn new() -> Self {
         Self(UnwinderInternal::new())

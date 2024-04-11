@@ -15,17 +15,15 @@ use crate::FrameAddress;
 ///
 ///  - `D`: The type for unwind section data in the modules. See [`Module`].
 /// -  `P`: The [`AllocationPolicy`].
-pub struct UnwinderX86_64<D: Deref<Target = [u8]>, P: AllocationPolicy = MayAllocateDuringUnwind>(
-    UnwinderInternal<D, ArchX86_64, P>,
-);
+pub struct UnwinderX86_64<D, P = MayAllocateDuringUnwind>(UnwinderInternal<D, ArchX86_64, P>);
 
-impl<D: Deref<Target = [u8]>, P: AllocationPolicy> Default for UnwinderX86_64<D, P> {
+impl<D, P> Default for UnwinderX86_64<D, P> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<D: Deref<Target = [u8]>, P: AllocationPolicy> UnwinderX86_64<D, P> {
+impl<D, P> UnwinderX86_64<D, P> {
     /// Create an unwinder for a process.
     pub fn new() -> Self {
         Self(UnwinderInternal::new())
