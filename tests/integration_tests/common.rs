@@ -121,9 +121,7 @@ fn get_uncompressed_section_data<'a>(
 ///    address 0x100000000.
 ///  - mach-O libraries in the dyld shared cache have a __TEXT segment at some
 ///    non-zero address in the cache.
-pub fn relative_address_base<'data: 'file, 'file>(
-    object_file: &'file impl object::Object<'data, 'file>,
-) -> u64 {
+pub fn relative_address_base<'data>(object_file: &impl object::Object<'data>) -> u64 {
     if let Some(text_segment) = object_file
         .segments()
         .find(|s| s.name() == Ok(Some("__TEXT")))

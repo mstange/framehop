@@ -943,7 +943,7 @@ mod object {
 
     impl<'data: 'file, 'file, O, D> ModuleSectionInfo<D> for &'file O
     where
-        O: Object<'data, 'file>,
+        O: Object<'data>,
         D: From<&'data [u8]>,
     {
         fn base_svma(&self) -> u64 {
