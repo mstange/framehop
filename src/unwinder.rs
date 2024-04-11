@@ -1,4 +1,5 @@
 use alloc::string::String;
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 use fallible_iterator::FallibleIterator;
 use gimli::{EndianSlice, LittleEndian};
@@ -394,7 +395,7 @@ impl<D: Deref<Target = [u8]>, A: Unwinding, P: AllocationPolicy> UnwinderInterna
         F: FnMut(u64) -> Result<u64, ()>,
     {
         let is_first_frame = !address.is_return_address();
-        let unwind_result = match &module.unwind_data {
+        let unwind_result = match &*module.unwind_data {
             #[cfg(feature = "macho")]
             ModuleUnwindDataInternal::CompactUnwindInfoAndEhFrame {
                 unwind_info,
@@ -759,7 +760,7 @@ pub struct Module<D> {
     /// The base address of this module, according to the module.
     base_svma: u64,
     /// The unwind data that should be used for unwinding addresses from this module.
-    unwind_data: ModuleUnwindDataInternal<D>,
+    unwind_data: Arc<ModuleUnwindDataInternal<D>>,
 }
 
 /// Information about a module's sections (and segments).
@@ -971,7 +972,7 @@ impl<D: Deref<Target = [u8]>> Module<D> {
             avma_range,
             base_avma,
             base_svma: section_info.base_svma(),
-            unwind_data,
+            unwind_data: Arc::new(unwind_data),
         }
     }
 
