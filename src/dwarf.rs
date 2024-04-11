@@ -79,12 +79,12 @@ pub enum UnwindSectionType {
     DebugFrame,
 }
 
-pub struct DwarfUnwinder<
-    'a,
+pub struct DwarfUnwinder<'a, R, A, UCS>
+where
     R: Reader,
-    A: DwarfUnwinding + ?Sized,
+    A: DwarfUnwinding,
     UCS: UnwindContextStorage<R::Offset>,
-> {
+{
     unwind_section_data: R,
     unwind_section_type: UnwindSectionType,
     eh_frame_hdr: Option<ParsedEhFrameHdr<EndianSlice<'a, R::Endian>>>,
@@ -94,8 +94,11 @@ pub struct DwarfUnwinder<
     _arch: PhantomData<A>,
 }
 
-impl<'a, R: Reader, A: DwarfUnwinding, UCS: UnwindContextStorage<R::Offset>>
-    DwarfUnwinder<'a, R, A, UCS>
+impl<'a, R, A, UCS> DwarfUnwinder<'a, R, A, UCS>
+where
+    R: Reader,
+    A: DwarfUnwinding,
+    UCS: UnwindContextStorage<R::Offset>,
 {
     pub fn new(
         unwind_section_data: R,
