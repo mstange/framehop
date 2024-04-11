@@ -809,7 +809,7 @@ pub trait ModuleSectionInfo<D> {
     /// Get the given section's memory range, as stated in the module.
     fn section_svma_range(&mut self, name: &[u8]) -> Option<Range<u64>>;
 
-    /// Get the given section's data.
+    /// Get the given section's data. This will only be called once per section.
     fn section_data(&mut self, name: &[u8]) -> Option<D>;
 
     /// Get the given segment's memory range, as stated in the module.
@@ -817,7 +817,7 @@ pub trait ModuleSectionInfo<D> {
         None
     }
 
-    /// Get the given segment's data.
+    /// Get the given segment's data. This will only be called once per segment.
     fn segment_data(&mut self, _name: &[u8]) -> Option<D> {
         None
     }
@@ -895,7 +895,7 @@ pub struct ExplicitModuleSectionInfo<D> {
 
 impl<D> ModuleSectionInfo<D> for ExplicitModuleSectionInfo<D>
 where
-    D: Deref<Target = [u8]> + Clone,
+    D: Deref<Target = [u8]>,
 {
     fn base_svma(&self) -> u64 {
         self.base_svma
@@ -914,11 +914,11 @@ where
     }
     fn section_data(&mut self, name: &[u8]) -> Option<D> {
         match name {
-            b"__text" | b".text" => self.text.clone(),
-            b"__unwind_info" => self.unwind_info.clone(),
-            b"__eh_frame" | b".eh_frame" => self.eh_frame.clone(),
-            b"__eh_frame_hdr" | b".eh_frame_hdr" => self.eh_frame_hdr.clone(),
-            b"__debug_frame" | b".debug_frame" => self.debug_frame.clone(),
+            b"__text" | b".text" => self.text.take(),
+            b"__unwind_info" => self.unwind_info.take(),
+            b"__eh_frame" | b".eh_frame" => self.eh_frame.take(),
+            b"__eh_frame_hdr" | b".eh_frame_hdr" => self.eh_frame_hdr.take(),
+            b"__debug_frame" | b".debug_frame" => self.debug_frame.take(),
             _ => None,
         }
     }
@@ -930,7 +930,7 @@ where
     }
     fn segment_data(&mut self, name: &[u8]) -> Option<D> {
         match name {
-            b"__TEXT" => self.text_segment.clone(),
+            b"__TEXT" => self.text_segment.take(),
             _ => None,
         }
     }
