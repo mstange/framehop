@@ -27,7 +27,7 @@ use core::sync::atomic::{AtomicU16, Ordering};
 
 /// Unwinder is the trait that each CPU architecture's concrete unwinder type implements.
 /// This trait's methods are what let you do the actual unwinding.
-pub trait Unwinder {
+pub trait Unwinder: Clone {
     /// The unwind registers type for the targeted CPU architecture.
     type UnwindRegs;
 
