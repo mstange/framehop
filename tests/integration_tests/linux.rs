@@ -378,7 +378,7 @@ fn test_libc_syscall_no_fde() {
 }
 
 #[test]
-fn test_root_func() {
+fn test_root_func_x64() {
     let mut cache = CacheX86_64::<_>::new();
     let mut unwinder = UnwinderX86_64::new();
     common::add_object(
@@ -429,6 +429,105 @@ fn test_root_func() {
     let mut regs = UnwindRegsX86_64::new(0x88cf2, 0x1000, 0xbeef);
     let res = unwinder.unwind_frame(
         FrameAddress::from_return_address(0x88cf2).unwrap(),
+        &mut regs,
+        &mut cache,
+        &mut read_stack,
+    );
+    assert_eq!(res, Ok(None));
+}
+
+#[ignore] // currently fails
+#[test]
+fn test_root_func_aarch64_old_glibc() {
+    // This test checks that we correctly stop unwinding at the root function (`start`)
+    // in aarch64 Linux binaries which were linked with an old glibc (2.18 and older).
+    // The `rustup` binary used for this test was compiled with glibc 2.17, so that it
+    // can run on old Linux systems, see https://github.com/rust-lang/rustup/issues/1681 .
+    //
+    // The `start` function is statically linked from glibc at compile time, so its contents
+    // depend on the version of glibc used on the machine that does the linking.
+    // In glibc versions prior to 2.19, the beginning of the aarch64 `start` function looked like this:
+    //
+    // ```asm
+    // _start:
+    // mov fp, #0x0  ; <-- sets fp to 0x0
+    // mov lr, #0x0
+    // mov fp, sp    ; <-- overwrites fp with sp, removed in glibc 2.19
+    // mov x5, x0
+    // [...]
+    // ```
+    //
+    // The instruction "mov fp, sp" was unnecessary and made it so that the framepointer
+    // register was set to a garbage value (https://sourceware.org/bugzilla/show_bug.cgi?id=17555 ).
+    // This was fixed in 2014 in glibc 2.19 - the offending instruction was removed. However,
+    // by building with old glibc versions, binaries built today still ship with this bug.
+    //
+    // Due to the wrong value of fp, the stack end is not detected correctly and we unwind
+    // one more frame, getting a garbage address as the caller of `start`.
+    // In a profiler, an extraneous caller of the root frame is usually easy ignore.
+    // But there are cases where having such an additional root frame can be quite annoying,
+    // for example when merging multiple runs into a single profile: https://share.firefox.dev/4aY3gUF
+    // This profile was obtained with the following command:
+    // `samply record --iteration-count 10 --reuse-threads rustup check`
+    // The extra "caller" of `start` is a different address in every run, and the combined
+    // flame graph of the multiple run doesn't "combine" correctly. Instead, you get 10
+    // different flamegraph "roots", each for a different garbage address.
+    //
+    // Aside: I first thought that all Rust binaries which link with the prebuilt stdlib
+    // would have this bug, since the Rust stdlib currently links with glibc 2.17:
+    // https://blog.rust-lang.org/2022/08/01/Increasing-glibc-kernel-requirements.html
+    // However, a Rust binary compiled on my machine with glibc 2.35 does not have the
+    // bad instruction in its `start` function. So it seems the stdlib doesn't provide
+    // the `start` function.
+
+    let mut cache = CacheAarch64::<_>::new();
+    let mut unwinder = UnwinderAarch64::new();
+    common::add_object(
+        &mut unwinder,
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/linux/aarch64/rustup"),
+        0xaaaaaaaa0000,
+    );
+
+    // _start:
+    // e6868  mov  fp, #0x0          ; <-- sets fp to 0x0
+    // e686c  mov  lr, #0x0
+    // e6870  mov  fp, sp            ; <-- overwrites fp with sp, removed in glibc 2.19
+    // e6874  mov  x5, x0
+    // e6878  ldr  x1, [sp, 0]
+    // e687c  add  x2, sp, #0x8
+    // e6880  mov  x6, sp
+    // e6884  adrp  x0, #0x98d000
+    // e6888  ldr  x0, [x0, #0xfe8]
+    // e688c  adrp  x3, #0x98d000
+    // e6890  ldr  x3, [x3, #0xbf8]
+    // e6894  adrp  x4, #0x98d000
+    // e6898  ldr  x4, [x4, #0x730]
+    // e689c  bl  sub_c70a0
+    // e68a0  bl  sub_c7540            ; <-- callee return address
+    // e68a4  adrp  x0, #0x98d000
+    // e68a8  ldr  x0, [x0, #0x810]
+    // e68ac  cbz  x0, loc_e68b4
+    // e68b0  b  sub_c71a0
+    // e68b4  ret
+
+    // DWARF CFI: Nothing! This function is not covered by any FDE.
+    // It falls between init_cpu_feature (pc=000e6820...000e6868) and
+    // deregister_tm_clones (pc=000e68b8...000e68e4)
+
+    // sp = 0x0000fffffffff080
+    let mut read_stack = |addr| {
+        Ok(match addr {
+            0x0000fffffffff080 => 0x0000000000000002,
+            0x0000fffffffff088 => 0xffffc8936f0f,
+            _ => return Err(()),
+        })
+    };
+
+    // Unwinding should stop immediately and not even read from the stack.
+    let mut regs =
+        UnwindRegsAarch64::new(0x0000aaaaaab868a0, 0x0000fffffffff080, 0x0000fffffffff080);
+    let res = unwinder.unwind_frame(
+        FrameAddress::from_return_address(0x0000aaaaaab868a0).unwrap(),
         &mut regs,
         &mut cache,
         &mut read_stack,
