@@ -4,48 +4,64 @@ use crate::dwarf::DwarfUnwinderError;
 use crate::{arch::Arch, unwind_rule::UnwindRule};
 use macho_unwind_info::UnwindInfo;
 
-#[cfg_attr(feature = "std", derive(thiserror::Error))]
-#[cfg_attr(not(feature = "std"), derive(thiserror_no_std::Error))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CompactUnwindInfoUnwinderError {
-    #[error("Bad __unwind_info format: {0}")]
-    BadFormat(#[from] macho_unwind_info::Error),
-
-    #[error("Address 0x{0:x} outside of the range covered by __unwind_info")]
+    BadFormat(macho_unwind_info::Error),
     AddressOutsideRange(u32),
-
-    #[error("Encountered a non-leaf function which was marked as frameless.")]
     CallerCannotBeFrameless,
-
-    #[error("No unwind info (null opcode) for this function in __unwind_info")]
     FunctionHasNoInfo,
-
-    #[error("rbp offset from the stack pointer divided by 8 does not fit into i16")]
     BpOffsetDoesNotFit,
-
-    #[error("Unrecognized __unwind_info opcode kind {0}")]
     BadOpcodeKind(u8),
-
-    #[error("DWARF unwinding failed: {0}")]
-    BadDwarfUnwinding(#[from] DwarfUnwinderError),
-
-    #[error("Don't have the function bytes to look up the offset for frameless function with indirect stack offset")]
+    BadDwarfUnwinding(DwarfUnwinderError),
     NoTextBytesToLookUpIndirectStackOffset,
-
-    #[error("Stack offset not found inside the bounds of the text bytes")]
     IndirectStackOffsetOutOfBounds,
-
-    #[error("Stack adjust addition overflowed")]
     StackAdjustOverflow,
-
-    #[error("Stack size does not fit into the rule representation")]
     StackSizeDoesNotFit,
-
-    #[error("A caller had its address in the __stubs section")]
     StubFunctionCannotBeCaller,
-
-    #[error("Encountered invalid unwind entry")]
     InvalidFrameless,
+}
+
+impl core::fmt::Display for CompactUnwindInfoUnwinderError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::BadFormat(err) => write!(f, "Bad __unwind_info format: {err}"),
+            Self::AddressOutsideRange(addr) => write!(f, "Address 0x{addr:x} outside of the range covered by __unwind_info"),
+            Self::CallerCannotBeFrameless => write!(f, "Encountered a non-leaf function which was marked as frameless."),
+            Self::FunctionHasNoInfo => write!(f, "No unwind info (null opcode) for this function in __unwind_info"),
+            Self::BpOffsetDoesNotFit => write!(f, "rbp offset from the stack pointer divided by 8 does not fit into i16"),
+            Self::BadOpcodeKind(kind) => write!(f, "Unrecognized __unwind_info opcode kind {kind}"),
+            Self::BadDwarfUnwinding(err) => write!(f, "DWARF unwinding failed: {err}"),
+            Self::NoTextBytesToLookUpIndirectStackOffset => write!(f, "Don't have the function bytes to look up the offset for frameless function with indirect stack offset"),
+            Self::IndirectStackOffsetOutOfBounds => write!(f, "Stack offset not found inside the bounds of the text bytes"),
+            Self::StackAdjustOverflow => write!(f, "Stack adjust addition overflowed"),
+            Self::StackSizeDoesNotFit => write!(f, "Stack size does not fit into the rule representation"),
+            Self::StubFunctionCannotBeCaller => write!(f, "A caller had its address in the __stubs section"),
+            Self::InvalidFrameless => write!(f, "Encountered invalid unwind entry"),
+        }
+    }
+}
+
+impl From<macho_unwind_info::Error> for CompactUnwindInfoUnwinderError {
+    fn from(e: macho_unwind_info::Error) -> Self {
+        Self::BadFormat(e)
+    }
+}
+
+impl From<DwarfUnwinderError> for CompactUnwindInfoUnwinderError {
+    fn from(e: DwarfUnwinderError) -> Self {
+        Self::BadDwarfUnwinding(e)
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for CompactUnwindInfoUnwinderError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::BadFormat(e) => Some(e),
+            Self::BadDwarfUnwinding(e) => Some(e),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]

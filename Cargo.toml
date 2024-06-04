@@ -15,8 +15,6 @@ exclude = ["/.github", "/.vscode", "/tests", "/fixtures", "/big-fixtures"]
 [dependencies]
 gimli = { version = "0.30", default-features = false, features = ["read"] }
 object = { version = "0.36", default-features = false, features = ["read_core"], optional = true }
-thiserror-no-std = "2.0.2"
-thiserror = { version = "1.0.0", optional = true }
 macho-unwind-info = { version = "0.4.0", optional = true }
 pe-unwind-info = { version = "0.2.1", optional = true }
 fallible-iterator = "0.3.0"
@@ -27,7 +25,7 @@ cfg-if = "1.0.0"
 default = ["std", "macho", "pe"]
 macho = ["macho-unwind-info"]
 pe = ["pe-unwind-info"]
-std = ["arrayvec/std", "thiserror", "gimli/std"]
+std = ["arrayvec/std", "gimli/std"]
 
 [dev-dependencies]
 object = "0.36"

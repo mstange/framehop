@@ -12,30 +12,45 @@ pub(crate) use gimli::BaseAddresses;
 
 use crate::{arch::Arch, unwind_result::UnwindResult, ModuleSectionInfo};
 
-#[cfg_attr(feature = "std", derive(thiserror::Error))]
-#[cfg_attr(not(feature = "std"), derive(thiserror_no_std::Error))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DwarfUnwinderError {
-    #[error("Could not get the FDE for the supplied offset: {0}")]
-    FdeFromOffsetFailed(#[source] gimli::Error),
-
-    #[error("Could not find DWARF unwind info for the requested address: {0}")]
-    UnwindInfoForAddressFailed(#[source] gimli::Error),
-
-    #[error("Stack pointer moved backwards")]
+    FdeFromOffsetFailed(gimli::Error),
+    UnwindInfoForAddressFailed(gimli::Error),
     StackPointerMovedBackwards,
-
-    #[error("Did not advance")]
     DidNotAdvance,
-
-    #[error("Could not recover the CFA")]
     CouldNotRecoverCfa,
-
-    #[error("Could not recover the return address")]
     CouldNotRecoverReturnAddress,
-
-    #[error("Could not recover the frame pointer")]
     CouldNotRecoverFramePointer,
+}
+
+impl core::fmt::Display for DwarfUnwinderError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::FdeFromOffsetFailed(err) => {
+                write!(f, "Could not get the FDE for the supplied offset: {err}")
+            }
+            Self::UnwindInfoForAddressFailed(err) => write!(
+                f,
+                "Could not find DWARF unwind info for the requested address: {err}"
+            ),
+            Self::StackPointerMovedBackwards => write!(f, "Stack pointer moved backwards"),
+            Self::DidNotAdvance => write!(f, "Did not advance"),
+            Self::CouldNotRecoverCfa => write!(f, "Could not recover the CFA"),
+            Self::CouldNotRecoverReturnAddress => write!(f, "Could not recover the return address"),
+            Self::CouldNotRecoverFramePointer => write!(f, "Could not recover the frame pointer"),
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for DwarfUnwinderError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::FdeFromOffsetFailed(e) => Some(e),
+            Self::UnwindInfoForAddressFailed(e) => Some(e),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -232,21 +247,41 @@ pub(crate) fn base_addresses_for_sections<D>(
         .set_got(start_addr(&[b"__got", b".got"]))
 }
 
-#[cfg_attr(feature = "std", derive(thiserror::Error))]
-#[cfg_attr(not(feature = "std"), derive(thiserror_no_std::Error))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DwarfCfiIndexError {
-    #[error("EhFrame processing failed: {0}")]
-    Gimli(#[from] gimli::Error),
-
-    #[error("Could not subtract base address to create relative pc")]
+    Gimli(gimli::Error),
     CouldNotSubtractBaseAddress,
-
-    #[error("Relative address did not fit into u32")]
     RelativeAddressTooBig,
-
-    #[error("FDE offset did not fit into u32")]
     FdeOffsetTooBig,
+}
+
+impl core::fmt::Display for DwarfCfiIndexError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::Gimli(e) => write!(f, "EhFrame processing failed: {e}"),
+            Self::CouldNotSubtractBaseAddress => {
+                write!(f, "Could not subtract base address to create relative pc")
+            }
+            Self::RelativeAddressTooBig => write!(f, "Relative address did not fit into u32"),
+            Self::FdeOffsetTooBig => write!(f, "FDE offset did not fit into u32"),
+        }
+    }
+}
+
+impl From<gimli::Error> for DwarfCfiIndexError {
+    fn from(e: gimli::Error) -> Self {
+        Self::Gimli(e)
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for DwarfCfiIndexError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Gimli(e) => Some(e),
+            _ => None,
+        }
+    }
 }
 
 /// A binary search table for eh_frame FDEs. We generate this whenever a module
