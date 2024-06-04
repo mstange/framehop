@@ -5,53 +5,90 @@ use crate::macho::CompactUnwindInfoUnwinderError;
 use crate::pe::PeUnwinderError;
 
 /// The error type used in this crate.
-#[cfg_attr(feature = "std", derive(thiserror::Error))]
-#[cfg_attr(not(feature = "std"), derive(thiserror_no_std::Error))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Error {
-    #[error("Could not read stack memory at 0x{0:x}")]
     CouldNotReadStack(u64),
-
-    #[error("Frame pointer unwinding moved backwards")]
     FramepointerUnwindingMovedBackwards,
-
-    #[error("Neither the code address nor the stack pointer changed, would loop")]
     DidNotAdvance,
-
-    #[error("Unwinding caused integer overflow")]
     IntegerOverflow,
-
-    #[error("Return address is null")]
     ReturnAddressIsNull,
 }
 
-#[cfg_attr(feature = "std", derive(thiserror::Error))]
-#[cfg_attr(not(feature = "std"), derive(thiserror_no_std::Error))]
+impl core::fmt::Display for Error {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::CouldNotReadStack(addr) => write!(f, "Could not read stack memory at 0x{addr:x}"),
+            Self::FramepointerUnwindingMovedBackwards => {
+                write!(f, "Frame pointer unwinding moved backwards")
+            }
+            Self::DidNotAdvance => write!(
+                f,
+                "Neither the code address nor the stack pointer changed, would loop"
+            ),
+            Self::IntegerOverflow => write!(f, "Unwinding caused integer overflow"),
+            Self::ReturnAddressIsNull => write!(f, "Return address is null"),
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for Error {}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnwinderError {
     #[cfg(feature = "macho")]
-    #[error("Compact Unwind Info unwinding failed: {0}")]
-    CompactUnwindInfo(#[source] CompactUnwindInfoUnwinderError),
-
-    #[error("DWARF unwinding failed: {0}")]
-    Dwarf(#[from] DwarfUnwinderError),
-
+    CompactUnwindInfo(CompactUnwindInfoUnwinderError),
+    Dwarf(DwarfUnwinderError),
     #[cfg(feature = "pe")]
-    #[error("PE unwinding failed: {0}")]
-    Pe(#[from] PeUnwinderError),
-
+    Pe(PeUnwinderError),
     #[cfg(feature = "macho")]
-    #[error("__unwind_info referred to DWARF FDE but we do not have __eh_frame data")]
     NoDwarfData,
-
-    #[error("No unwind data for the module containing the address")]
     NoModuleUnwindData,
-
-    #[error(".eh_frame_hdr was not successful in looking up the address in the table")]
     EhFrameHdrCouldNotFindAddress,
-
-    #[error("Failed to look up the address in the DwarfCfiIndex search table")]
     DwarfCfiIndexCouldNotFindAddress,
+}
+
+impl core::fmt::Display for UnwinderError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            #[cfg(feature = "macho")]
+            Self::CompactUnwindInfo(err) => {
+                write!(f, "Compact Unwind Info unwinding failed: {err}")
+            }
+            Self::Dwarf(err) => write!(f, "DWARF unwinding failed: {err}"),
+            #[cfg(feature = "pe")]
+            Self::Pe(err) => write!(f, "PE unwinding failed: {err}"),
+            #[cfg(feature = "macho")]
+            Self::NoDwarfData => write!(
+                f,
+                "__unwind_info referred to DWARF FDE but we do not have __eh_frame data"
+            ),
+            Self::NoModuleUnwindData => {
+                write!(f, "No unwind data for the module containing the address")
+            }
+            Self::EhFrameHdrCouldNotFindAddress => write!(
+                f,
+                ".eh_frame_hdr was not successful in looking up the address in the table"
+            ),
+            Self::DwarfCfiIndexCouldNotFindAddress => write!(
+                f,
+                "Failed to look up the address in the DwarfCfiIndex search table"
+            ),
+        }
+    }
+}
+
+impl From<DwarfUnwinderError> for UnwinderError {
+    fn from(e: DwarfUnwinderError) -> Self {
+        Self::Dwarf(e)
+    }
+}
+
+#[cfg(feature = "pe")]
+impl From<PeUnwinderError> for UnwinderError {
+    fn from(e: PeUnwinderError) -> Self {
+        Self::Pe(e)
+    }
 }
 
 #[cfg(feature = "macho")]
@@ -60,6 +97,20 @@ impl From<CompactUnwindInfoUnwinderError> for UnwinderError {
         match e {
             CompactUnwindInfoUnwinderError::BadDwarfUnwinding(e) => UnwinderError::Dwarf(e),
             e => UnwinderError::CompactUnwindInfo(e),
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for UnwinderError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            #[cfg(feature = "macho")]
+            Self::CompactUnwindInfo(e) => Some(e),
+            Self::Dwarf(e) => Some(e),
+            #[cfg(feature = "pe")]
+            Self::Pe(e) => Some(e),
+            _ => None,
         }
     }
 }

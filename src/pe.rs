@@ -1,23 +1,39 @@
-use alloc::format;
-
 use crate::{arch::Arch, unwind_result::UnwindResult};
 use core::ops::Range;
 
-#[cfg_attr(feature = "std", derive(thiserror::Error))]
-#[cfg_attr(not(feature = "std"), derive(thiserror_no_std::Error))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PeUnwinderError {
-    #[error("failed to read unwind info memory at RVA {0:x}")]
     MissingUnwindInfoData(u32),
-    #[error("failed to read instruction memory at RVA {0:x}")]
     MissingInstructionData(u32),
-    #[error("failed to read stack{}", .0.map(|a| format!(" at address {a:x}")).unwrap_or_default())]
     MissingStackData(Option<u64>),
-    #[error("failed to parse UnwindInfo")]
     UnwindInfoParseError,
-    #[error("AArch64 is not yet supported")]
     Aarch64Unsupported,
 }
+
+impl core::fmt::Display for PeUnwinderError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::MissingUnwindInfoData(rva) => {
+                write!(f, "failed to read unwind info memory at RVA {rva:x}")
+            }
+            Self::MissingInstructionData(rva) => {
+                write!(f, "failed to read instruction memory at RVA {rva:x}")
+            }
+            Self::MissingStackData(addr) => {
+                write!(f, "failed to read stack")?;
+                if let Some(addr) = addr {
+                    write!(f, " at address {addr:x}")?;
+                }
+                Ok(())
+            }
+            Self::UnwindInfoParseError => write!(f, "failed to parse UnwindInfo"),
+            Self::Aarch64Unsupported => write!(f, "AArch64 is not yet supported"),
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for PeUnwinderError {}
 
 /// Data and the related RVA range within the binary.
 ///
