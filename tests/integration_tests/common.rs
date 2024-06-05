@@ -54,16 +54,11 @@ where
         }
     }
 
-    #[cfg(not(feature = "object"))]
-    let section_info = Module(file);
-    #[cfg(feature = "object")]
-    let section_info = &file;
-
     let module = framehop::Module::new(
         objpath.to_string_lossy().to_string(),
         base_avma..(base_avma + buf.len() as u64),
         base_avma,
-        section_info,
+        Module(file),
     );
     unwinder.add_module(module);
 }
