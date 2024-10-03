@@ -105,7 +105,7 @@ pub trait Unwinder: Clone {
 ///  - `'u`: The lifetime of the [`Unwinder`].
 ///  - `'c`: The lifetime of the unwinder cache.
 ///  - `'r`: The lifetime of the exclusive access to the `read_stack` callback.
-pub struct UnwindIterator<'u, 'c, 'r, U: Unwinder + ?Sized, F: FnMut(u64) -> Result<u64, ()>> {
+pub struct UnwindIterator<'u, 'c, 'r, U: Unwinder, F: FnMut(u64) -> Result<u64, ()>> {
     unwinder: &'u U,
     state: UnwindIteratorState,
     regs: U::UnwindRegs,
@@ -119,7 +119,7 @@ enum UnwindIteratorState {
     Done,
 }
 
-impl<'u, 'c, 'r, U: Unwinder + ?Sized, F: FnMut(u64) -> Result<u64, ()>>
+impl<'u, 'c, 'r, U: Unwinder, F: FnMut(u64) -> Result<u64, ()>>
     UnwindIterator<'u, 'c, 'r, U, F>
 {
     /// Create a new iterator. You'd usually use [`Unwinder::iter_frames`] instead.
@@ -140,7 +140,7 @@ impl<'u, 'c, 'r, U: Unwinder + ?Sized, F: FnMut(u64) -> Result<u64, ()>>
     }
 }
 
-impl<'u, 'c, 'r, U: Unwinder + ?Sized, F: FnMut(u64) -> Result<u64, ()>>
+impl<'u, 'c, 'r, U: Unwinder, F: FnMut(u64) -> Result<u64, ()>>
     UnwindIterator<'u, 'c, 'r, U, F>
 {
     /// Yield the next frame in the stack.
@@ -179,7 +179,7 @@ impl<'u, 'c, 'r, U: Unwinder + ?Sized, F: FnMut(u64) -> Result<u64, ()>>
     }
 }
 
-impl<'u, 'c, 'r, U: Unwinder + ?Sized, F: FnMut(u64) -> Result<u64, ()>> FallibleIterator
+impl<'u, 'c, 'r, U: Unwinder, F: FnMut(u64) -> Result<u64, ()>> FallibleIterator
     for UnwindIterator<'u, 'c, 'r, U, F>
 {
     type Item = FrameAddress;
