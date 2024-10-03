@@ -119,9 +119,7 @@ enum UnwindIteratorState {
     Done,
 }
 
-impl<'u, 'c, 'r, U: Unwinder, F: FnMut(u64) -> Result<u64, ()>>
-    UnwindIterator<'u, 'c, 'r, U, F>
-{
+impl<'u, 'c, 'r, U: Unwinder, F: FnMut(u64) -> Result<u64, ()>> UnwindIterator<'u, 'c, 'r, U, F> {
     /// Create a new iterator. You'd usually use [`Unwinder::iter_frames`] instead.
     pub fn new(
         unwinder: &'u U,
@@ -140,9 +138,7 @@ impl<'u, 'c, 'r, U: Unwinder, F: FnMut(u64) -> Result<u64, ()>>
     }
 }
 
-impl<'u, 'c, 'r, U: Unwinder, F: FnMut(u64) -> Result<u64, ()>>
-    UnwindIterator<'u, 'c, 'r, U, F>
-{
+impl<'u, 'c, 'r, U: Unwinder, F: FnMut(u64) -> Result<u64, ()>> UnwindIterator<'u, 'c, 'r, U, F> {
     /// Yield the next frame in the stack.
     ///
     /// The first frame is `Ok(Some(FrameAddress::InstructionPointer(...)))`.
