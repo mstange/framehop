@@ -138,7 +138,7 @@ impl<'u, 'c, 'r, U: Unwinder, F: FnMut(u64) -> Result<u64, ()>> UnwindIterator<'
     }
 }
 
-impl<'u, 'c, 'r, U: Unwinder, F: FnMut(u64) -> Result<u64, ()>> UnwindIterator<'u, 'c, 'r, U, F> {
+impl<U: Unwinder, F: FnMut(u64) -> Result<u64, ()>> UnwindIterator<'_, '_, '_, U, F> {
     /// Yield the next frame in the stack.
     ///
     /// The first frame is `Ok(Some(FrameAddress::InstructionPointer(...)))`.
@@ -175,8 +175,8 @@ impl<'u, 'c, 'r, U: Unwinder, F: FnMut(u64) -> Result<u64, ()>> UnwindIterator<'
     }
 }
 
-impl<'u, 'c, 'r, U: Unwinder, F: FnMut(u64) -> Result<u64, ()>> FallibleIterator
-    for UnwindIterator<'u, 'c, 'r, U, F>
+impl<U: Unwinder, F: FnMut(u64) -> Result<u64, ()>> FallibleIterator
+    for UnwindIterator<'_, '_, '_, U, F>
 {
     type Item = FrameAddress;
     type Error = Error;
