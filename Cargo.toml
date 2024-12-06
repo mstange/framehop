@@ -1,6 +1,6 @@
 [package]
 name = "framehop"
-version = "0.13.1"
+version = "0.13.2"
 edition = "2021"
 authors = ["Markus Stange <mstange.moz@gmail.com>"]
 categories = ["development-tools::debugging"]
