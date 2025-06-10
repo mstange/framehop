@@ -261,14 +261,7 @@ impl<D: Deref<Target = [u8]>, A: Unwinding, P: AllocationPolicy> UnwinderInterna
             .modules
             .binary_search_by_key(&module.avma_range.start, |module| module.avma_range.start)
         {
-            Ok(i) => {
-                #[cfg(feature = "std")]
-                eprintln!(
-                    "Now we have two modules at the same start address 0x{:x}. This can't be good.",
-                    module.avma_range.start
-                );
-                i
-            }
+            Ok(i) => i, // unexpected
             Err(i) => i,
         };
         self.modules.insert(insertion_index, module);
