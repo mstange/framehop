@@ -134,6 +134,8 @@ mod unwinder;
 
 /// Types for unwinding on the aarch64 CPU architecture.
 pub mod aarch64;
+/// Types for unwinding on the armhf CPU architecture.
+pub mod armhf;
 /// Types for unwinding on the x86_64 CPU architecture.
 pub mod x86_64;
 
@@ -164,3 +166,13 @@ pub type UnwindRegsNative = x86_64::UnwindRegsX86_64;
 /// The unwinder type for the native CPU architecture.
 #[cfg(target_arch = "x86_64")]
 pub type UnwinderNative<D, P> = x86_64::UnwinderX86_64<D, P>;
+
+/// The unwinder cache for the native CPU architecture.
+#[cfg(target_arch = "arm")]
+pub type CacheNative<P> = armhf::CacheArmhf<P>;
+/// The unwind registers type for the native CPU architecture.
+#[cfg(target_arch = "arm")]
+pub type UnwindRegsNative = armhf::UnwindRegsArmhf;
+/// The unwinder type for the native CPU architecture.
+#[cfg(target_arch = "arm")]
+pub type UnwinderNative<D, P> = armhf::UnwinderArmhf<D, P>;
