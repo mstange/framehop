@@ -19,6 +19,7 @@ pub enum CompactUnwindInfoUnwinderError {
     StackSizeDoesNotFit,
     StubFunctionCannotBeCaller,
     InvalidFrameless,
+    ArmhfUnsupported,
 }
 
 impl core::fmt::Display for CompactUnwindInfoUnwinderError {
@@ -37,6 +38,7 @@ impl core::fmt::Display for CompactUnwindInfoUnwinderError {
             Self::StackSizeDoesNotFit => write!(f, "Stack size does not fit into the rule representation"),
             Self::StubFunctionCannotBeCaller => write!(f, "A caller had its address in the __stubs section"),
             Self::InvalidFrameless => write!(f, "Encountered invalid unwind entry"),
+            Self::ArmhfUnsupported => write!(f, "Armhf is not supported"),
         }
     }
 }
