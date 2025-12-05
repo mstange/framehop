@@ -1,6 +1,8 @@
+use std::io::Read;
 use std::path::Path;
 
 use framehop::aarch64::*;
+use framehop::armhf::*;
 use framehop::x86_64::*;
 use framehop::FrameAddress;
 use framehop::Unwinder;
@@ -533,4 +535,288 @@ fn test_root_func_aarch64_old_glibc() {
         &mut read_stack,
     );
     assert_eq!(res, Ok(None));
+}
+
+#[test]
+fn fp_basic_unwind_a64() {
+    use framehop::MayAllocateDuringUnwind;
+
+    let mut cache = CacheAarch64::<_>::new();
+    let mut unwinder = UnwinderAarch64::<Vec<u8>, MayAllocateDuringUnwind>::new();
+
+    let mut stack_bytes = Vec::new();
+    let mut file = std::fs::File::open(
+        &Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("fixtures/linux/aarch64/fp-basic-unwind-a64.stack.bin"),
+    )
+    .unwrap();
+    file.read_to_end(&mut stack_bytes).unwrap();
+    assert!(stack_bytes.len() % 8 == 0);
+    let stack = stack_bytes
+        .chunks(8)
+        .map(|x| x.try_into().unwrap())
+        .map(u64::from_le_bytes)
+        .collect::<Vec<_>>();
+
+    let module = framehop::Module::new(
+        "basic-a64".to_string(),
+        0x0000aaaaaaaa0000..0x0000aaaaaaac0048,
+        0x0000aaaaaaaa0000,
+        framehop::ExplicitModuleSectionInfo {
+            ..Default::default()
+        },
+    );
+    unwinder.add_module(module);
+
+    let pc = 0x0000aaaaaaaa0000 + 0x0000000000000858;
+    let lr = 0x0000aaaaaaaa0000 + 0x0000000000000858;
+    let sp = 0x1000000000000 - 0x0000000000000c50;
+    let fp = 0x1000000000000 - 0x0000000000000a50;
+    let mut read_stack = |addr| {
+        assert!(addr % 8 == 0);
+        assert!(addr <= 0x1000000000000);
+        let offset = (0x1000000000000 - addr) as usize / 8;
+        assert!(offset < stack.len());
+        stack.get(stack.len() - offset).cloned().ok_or(())
+    };
+
+    use framehop::Unwinder;
+    let mut iter = unwinder.iter_frames(
+        pc,
+        UnwindRegsAarch64::new(lr, sp, fp),
+        &mut cache,
+        &mut read_stack,
+    );
+
+    let mut frames = Vec::new();
+    while let Ok(Some(frame)) = iter.next() {
+        frames.push(frame);
+    }
+
+    assert_eq!(
+        frames,
+        vec![
+            FrameAddress::from_instruction_pointer(0x0000aaaaaaaa0000 + 0x0000000000000858),
+            FrameAddress::from_return_address(0x0000aaaaaaaa0000 + 0x0000000000000840).unwrap(),
+            FrameAddress::from_return_address(0x0000aaaaaaaa0000 + 0x00000000000008e8).unwrap(),
+            FrameAddress::from_return_address(0x0000fffff7a60000 + 0x00000000000284c4).unwrap(),
+            FrameAddress::from_return_address(0x0000fffff7a60000 + 0x0000000000028598).unwrap(),
+        ]
+    );
+}
+
+#[test]
+fn fp_basic_unwind_a64_jit() {
+    use framehop::MayAllocateDuringUnwind;
+
+    let mut cache = CacheAarch64::<_>::new();
+    let mut unwinder = UnwinderAarch64::<Vec<u8>, MayAllocateDuringUnwind>::new();
+
+    let mut stack_bytes = Vec::new();
+    let mut file = std::fs::File::open(
+        &Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("fixtures/linux/aarch64/fp-basic-unwind-a64-jit.stack.bin"),
+    )
+    .unwrap();
+    file.read_to_end(&mut stack_bytes).unwrap();
+    assert!(stack_bytes.len() % 8 == 0);
+    let stack = stack_bytes
+        .chunks(8)
+        .map(|x| x.try_into().unwrap())
+        .map(u64::from_le_bytes)
+        .collect::<Vec<_>>();
+
+    let module = framehop::Module::new(
+        "basic-a64".to_string(),
+        0x0000aaaaaaaa0000..0x0000aaaaaaac0048,
+        0x0000aaaaaaaa0000,
+        framehop::ExplicitModuleSectionInfo {
+            ..Default::default()
+        },
+    );
+    unwinder.add_module(module);
+
+    let pc = 0x0000aaaaaaaa0000 + 0x0000000000000898;
+    let lr = 0xfffff7ff1000 + 0x000000000000030;
+    let sp = 0x1000000000000 - 0x0000000000000c50;
+    let fp = 0x1000000000000 - 0x0000000000000a50;
+    let mut read_stack = |addr| {
+        assert!(addr % 8 == 0);
+        assert!(addr <= 0x1000000000000);
+        let offset = (0x1000000000000 - addr) as usize / 8;
+        assert!(offset < stack.len());
+        stack.get(stack.len() - offset).cloned().ok_or(())
+    };
+
+    use framehop::Unwinder;
+    let mut iter = unwinder.iter_frames(
+        pc,
+        UnwindRegsAarch64::new(lr, sp, fp),
+        &mut cache,
+        &mut read_stack,
+    );
+
+    let mut frames = Vec::new();
+    while let Ok(Some(frame)) = iter.next() {
+        frames.push(frame);
+    }
+
+    println!(
+        "{:?}",
+        frames
+            .iter()
+            .map(|frame| format!("{:x}", frame.address()))
+            .collect::<Vec<String>>()
+    );
+    assert_eq!(
+        frames,
+        vec![
+            FrameAddress::from_instruction_pointer(0x0000aaaaaaaa0000 + 0x0000000000000898),
+            FrameAddress::from_return_address(0xfffff7ff1000 + 0x0000000000000018).unwrap(),
+            FrameAddress::from_return_address(0x0000aaaaaaaa0000 + 0x0000000000000934).unwrap(),
+            FrameAddress::from_return_address(0x0000fffff7a60000 + 0x00000000000284c4).unwrap(),
+            FrameAddress::from_return_address(0x0000fffff7a60000 + 0x0000000000028598).unwrap(),
+        ]
+    );
+}
+
+#[test]
+fn fp_basic_unwind_a32() {
+    use framehop::MayAllocateDuringUnwind;
+
+    let mut cache = CacheArmhf::<_>::new();
+    let mut unwinder = UnwinderArmhf::<Vec<u8>, MayAllocateDuringUnwind>::new();
+
+    let mut stack_bytes = Vec::new();
+    let mut file = std::fs::File::open(
+        &Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("fixtures/linux/armhf/fp-basic-unwind-a32.stack.bin"),
+    )
+    .unwrap();
+    file.read_to_end(&mut stack_bytes).unwrap();
+    assert!(stack_bytes.len() % 4 == 0);
+    let stack = stack_bytes
+        .chunks(4)
+        .map(|x| x.try_into().unwrap())
+        .map(u32::from_le_bytes)
+        .collect::<Vec<_>>();
+
+    let module = framehop::Module::new(
+        "basic-a32".to_string(),
+        0x00400000..0x00400000,
+        0x00400000,
+        framehop::ExplicitModuleSectionInfo {
+            ..Default::default()
+        },
+    );
+    unwinder.add_module(module);
+
+    let pc = 0x00400000 + 0x0000060e;
+    let lr = 0x00400000 + 0x00000609;
+    let sp = 0xffff0000 - 0x00000938;
+    let fp = 0xffff0000 - 0x00000910;
+    let mut read_stack = |addr| {
+        assert!(addr % 4 == 0);
+        assert!(addr < 0xffff0000);
+        let offset = ((0xffff0000 - addr) / 4) as usize;
+        assert!(offset < stack.len());
+        stack
+            .get(stack.len() - offset)
+            .cloned()
+            .ok_or(())
+            .map(|x| x as u64)
+    };
+
+    use framehop::Unwinder;
+    let mut iter = unwinder.iter_frames(
+        pc,
+        UnwindRegsArmhf::new(lr, sp, fp),
+        &mut cache,
+        &mut read_stack,
+    );
+
+    let mut frames = Vec::new();
+    while let Ok(Some(frame)) = iter.next() {
+        frames.push(frame);
+    }
+
+    assert_eq!(
+        frames,
+        vec![
+            FrameAddress::from_instruction_pointer(0x00400000 + 0x0000060e),
+            FrameAddress::from_return_address(0x00400000 + 0x000005f3).unwrap(),
+            FrameAddress::from_return_address(0x00400000 + 0x0000066d).unwrap(),
+        ]
+    );
+}
+
+#[test]
+fn fp_basic_unwind_a32_jit() {
+    use framehop::MayAllocateDuringUnwind;
+
+    let mut cache = CacheArmhf::<_>::new();
+    let mut unwinder = UnwinderArmhf::<Vec<u8>, MayAllocateDuringUnwind>::new();
+
+    let mut stack_bytes = Vec::new();
+    let mut file = std::fs::File::open(
+        &Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("fixtures/linux/armhf/fp-basic-unwind-a32-jit.stack.bin"),
+    )
+    .unwrap();
+    file.read_to_end(&mut stack_bytes).unwrap();
+    assert!(stack_bytes.len() % 4 == 0);
+    let stack = stack_bytes
+        .chunks(4)
+        .map(|x| x.try_into().unwrap())
+        .map(u32::from_le_bytes)
+        .collect::<Vec<_>>();
+
+    let module = framehop::Module::new(
+        "basic-a32".to_string(),
+        0x00400000..0x00400000,
+        0x00400000,
+        framehop::ExplicitModuleSectionInfo {
+            ..Default::default()
+        },
+    );
+    unwinder.add_module(module);
+
+    let pc = 0x00400000 + 0x0000060e;
+    let lr = 0xf7fcf000 + 0x0000002d;
+    let sp = 0xffff0000 - 0x00000930;
+    let fp = 0xffff0000 - 0x00000908;
+    let mut read_stack = |addr| {
+        assert!(addr % 4 == 0);
+        assert!(addr <= 0xffff0000);
+        let offset = (0xffff0000 - addr) as usize / 4;
+        assert!(offset < stack.len());
+        stack
+            .get(stack.len() - offset)
+            .cloned()
+            .ok_or(())
+            .map(|x| x as u64)
+    };
+
+    use framehop::Unwinder;
+    let mut iter = unwinder.iter_frames(
+        pc,
+        UnwindRegsArmhf::new(lr, sp, fp),
+        &mut cache,
+        &mut read_stack,
+    );
+
+    let mut frames = Vec::new();
+    while let Ok(Some(frame)) = iter.next() {
+        println!("{:x}", frame.address());
+        frames.push(frame);
+    }
+
+    assert_eq!(
+        frames,
+        vec![
+            FrameAddress::from_instruction_pointer(0x00400000 + 0x0000060e),
+            FrameAddress::from_return_address(0xf7fcf000 + 0x00000017).unwrap(),
+            FrameAddress::from_return_address(0x00400000 + 0x00000677).unwrap(),
+        ]
+    );
 }
