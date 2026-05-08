@@ -145,6 +145,98 @@ fn test_pthread_cfa_expr() {
 }
 
 #[test]
+fn test_signal_trampoline_cfa_expr_with_memory_deref() {
+    let mut cache = CacheX86_64::<_>::new();
+    let mut unwinder = UnwinderX86_64::new();
+    common::add_object(
+        &mut unwinder,
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/linux/x86_64/nofp/libc.so.6"),
+        0x0,
+    );
+
+    // From the __restore_rt FDE in fixtures/linux/x86_64/nofp/libc.so.6:
+    //
+    // __restore_rt:
+    // 46520  mov  rax, 0xf
+    // 46527  syscall
+    //
+    // with DWARF CFI:
+    //
+    // 0x4651f...0x46529:
+    //   CFA=DW_OP_breg7(RSP) +160, DW_OP_deref
+    //   RBP=DW_OP_breg7(RSP) +120
+    //   RIP=DW_OP_breg7(RSP) +168
+    // With RSP=0x80, the CFA expression reads [RSP+160] = [0x120].
+    // The RBP and RIP expressions read [RSP+120] and [RSP+168].
+    let mut stack = vec![0u64; 0x200 / 8];
+    stack[0x0f8 / 8] = 0x4567;
+    stack[0x120 / 8] = 0x188;
+    stack[0x128 / 8] = 0x123456;
+    let mut read_stack = |addr| stack.get((addr / 8) as usize).cloned().ok_or(());
+
+    let mut regs = UnwindRegsX86_64::new(0x46527, 0x80, 0x9999);
+    let res = unwinder.unwind_frame(
+        FrameAddress::from_instruction_pointer(0x46527),
+        &mut regs,
+        &mut cache,
+        &mut read_stack,
+    );
+    assert_eq!(res, Ok(Some(0x123456)));
+    assert_eq!(regs.sp(), 0x188);
+    assert_eq!(regs.bp(), 0x4567);
+}
+
+#[test]
+fn test_cfa_expr_with_general_purpose_register() {
+    let mut cache = CacheX86_64::<_>::new();
+    let mut unwinder = UnwinderX86_64::new();
+    common::add_object(
+        &mut unwinder,
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/linux/x86_64/nofp/rustup"),
+        0x0,
+    );
+
+    // From the GFp_bn_mul_mont FDE in fixtures/linux/x86_64/nofp/rustup:
+    //
+    // GFp_bn_mul_mont:
+    // 5f25c0  push  rbx
+    // 5f25c1  push  rbp
+    // 5f25c2  push  r12
+    // 5f25c4  push  r13
+    // 5f25c6  push  r14
+    // 5f25c8  push  r15
+    // ...
+    // 5f2616  mov   r12, rdx
+    //
+    // with DWARF CFI:
+    //
+    // 0x5f2616:
+    //   CFA=DW_OP_breg7(RSP) +8, DW_OP_breg9(R9) +0, DW_OP_lit8,
+    //       DW_OP_mul, DW_OP_plus, DW_OP_deref, DW_OP_plus_uconst +8
+    //   RBP=[CFA-24]
+    //   RIP=[CFA-8]
+    // With RSP=0x80 and R9=4, the CFA expression reads
+    // [RSP + 8 + R9 * 8] = [0xa8], then adds 8.
+    let mut stack = vec![0u64; 0x200 / 8];
+    stack[0x0a8 / 8] = 0x180;
+    stack[0x170 / 8] = 0x4567;
+    stack[0x180 / 8] = 0x123456;
+    let mut read_stack = |addr| stack.get((addr / 8) as usize).cloned().ok_or(());
+
+    let mut regs = UnwindRegsX86_64::new(0x5f2616, 0x80, 0x9999);
+    regs.set(Reg::R9, 4);
+    let res = unwinder.unwind_frame(
+        FrameAddress::from_instruction_pointer(0x5f2616),
+        &mut regs,
+        &mut cache,
+        &mut read_stack,
+    );
+    assert_eq!(res, Ok(Some(0x123456)));
+    assert_eq!(regs.sp(), 0x188);
+    assert_eq!(regs.bp(), 0x4567);
+}
+
+#[test]
 fn test_no_eh_frame_hdr() {
     let mut cache = CacheAarch64::<_>::new();
     let mut unwinder = UnwinderAarch64::new();

@@ -109,6 +109,7 @@ impl UnwindRule for UnwindRuleX86_64 {
         F: FnMut(u64) -> Result<u64, ()>,
     {
         let sp = regs.sp();
+        let mut restored_regs = ArrayVec::<(Reg, u64), 8>::new();
         let (new_sp, new_bp) = match self {
             UnwindRuleX86_64::EndOfStack => return Ok(None),
             UnwindRuleX86_64::JustReturn => {
@@ -231,9 +232,13 @@ impl UnwindRule for UnwindRuleX86_64 {
                 for reg in register_ordering::decode(register_count, encoded_registers_to_pop) {
                     let value = read_stack(sp).map_err(|_| Error::CouldNotReadStack(sp))?;
                     sp = sp.checked_add(8).ok_or(Error::IntegerOverflow)?;
-                    regs.set(reg, value);
+                    restored_regs.push((reg, value));
                 }
-                (sp.checked_add(8).ok_or(Error::IntegerOverflow)?, regs.bp())
+                let new_bp = restored_regs
+                    .iter()
+                    .find_map(|(reg, value)| (*reg == Reg::RBP).then_some(*value))
+                    .unwrap_or_else(|| regs.bp());
+                (sp.checked_add(8).ok_or(Error::IntegerOverflow)?, new_bp)
             }
         };
         let return_address =
@@ -243,6 +248,10 @@ impl UnwindRule for UnwindRuleX86_64 {
         }
         if new_sp == sp && return_address == regs.ip() {
             return Err(Error::DidNotAdvance);
+        }
+        regs.clear_unrestored_caller_registers();
+        for (reg, value) in restored_regs {
+            regs.set(reg, value);
         }
         regs.set_ip(return_address);
         regs.set_sp(new_sp);
@@ -305,5 +314,45 @@ mod test {
         assert_eq!(res, Err(Error::IntegerOverflow));
         let res = UnwindRuleX86_64::UseFramePointer.exec(true, &mut regs, &mut read_stack);
         assert_eq!(res, Err(Error::IntegerOverflow));
+    }
+
+    #[test]
+    fn test_unwind_clears_unrestored_general_purpose_registers() {
+        let stack = [0x100200, 0x100100];
+        let mut read_stack = |addr| Ok(stack[(addr / 8) as usize]);
+        let mut regs = UnwindRegsX86_64::new(0x100300, 0, 0x20);
+        regs.set(Reg::RAX, 0xaa);
+        regs.set(Reg::RBX, 0xbb);
+
+        let res =
+            UnwindRuleX86_64::OffsetSp { sp_offset_by_8: 1 }.exec(true, &mut regs, &mut read_stack);
+
+        assert_eq!(res, Ok(Some(0x100200)));
+        assert_eq!(regs.get_if_set(Reg::RAX), None);
+        assert_eq!(regs.get_if_set(Reg::RBX), None);
+        assert_eq!(regs.get_if_set(Reg::RSP), Some(8));
+        assert_eq!(regs.get_if_set(Reg::RBP), Some(0x20));
+    }
+
+    #[test]
+    fn test_unwind_keeps_restored_general_purpose_registers() {
+        let stack = [0xbeef, 0x100200];
+        let mut read_stack = |addr| Ok(stack[(addr / 8) as usize]);
+        let mut regs = UnwindRegsX86_64::new(0x100300, 0, 0x20);
+        regs.set(Reg::RAX, 0xaa);
+        regs.set(Reg::RBX, 0xbb);
+
+        let res = UnwindRuleX86_64::OffsetSpAndPopRegisters {
+            sp_offset_by_8: 0,
+            register_count: 1,
+            encoded_registers_to_pop: 0,
+        }
+        .exec(true, &mut regs, &mut read_stack);
+
+        assert_eq!(res, Ok(Some(0x100200)));
+        assert_eq!(regs.get_if_set(Reg::RAX), None);
+        assert_eq!(regs.get_if_set(Reg::RBX), Some(0xbeef));
+        assert_eq!(regs.get_if_set(Reg::RSP), Some(16));
+        assert_eq!(regs.get_if_set(Reg::RBP), Some(0x20));
     }
 }
