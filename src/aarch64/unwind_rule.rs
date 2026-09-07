@@ -83,6 +83,9 @@ impl UnwindRule for UnwindRuleAarch64 {
                     (lr, sp, fp)
                 } else {
                     let fp = regs.fp();
+                    if fp == 0 {
+                        return Ok(None);
+                    }
                     let new_sp = fp.checked_add(16).ok_or(Error::IntegerOverflow)?;
                     let new_lr =
                         read_stack(fp + 8).map_err(|_| Error::CouldNotReadStack(fp + 8))?;
@@ -181,6 +184,9 @@ impl UnwindRule for UnwindRuleAarch64 {
                 //
                 // So: *fp is the caller's frame pointer, and *(fp + 8) is the return address.
                 let fp = regs.fp();
+                if fp == 0 {
+                    return Ok(None);
+                }
                 let new_sp = fp.checked_add(16).ok_or(Error::IntegerOverflow)?;
                 let new_lr = read_stack(fp + 8).map_err(|_| Error::CouldNotReadStack(fp + 8))?;
                 let new_fp = read_stack(fp).map_err(|_| Error::CouldNotReadStack(fp))?;
@@ -260,5 +266,23 @@ mod test {
         assert_eq!(regs.fp(), 0x70);
         let res = UnwindRuleAarch64::UseFramePointer.exec(false, &mut regs, &mut read_stack);
         assert_eq!(res, Ok(None));
+    }
+
+    #[test]
+    fn test_zero_fp_ends_stack_without_reading() {
+        for rule in [
+            UnwindRuleAarch64::NoOpIfFirstFrameOtherwiseFp,
+            UnwindRuleAarch64::UseFramePointer,
+        ] {
+            let mut regs = UnwindRegsAarch64::new(0x100300, 0x1000, 0);
+            let original_regs = regs;
+            let mut read_stack =
+                |_| -> Result<u64, ()> { panic!("a zero frame pointer should not read the stack") };
+
+            let res = rule.exec(false, &mut regs, &mut read_stack);
+
+            assert_eq!(res, Ok(None));
+            assert_eq!(regs, original_regs);
+        }
     }
 }

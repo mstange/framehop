@@ -122,6 +122,9 @@ impl UnwindRule for UnwindRuleX86_64 {
                 } else {
                     let sp = regs.sp();
                     let bp = regs.bp();
+                    if bp == 0 {
+                        return Ok(None);
+                    }
                     let new_sp = bp.checked_add(16).ok_or(Error::IntegerOverflow)?;
                     if new_sp <= sp {
                         return Err(Error::FramepointerUnwindingMovedBackwards);
@@ -305,5 +308,22 @@ mod test {
         assert_eq!(res, Err(Error::IntegerOverflow));
         let res = UnwindRuleX86_64::UseFramePointer.exec(true, &mut regs, &mut read_stack);
         assert_eq!(res, Err(Error::IntegerOverflow));
+    }
+
+    #[test]
+    fn test_uncovered_older_frame_with_zero_bp_ends_stack() {
+        let mut regs = UnwindRegsX86_64::new(0x100400, 0x1000, 0);
+        let original_regs = regs;
+        let mut read_stack =
+            |_| -> Result<u64, ()> { panic!("a zero frame pointer should not read the stack") };
+
+        let res = UnwindRuleX86_64::JustReturnIfFirstFrameOtherwiseFp.exec(
+            false,
+            &mut regs,
+            &mut read_stack,
+        );
+
+        assert_eq!(res, Ok(None));
+        assert_eq!(regs, original_regs);
     }
 }
