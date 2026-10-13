@@ -17,7 +17,7 @@ impl<R: UnwindRule> RuleCache<R> {
         }
     }
 
-    pub fn lookup(&mut self, address: u64, modules_generation: u16) -> CacheResult<R> {
+    pub fn lookup(&mut self, address: u64, modules_generation: u64) -> CacheResult<R> {
         let slot = (address % (CACHE_ENTRY_COUNT as u64)) as u16;
         match &self.entries[slot as usize] {
             None => {
@@ -70,7 +70,7 @@ pub enum CacheResult<R: UnwindRule> {
 pub struct CacheHandle {
     slot: u16,
     address: u64,
-    modules_generation: u16,
+    modules_generation: u64,
 }
 
 const _: () = assert!(
@@ -81,7 +81,7 @@ const _: () = assert!(
 #[derive(Clone, Copy, Debug)]
 struct CacheEntry<R: UnwindRule> {
     address: u64,
-    modules_generation: u16,
+    modules_generation: u64,
     unwind_rule: R,
 }
 
@@ -136,7 +136,7 @@ mod tests {
     fn test_cache_entry_size() {
         assert_eq!(
             core::mem::size_of::<Option<CacheEntry<UnwindRuleX86_64>>>(),
-            16
+            24
         );
         assert_eq!(
             core::mem::size_of::<Option<CacheEntry<UnwindRuleAarch64>>>(),
