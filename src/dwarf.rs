@@ -72,12 +72,15 @@ pub enum ConversionError {
 }
 
 pub trait DwarfUnwinding: Arch {
+    #[allow(clippy::too_many_arguments)]
     fn unwind_frame<F, R, UCS, ES>(
         section: &impl UnwindSection<R>,
         unwind_info: &UnwindTableRow<R::Offset, UCS>,
         encoding: Encoding,
         regs: &mut Self::UnwindRegs,
         is_first_frame: bool,
+        is_signal_frame: bool,
+        signal_aware: bool,
         read_stack: &mut F,
     ) -> Result<UnwindResult<Self::UnwindRule>, DwarfUnwinderError>
     where
@@ -154,6 +157,7 @@ where
         &mut self,
         regs: &mut A::UnwindRegs,
         is_first_frame: bool,
+        signal_aware: bool,
         rel_lookup_address: u32,
         fde_offset: u32,
         read_stack: &mut F,
@@ -172,13 +176,15 @@ where
                 if let Err(DwarfUnwinderError::UnwindInfoForAddressFailed(_)) = unwind_info {
                     return Ok(UnwindResult::ExecRule(A::rule_if_uncovered_by_fde()));
                 }
-                let (unwind_info, encoding) = unwind_info?;
+                let (unwind_info, encoding, is_signal_frame) = unwind_info?;
                 A::unwind_frame::<F, R, UCS, ES>(
                     &eh_frame,
                     unwind_info,
                     encoding,
                     regs,
                     is_first_frame,
+                    is_signal_frame,
+                    signal_aware,
                     read_stack,
                 )
             }
@@ -189,25 +195,28 @@ where
                 if let Err(DwarfUnwinderError::UnwindInfoForAddressFailed(_)) = unwind_info {
                     return Ok(UnwindResult::ExecRule(A::rule_if_uncovered_by_fde()));
                 }
-                let (unwind_info, encoding) = unwind_info?;
+                let (unwind_info, encoding, is_signal_frame) = unwind_info?;
                 A::unwind_frame::<F, R, UCS, ES>(
                     &debug_frame,
                     unwind_info,
                     encoding,
                     regs,
                     is_first_frame,
+                    is_signal_frame,
+                    signal_aware,
                     read_stack,
                 )
             }
         }
     }
 
+    #[allow(clippy::type_complexity)]
     fn unwind_info_for_fde<US: UnwindSection<R>>(
         &mut self,
         unwind_section: &US,
         lookup_svma: u64,
         fde_offset: u32,
-    ) -> Result<(&UnwindTableRow<R::Offset, UCS>, Encoding), DwarfUnwinderError> {
+    ) -> Result<(&UnwindTableRow<R::Offset, UCS>, Encoding, bool), DwarfUnwinderError> {
         let fde = unwind_section.fde_from_offset(
             &self.bases,
             US::Offset::from(R::Offset::from_u32(fde_offset)),
@@ -215,6 +224,7 @@ where
         );
         let fde = fde.map_err(DwarfUnwinderError::FdeFromOffsetFailed)?;
         let encoding = fde.cie().encoding();
+        let is_signal_frame = fde.is_signal_trampoline();
         let unwind_info: &UnwindTableRow<_, _> = fde
             .unwind_info_for_address(
                 unwind_section,
@@ -223,7 +233,7 @@ where
                 lookup_svma,
             )
             .map_err(DwarfUnwinderError::UnwindInfoForAddressFailed)?;
-        Ok((unwind_info, encoding))
+        Ok((unwind_info, encoding, is_signal_frame))
     }
 }
 
