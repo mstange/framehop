@@ -218,9 +218,34 @@ cfg_if::cfg_if! {
     }
 }
 
+/// A chunk of the module list that grows past twice this many modules is split in two; see
+/// [`UnwinderInternal::modules`].
+const MODULE_CHUNK: usize = 64;
+
+/// Consecutive modules of the module list.
+struct ModuleChunk<D> {
+    /// The start of the first module, kept here so that finding the chunk for an address
+    /// reads only the list of chunks.
+    start: u64,
+    /// Sorted by avma_range.start, never empty.
+    modules: Arc<Vec<Module<D>>>,
+}
+
+impl<D> Clone for ModuleChunk<D> {
+    fn clone(&self) -> Self {
+        Self {
+            start: self.start,
+            modules: self.modules.clone(),
+        }
+    }
+}
+
 pub struct UnwinderInternal<D, A, P> {
-    /// sorted by avma_range.start
-    modules: Vec<Module<D>>,
+    /// Sorted by avma_range.start, in chunks of up to `2 * MODULE_CHUNK` modules. Two
+    /// neighboring chunks hold more than `MODULE_CHUNK` modules. Cloning the unwinder copies
+    /// only the list of chunks, and changing a clone copies only the modules of the chunk the
+    /// change is in.
+    modules: Vec<ModuleChunk<D>>,
     /// Incremented every time modules is changed.
     modules_generation: u16,
     _arch: PhantomData<A>,
@@ -253,55 +278,119 @@ impl<D, A, P> UnwinderInternal<D, A, P> {
             _allocation_policy: PhantomData,
         }
     }
+
+    /// The index of the chunk that holds the module with the highest start at or below
+    /// `address`, or of the first chunk if there is none. Only valid if there is at least
+    /// one chunk.
+    fn chunk_index_for(&self, address: u64) -> usize {
+        self.modules[1..].partition_point(|chunk| chunk.start <= address)
+    }
+
+    /// Joins the chunk at `index` with a neighbor if the two hold at most `MODULE_CHUNK`
+    /// modules, so that removing modules does not leave many small chunks.
+    fn join_small_chunk(&mut self, index: usize) {
+        let len = |i: usize| self.modules.get(i).map_or(usize::MAX, |c| c.modules.len());
+        let left = if index > 0 && len(index - 1).saturating_add(len(index)) <= MODULE_CHUNK {
+            index - 1
+        } else if len(index).saturating_add(len(index + 1)) <= MODULE_CHUNK {
+            index
+        } else {
+            return;
+        };
+        let right = self.modules.remove(left + 1);
+        let modules = Arc::make_mut(&mut self.modules[left].modules);
+        match Arc::try_unwrap(right.modules) {
+            Ok(right) => modules.extend(right),
+            Err(right) => modules.extend(right.iter().cloned()),
+        }
+    }
 }
 
 impl<D: Deref<Target = [u8]>, A: Unwinding, P: AllocationPolicy> UnwinderInternal<D, A, P> {
     pub fn add_module(&mut self, module: Module<D>) {
-        let insertion_index = match self
-            .modules
-            .binary_search_by_key(&module.avma_range.start, |module| module.avma_range.start)
-        {
-            Ok(i) => i, // unexpected
-            Err(i) => i,
-        };
-        self.modules.insert(insertion_index, module);
+        let start = module.avma_range.start;
+        if self.modules.is_empty() {
+            self.modules.push(ModuleChunk {
+                start,
+                modules: Arc::new(Vec::from([module])),
+            });
+        } else {
+            let chunk_index = self.chunk_index_for(start);
+            let chunk = &mut self.modules[chunk_index];
+            let modules = Arc::make_mut(&mut chunk.modules);
+            let insertion_index =
+                match modules.binary_search_by_key(&start, |module| module.avma_range.start) {
+                    Ok(i) => i, // unexpected
+                    Err(i) => i,
+                };
+            modules.insert(insertion_index, module);
+            chunk.start = chunk.start.min(start);
+            if modules.len() > 2 * MODULE_CHUNK {
+                let tail = modules.split_off(MODULE_CHUNK);
+                let tail = ModuleChunk {
+                    start: tail[0].avma_range.start,
+                    modules: Arc::new(tail),
+                };
+                self.modules.insert(chunk_index + 1, tail);
+            }
+        }
         self.modules_generation = next_global_modules_generation();
     }
 
     pub fn remove_module(&mut self, module_address_range_start: u64) {
-        if let Ok(index) = self
+        if self.modules.is_empty() {
+            return;
+        }
+        let chunk_index = self.chunk_index_for(module_address_range_start);
+        let chunk = &mut self.modules[chunk_index];
+        if let Ok(index) = chunk
             .modules
             .binary_search_by_key(&module_address_range_start, |module| {
                 module.avma_range.start
             })
         {
-            self.modules.remove(index);
+            let modules = Arc::make_mut(&mut chunk.modules);
+            // Dropped last: its section data may panic when dropped.
+            let removed = modules.remove(index);
+            match modules.first() {
+                Some(first) => {
+                    chunk.start = first.avma_range.start;
+                    self.join_small_chunk(chunk_index);
+                }
+                None => {
+                    self.modules.remove(chunk_index);
+                }
+            }
             self.modules_generation = next_global_modules_generation();
+            drop(removed);
         };
     }
 
     pub fn max_known_code_address(&self) -> u64 {
-        self.modules.last().map_or(0, |m| m.avma_range.end)
+        self.modules
+            .last()
+            .and_then(|chunk| chunk.modules.last())
+            .map_or(0, |m| m.avma_range.end)
     }
 
-    fn find_module_for_address(&self, address: u64) -> Option<(usize, u32)> {
-        let (module_index, module) = match self
-            .modules
-            .binary_search_by_key(&address, |m| m.avma_range.start)
-        {
-            Ok(i) => (i, &self.modules[i]),
+    fn find_module_for_address(&self, address: u64) -> Option<(&Module<D>, u32)> {
+        if self.modules.is_empty() {
+            return None;
+        }
+        let chunk = &self.modules[self.chunk_index_for(address)].modules;
+        let module = match chunk.binary_search_by_key(&address, |m| m.avma_range.start) {
+            Ok(i) => &chunk[i],
             Err(insertion_index) => {
                 if insertion_index == 0 {
                     // address is before first known module
                     return None;
                 }
-                let i = insertion_index - 1;
-                let module = &self.modules[i];
+                let module = &chunk[insertion_index - 1];
                 if module.avma_range.end <= address {
                     // address is after this module
                     return None;
                 }
-                (i, module)
+                module
             }
         };
         if address < module.base_avma {
@@ -309,7 +398,7 @@ impl<D: Deref<Target = [u8]>, A: Unwinding, P: AllocationPolicy> UnwinderInterna
             return None;
         }
         let relative_address = u32::try_from(address - module.base_avma).ok()?;
-        Some((module_index, relative_address))
+        Some((module, relative_address))
     }
 
     fn with_cache<F, G>(
@@ -345,8 +434,7 @@ impl<D: Deref<Target = [u8]>, A: Unwinding, P: AllocationPolicy> UnwinderInterna
 
         let unwind_rule = match self.find_module_for_address(lookup_address) {
             None => A::UnwindRule::fallback_rule(),
-            Some((module_index, relative_lookup_address)) => {
-                let module = &self.modules[module_index];
+            Some((module, relative_lookup_address)) => {
                 match callback(
                     module,
                     address,
@@ -953,5 +1041,194 @@ impl<D: Deref<Target = [u8]>> Module<D> {
 
     pub fn name(&self) -> &str {
         &self.name
+    }
+}
+
+#[cfg(test)]
+mod module_chunk_tests {
+    use super::*;
+    use crate::cache::MayAllocateDuringUnwind;
+    use crate::x86_64::ArchX86_64;
+
+    type Unw = UnwinderInternal<Vec<u8>, ArchX86_64, MayAllocateDuringUnwind>;
+
+    const SPAN: u64 = 0x100;
+
+    fn module(start: u64) -> Module<Vec<u8>> {
+        Module::new(
+            String::new(),
+            start..start + SPAN,
+            start,
+            ExplicitModuleSectionInfo::<Vec<u8>>::default(),
+        )
+    }
+
+    fn check(unw: &Unw, reference: &[u64]) {
+        let mut last_start = None;
+        for pair in unw.modules.windows(2) {
+            assert!(pair[0].modules.len() + pair[1].modules.len() > MODULE_CHUNK);
+        }
+        for chunk in &unw.modules {
+            assert!(!chunk.modules.is_empty() && chunk.modules.len() <= 2 * MODULE_CHUNK);
+            assert_eq!(chunk.start, chunk.modules[0].avma_range.start);
+            for m in chunk.modules.iter() {
+                assert!(last_start < Some(m.avma_range.start));
+                last_start = Some(m.avma_range.start);
+            }
+        }
+        let starts: Vec<u64> = unw
+            .modules
+            .iter()
+            .flat_map(|c| c.modules.iter().map(|m| m.avma_range.start))
+            .collect();
+        assert_eq!(starts, reference);
+        assert_eq!(
+            unw.max_known_code_address(),
+            reference.last().map_or(0, |s| s + SPAN)
+        );
+        for slot in 0..2001u64 {
+            for addr in [
+                slot * 0x1000,
+                slot * 0x1000 + SPAN - 1,
+                slot * 0x1000 + SPAN,
+            ] {
+                let expected = reference
+                    .iter()
+                    .copied()
+                    .find(|&s| s <= addr && addr < s + SPAN);
+                let found = unw
+                    .find_module_for_address(addr)
+                    .map(|(m, _)| m.avma_range.start);
+                assert_eq!(found, expected, "lookup of {addr:#x}");
+            }
+        }
+    }
+
+    #[test]
+    fn chunked_module_list_matches_a_sorted_list() {
+        let mut unw = Unw::new();
+        let mut reference: Vec<u64> = Vec::new();
+        let mut snapshots = Vec::new();
+        let mut x: u64 = 0x9e37_79b9_7f4a_7c15;
+        for step in 0..6000 {
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            let start = 0x1000 * (x % 2000);
+            match reference.binary_search(&start) {
+                Ok(i) => {
+                    if x & 1 == 0 {
+                        unw.remove_module(start);
+                        reference.remove(i);
+                    }
+                }
+                Err(i) => {
+                    unw.add_module(module(start));
+                    reference.insert(i, start);
+                }
+            }
+            if step % 600 == 0 {
+                snapshots.push((unw.clone(), reference.clone()));
+            }
+        }
+        // removing an absent module changes nothing
+        let generation = unw.modules_generation;
+        unw.remove_module(0x1000 * 5000);
+        assert_eq!(unw.modules_generation, generation);
+        snapshots.push((unw.clone(), reference.clone()));
+        // earlier clones must not see later changes
+        for (unw, reference) in &snapshots {
+            check(unw, reference);
+        }
+    }
+
+    #[test]
+    fn clones_share_the_chunks_they_do_not_change() {
+        let mut unw = Unw::new();
+        let mut reference: Vec<u64> = (0..2 * MODULE_CHUNK as u64 + 1)
+            .map(|i| i * 0x1000)
+            .collect();
+        for &start in &reference {
+            unw.add_module(module(start));
+        }
+        assert_eq!(unw.modules.len(), 2);
+        check(&unw, &reference);
+
+        let mut changed = unw.clone();
+        let last = reference.pop().unwrap();
+        changed.remove_module(last);
+        assert!(Arc::ptr_eq(
+            &unw.modules[0].modules,
+            &changed.modules[0].modules
+        ));
+        assert!(!Arc::ptr_eq(
+            &unw.modules[1].modules,
+            &changed.modules[1].modules
+        ));
+        check(&changed, &reference);
+
+        // emptying a chunk removes it
+        for start in reference.split_off(MODULE_CHUNK) {
+            changed.remove_module(start);
+        }
+        assert_eq!(changed.modules.len(), 1);
+        check(&changed, &reference);
+        for start in reference.split_off(0) {
+            changed.remove_module(start);
+        }
+        assert!(changed.modules.is_empty());
+        check(&changed, &reference);
+        changed.add_module(module(0x1000));
+        check(&changed, &[0x1000]);
+
+        reference = (0..2 * MODULE_CHUNK as u64 + 1)
+            .map(|i| i * 0x1000)
+            .collect();
+        check(&unw, &reference);
+    }
+
+    #[test]
+    fn removing_modules_joins_small_chunks() {
+        let mut unw = Unw::new();
+        let mut reference: Vec<u64> = (0..8 * MODULE_CHUNK as u64).map(|i| i * 0x1000).collect();
+        for &start in &reference {
+            unw.add_module(module(start));
+        }
+        let chunks = unw.modules.len();
+        assert!(chunks >= 4);
+        let shared = unw.clone();
+        let all = reference.clone();
+        // keep every 16th module
+        for start in all.iter().copied().filter(|s| (s / 0x1000) % 16 != 0) {
+            unw.remove_module(start);
+        }
+        reference.retain(|s| (s / 0x1000) % 16 == 0);
+        assert_eq!(unw.modules.len(), 1);
+        check(&unw, &reference);
+        assert_eq!(shared.modules.len(), chunks);
+        check(&shared, &all);
+    }
+
+    #[test]
+    fn changed_clone_misses_the_rule_cache() {
+        let mut unw = Unw::new();
+        unw.add_module(module(0x1000));
+        let mut cache = Cache::<_, MayAllocateDuringUnwind>::new();
+        let mut step = |unw: &Unw| {
+            let mut regs = crate::x86_64::UnwindRegsX86_64::new(0x1010, 0x100, 0x200);
+            let mut read_stack = |addr: u64| Ok(addr + 0x10);
+            let address = FrameAddress::from_instruction_pointer(0x1010);
+            let _ = unw.unwind_frame(address, &mut regs, &mut cache, &mut read_stack);
+            let stats = cache.rule_cache.stats();
+            (stats.hits(), stats.misses())
+        };
+        assert_eq!(step(&unw), (0, 1));
+        let mut clone = unw.clone();
+        assert_eq!(step(&clone), (1, 1));
+        clone.remove_module(0x1000);
+        assert_eq!(step(&clone), (1, 2));
+        assert_eq!(step(&unw), (1, 3));
+        clone.add_module(module(0x1000));
+        assert_eq!(step(&clone), (1, 4));
     }
 }
