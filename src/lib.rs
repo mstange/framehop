@@ -39,7 +39,7 @@
 //!
 //! Framehop achieves high speed in the following ways:
 //!
-//!  1. It only recovers registers which are needed for computing return addresses. On x86_64 that's `rip`, `rsp` and `rbp`, and on aarch64 that's `lr`, `sp` and `fp`. All other registers are not needed - in theory they could be used as inputs to DWARF CFI expressions, but in practice they are not.
+//!  1. It only recovers registers which are needed for computing return addresses. On x86_64 that's usually `rip`, `rsp` and `rbp`, and on aarch64 that's `lr`, `sp` and `fp`. x86_64 callers can also provide the other general-purpose registers for uncommon DWARF CFI expressions.
 //!  2. It uses zero-copy parsing wherever possible. For example, the bytes in `__unwind_info` are only accessed during unwinding, and the binary search happens right inside the original `__unwind_info` memory. For DWARF unwinding, framehop uses the excellent [`gimli` crate](https://github.com/gimli-rs/gimli/), which was written with performance in mind.
 //!  3. It uses binary search to find the correct unwind rule in all supported unwind information formats. For formats without an built-in index, it creates an index when the module is added.
 //!  4. It caches unwind rules based on address. In practice, the 509-slot cache achieves a hit rate of around 80% on complicated code like Firefox (with the cache being shared across all Firefox processes). When profiling simpler applications, the hit rate is likely much higher.

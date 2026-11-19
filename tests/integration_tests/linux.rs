@@ -2,6 +2,7 @@ use std::path::Path;
 
 use framehop::aarch64::*;
 use framehop::x86_64::*;
+use framehop::Error;
 use framehop::FrameAddress;
 use framehop::Unwinder;
 
@@ -142,6 +143,286 @@ fn test_pthread_cfa_expr() {
     assert_eq!(res, Ok(Some(0xbe7042)));
     assert_eq!(regs.sp(), 0x130);
     assert_eq!(regs.bp(), 0x1234);
+}
+
+#[test]
+fn test_signal_trampoline_cfa_expr_with_memory_deref() {
+    let mut cache = CacheX86_64::<_>::new();
+    let mut unwinder = UnwinderX86_64::new();
+    common::add_object(
+        &mut unwinder,
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/linux/x86_64/nofp/libc.so.6"),
+        0x0,
+    );
+
+    // From the __restore_rt FDE in fixtures/linux/x86_64/nofp/libc.so.6:
+    //
+    // __restore_rt:
+    // 46520  mov  rax, 0xf
+    // 46527  syscall
+    //
+    // with DWARF CFI:
+    //
+    // 0x4651f...0x46529:
+    //   CFA=DW_OP_breg7(RSP) +160, DW_OP_deref
+    //   RBP=DW_OP_breg7(RSP) +120
+    //   RIP=DW_OP_breg7(RSP) +168
+    // With RSP=0x80, the CFA expression reads [RSP+160] = [0x120].
+    // The RBP and RIP expressions read [RSP+120] and [RSP+168].
+    let mut stack = vec![0u64; 0x200 / 8];
+    stack[0x0f8 / 8] = 0x4567;
+    stack[0x120 / 8] = 0x188;
+    stack[0x128 / 8] = 0x123456;
+    let mut read_stack = |addr| stack.get((addr / 8) as usize).cloned().ok_or(());
+
+    let mut regs = UnwindRegsX86_64::new(0x46527, 0x80, 0x9999);
+    let res = unwinder.unwind_frame(
+        FrameAddress::from_instruction_pointer(0x46527),
+        &mut regs,
+        &mut cache,
+        &mut read_stack,
+    );
+    assert_eq!(res, Ok(Some(0x123456)));
+    assert_eq!(regs.sp(), 0x188);
+    assert_eq!(regs.bp(), 0x4567);
+}
+
+#[test]
+fn test_signal_trampoline_reports_interrupted_frame() {
+    let mut cache = CacheX86_64::<_>::new();
+    let mut unwinder = UnwinderX86_64::new();
+    common::add_object(
+        &mut unwinder,
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/linux/x86_64/nofp/libc.so.6"),
+        0x0,
+    );
+
+    // The signal handler returns to __restore_rt at 0x46520; see the test above for its
+    // FDE, which the CIE marks as a signal frame. The handler ran on an alternate stack
+    // at 0x100, and the interrupted code has a lower stack pointer, 0x40.
+    let mut stack = vec![0u64; 0x200 / 8];
+    stack[0x178 / 8] = 0x4567; // [RSP+120]: RBP
+    stack[0x1a0 / 8] = 0x40; // [RSP+160]: RSP
+    stack[0x1a8 / 8] = 0x123456; // [RSP+168]: RIP
+    let mut read_stack = |addr| stack.get((addr / 8) as usize).cloned().ok_or(());
+
+    // unwind_frame does not step to a lower stack pointer. It follows the frame pointer
+    // instead, which is not readable here.
+    let mut regs = UnwindRegsX86_64::new(0x46520, 0x100, 0x9999);
+    let res = unwinder.unwind_frame(
+        FrameAddress::from_return_address(0x46520).unwrap(),
+        &mut regs,
+        &mut cache,
+        &mut read_stack,
+    );
+    assert_eq!(res, Err(Error::CouldNotReadStack(0x9999)));
+
+    // That failure is not cached for the address.
+    let mut regs = UnwindRegsX86_64::new(0x46520, 0x100, 0x9999);
+    let res = unwinder.unwind_frame_signal_aware(
+        FrameAddress::from_return_address(0x46520).unwrap(),
+        &mut regs,
+        &mut cache,
+        &mut read_stack,
+    );
+    assert_eq!(res, Ok(Some(FrameAddress::InstructionPointer(0x123456))));
+    assert_eq!(regs.sp(), 0x40);
+    assert_eq!(regs.bp(), 0x4567);
+
+    // If the interrupted code is on the same stack, unwind_frame returns the same address.
+    stack[0x1a0 / 8] = 0x1c0;
+    let mut read_stack = |addr| stack.get((addr / 8) as usize).cloned().ok_or(());
+    let mut regs = UnwindRegsX86_64::new(0x46520, 0x100, 0x9999);
+    let res = unwinder.unwind_frame(
+        FrameAddress::from_return_address(0x46520).unwrap(),
+        &mut regs,
+        &mut cache,
+        &mut read_stack,
+    );
+    assert_eq!(res, Ok(Some(0x123456)));
+    assert_eq!(regs.sp(), 0x1c0);
+    assert_eq!(regs.bp(), 0x4567);
+
+    // A frame that is not a signal frame yields a return address. This address is outside
+    // the module, so the frame pointer is followed.
+    stack[0x80 / 8] = 0x1234;
+    stack[0x88 / 8] = 0xabcdef;
+    let mut read_stack = |addr| stack.get((addr / 8) as usize).cloned().ok_or(());
+    let mut regs = UnwindRegsX86_64::new(0x7000_0000, 0x40, 0x80);
+    let res = unwinder.unwind_frame_signal_aware(
+        FrameAddress::from_return_address(0x7000_0000).unwrap(),
+        &mut regs,
+        &mut cache,
+        &mut read_stack,
+    );
+    assert_eq!(res, Ok(FrameAddress::from_return_address(0xabcdef)));
+    assert_eq!(regs.sp(), 0x90);
+    assert_eq!(regs.bp(), 0x1234);
+}
+
+#[test]
+fn test_iterator_unwinds_interrupted_frame_from_its_instruction_pointer() {
+    let mut cache = CacheX86_64::<_>::new();
+    let mut unwinder = UnwinderX86_64::new();
+    common::add_object(
+        &mut unwinder,
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/linux/x86_64/nofp/libc.so.6"),
+        0x0,
+    );
+
+    // The signal interrupted the function after __restore_rt at 0x4653b, where its DWARF
+    // CFI changes:
+    //
+    // 0x46530: CFA=RSP+8    RIP=[CFA-8]
+    // 0x4653b: CFA=RSP+336  RIP=[CFA-8]
+    //
+    // 0x4653b has not run yet, so the second row applies. For a return address the first
+    // row would, because the call before it is what would be looked up.
+    let mut stack = vec![0u64; 0x400 / 8];
+    stack[0x1a0 / 8] = 0x200; // [RSP+160]: RSP
+    stack[0x1a8 / 8] = 0x4653b; // [RSP+168]: RIP
+    stack[0x200 / 8] = 0xbad; // [RSP]
+    stack[0x348 / 8] = 0x7000_0000; // [RSP+328]
+    let mut read_stack = |addr| stack.get((addr / 8) as usize).cloned().ok_or(());
+
+    let regs = UnwindRegsX86_64::new(0x46527, 0x100, 0x9999);
+    let mut iter = unwinder.iter_frames(0x46527, regs, &mut cache, &mut read_stack);
+    assert_eq!(
+        iter.next(),
+        Ok(Some(FrameAddress::from_instruction_pointer(0x46527)))
+    );
+    assert_eq!(
+        iter.next(),
+        Ok(Some(FrameAddress::from_instruction_pointer(0x4653b)))
+    );
+    assert_eq!(
+        iter.next(),
+        Ok(FrameAddress::from_return_address(0x7000_0000))
+    );
+}
+
+#[test]
+fn test_iterator_ends_a_cycle_of_signal_frames() {
+    let mut cache = CacheX86_64::<_>::new();
+    let mut unwinder = UnwinderX86_64::new();
+    common::add_object(
+        &mut unwinder,
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/linux/x86_64/nofp/libc.so.6"),
+        0x0,
+    );
+
+    // This stack says that __restore_rt, with the stack pointer at 0x200, was interrupted
+    // at 0x4653b with the stack pointer at 0xb0, and that 0x4653b, whose CFA is RSP+336,
+    // returns to __restore_rt.
+    let mut stack = vec![0u64; 0x400 / 8];
+    stack[0x2a0 / 8] = 0xb0; // [RSP+160]: RSP
+    stack[0x2a8 / 8] = 0x4653b; // [RSP+168]: RIP
+    stack[0x1f8 / 8] = 0x46520; // [0xb0+328]
+    let mut read_stack = |addr| stack.get((addr / 8) as usize).cloned().ok_or(());
+
+    let regs = UnwindRegsX86_64::new(0x46527, 0x200, 0x9999);
+    let mut iter = unwinder.iter_frames(0x46527, regs, &mut cache, &mut read_stack);
+    let mut frames = 0;
+    let res = loop {
+        match iter.next() {
+            Ok(Some(_)) => frames += 1,
+            res => break res,
+        }
+    };
+    assert_eq!(res, Err(Error::DidNotAdvance));
+    assert_eq!(frames, 1 + 2 * 64);
+}
+
+#[test]
+fn test_signal_trampoline_restores_general_purpose_registers() {
+    let mut cache = CacheX86_64::<_>::new();
+    let mut unwinder = UnwinderX86_64::new();
+    common::add_object(
+        &mut unwinder,
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/linux/x86_64/nofp/libc.so.6"),
+        0x0,
+    );
+    common::add_object(
+        &mut unwinder,
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/linux/x86_64/nofp/rustup"),
+        0x1000_0000,
+    );
+
+    // The signal interrupted GFp_bn_mul_mont at 0x5f2616, where the CFA is
+    // [RSP + 8 + R9 * 8] + 8; see test_cfa_expr_with_general_purpose_register.
+    // __restore_rt has the DWARF CFI R9=DW_OP_breg7(RSP) +48.
+    let mut stack = vec![0u64; 0x400 / 8];
+    stack[0x130 / 8] = 4; // [RSP+48]: R9
+    stack[0x1a0 / 8] = 0x200; // [RSP+160]: RSP
+    stack[0x1a8 / 8] = 0x105f_2616; // [RSP+168]: RIP
+    stack[0x228 / 8] = 0x300; // [RSP + 8 + R9 * 8]
+    stack[0x300 / 8] = 0x7000_0000; // [CFA-8]
+    let mut read_stack = |addr| stack.get((addr / 8) as usize).cloned().ok_or(());
+
+    let regs = UnwindRegsX86_64::new(0x46527, 0x100, 0x9999);
+    let mut iter = unwinder.iter_frames(0x46527, regs, &mut cache, &mut read_stack);
+    assert_eq!(
+        iter.next(),
+        Ok(Some(FrameAddress::from_instruction_pointer(0x46527)))
+    );
+    assert_eq!(
+        iter.next(),
+        Ok(Some(FrameAddress::from_instruction_pointer(0x105f_2616)))
+    );
+    assert_eq!(
+        iter.next(),
+        Ok(FrameAddress::from_return_address(0x7000_0000))
+    );
+}
+
+#[test]
+fn test_cfa_expr_with_general_purpose_register() {
+    let mut cache = CacheX86_64::<_>::new();
+    let mut unwinder = UnwinderX86_64::new();
+    common::add_object(
+        &mut unwinder,
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/linux/x86_64/nofp/rustup"),
+        0x0,
+    );
+
+    // From the GFp_bn_mul_mont FDE in fixtures/linux/x86_64/nofp/rustup:
+    //
+    // GFp_bn_mul_mont:
+    // 5f25c0  push  rbx
+    // 5f25c1  push  rbp
+    // 5f25c2  push  r12
+    // 5f25c4  push  r13
+    // 5f25c6  push  r14
+    // 5f25c8  push  r15
+    // ...
+    // 5f2616  mov   r12, rdx
+    //
+    // with DWARF CFI:
+    //
+    // 0x5f2616:
+    //   CFA=DW_OP_breg7(RSP) +8, DW_OP_breg9(R9) +0, DW_OP_lit8,
+    //       DW_OP_mul, DW_OP_plus, DW_OP_deref, DW_OP_plus_uconst +8
+    //   RBP=[CFA-24]
+    //   RIP=[CFA-8]
+    // With RSP=0x80 and R9=4, the CFA expression reads
+    // [RSP + 8 + R9 * 8] = [0xa8], then adds 8.
+    let mut stack = vec![0u64; 0x200 / 8];
+    stack[0x0a8 / 8] = 0x180;
+    stack[0x170 / 8] = 0x4567;
+    stack[0x180 / 8] = 0x123456;
+    let mut read_stack = |addr| stack.get((addr / 8) as usize).cloned().ok_or(());
+
+    let mut regs = UnwindRegsX86_64::new(0x5f2616, 0x80, 0x9999);
+    regs.set(Reg::R9, 4);
+    let res = unwinder.unwind_frame(
+        FrameAddress::from_instruction_pointer(0x5f2616),
+        &mut regs,
+        &mut cache,
+        &mut read_stack,
+    );
+    assert_eq!(res, Ok(Some(0x123456)));
+    assert_eq!(regs.sp(), 0x188);
+    assert_eq!(regs.bp(), 0x4567);
 }
 
 #[test]

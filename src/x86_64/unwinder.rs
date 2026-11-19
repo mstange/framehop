@@ -65,4 +65,18 @@ impl<D: Deref<Target = [u8]>, P: AllocationPolicy> Unwinder for UnwinderX86_64<D
     {
         self.0.unwind_frame(address, regs, &mut cache.0, read_stack)
     }
+
+    fn unwind_frame_signal_aware<F>(
+        &self,
+        address: FrameAddress,
+        regs: &mut UnwindRegsX86_64,
+        cache: &mut CacheX86_64<P>,
+        read_stack: &mut F,
+    ) -> Result<Option<FrameAddress>, Error>
+    where
+        F: FnMut(u64) -> Result<u64, ()>,
+    {
+        self.0
+            .unwind_frame_signal_aware(address, regs, &mut cache.0, read_stack)
+    }
 }
