@@ -24,6 +24,8 @@ impl DwarfUnwindRegs for UnwindRegsAarch64 {
 }
 
 impl DwarfUnwinding for ArchAarch64 {
+    const VENDOR: gimli::Vendor = gimli::Vendor::AArch64;
+
     fn unwind_frame<F, R, UCS, ES>(
         section: &impl UnwindSection<R>,
         unwind_info: &UnwindTableRow<R::Offset, UCS>,

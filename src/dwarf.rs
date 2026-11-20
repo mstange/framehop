@@ -72,6 +72,11 @@ pub enum ConversionError {
 }
 
 pub trait DwarfUnwinding: Arch {
+    /// The vendor for gimli's CFI parsing. On aarch64, this makes gimli
+    /// understand `DW_CFA_AARCH64_negate_ra_state`, which code compiled with
+    /// return address signing (for example on Android) has in every FDE.
+    const VENDOR: gimli::Vendor = gimli::Vendor::Default;
+
     fn unwind_frame<F, R, UCS, ES>(
         section: &impl UnwindSection<R>,
         unwind_info: &UnwindTableRow<R::Offset, UCS>,
@@ -168,6 +173,7 @@ where
             UnwindSectionType::EhFrame => {
                 let mut eh_frame = EhFrame::from(unwind_section_data);
                 eh_frame.set_address_size(8);
+                eh_frame.set_vendor(A::VENDOR);
                 let unwind_info = self.unwind_info_for_fde(&eh_frame, lookup_svma, fde_offset);
                 if let Err(DwarfUnwinderError::UnwindInfoForAddressFailed(_)) = unwind_info {
                     return Ok(UnwindResult::ExecRule(A::rule_if_uncovered_by_fde()));
@@ -185,6 +191,7 @@ where
             UnwindSectionType::DebugFrame => {
                 let mut debug_frame = DebugFrame::from(unwind_section_data);
                 debug_frame.set_address_size(8);
+                debug_frame.set_vendor(A::VENDOR);
                 let unwind_info = self.unwind_info_for_fde(&debug_frame, lookup_svma, fde_offset);
                 if let Err(DwarfUnwinderError::UnwindInfoForAddressFailed(_)) = unwind_info {
                     return Ok(UnwindResult::ExecRule(A::rule_if_uncovered_by_fde()));
