@@ -188,14 +188,15 @@ impl UnwindRule for UnwindRuleAarch64 {
                     return Ok(None);
                 }
                 let new_sp = fp.checked_add(16).ok_or(Error::IntegerOverflow)?;
-                let new_lr = read_stack(fp + 8).map_err(|_| Error::CouldNotReadStack(fp + 8))?;
-                let new_fp = read_stack(fp).map_err(|_| Error::CouldNotReadStack(fp))?;
-                if new_fp == 0 {
-                    return Ok(None);
-                }
-                if new_fp <= fp || new_sp <= sp {
+                if new_sp <= sp {
                     return Err(Error::FramepointerUnwindingMovedBackwards);
                 }
+                let new_lr = read_stack(fp + 8).map_err(|_| Error::CouldNotReadStack(fp + 8))?;
+                let new_fp = read_stack(fp).map_err(|_| Error::CouldNotReadStack(fp))?;
+                // new_fp is the caller's fp. If the caller uses frame pointers, it is a
+                // valid frame pointer. But the caller may be using fp as a general purpose
+                // register, in which case any value (including zero) is valid. We don't
+                // know which one it is, so we leave new_fp unchecked, like on x86_64.
                 (new_lr, new_sp, new_fp)
             }
             UnwindRuleAarch64::UseFramepointerWithOffsets {
@@ -217,11 +218,8 @@ impl UnwindRule for UnwindRuleAarch64 {
                     checked_add_signed(fp, fp_storage_offset).ok_or(Error::IntegerOverflow)?;
                 let new_fp =
                     read_stack(fp_location).map_err(|_| Error::CouldNotReadStack(fp_location))?;
-
-                if new_fp == 0 {
-                    return Ok(None);
-                }
-                if new_fp <= fp || new_sp <= sp {
+                // As in UseFramePointer, the caller's fp may not be a frame pointer.
+                if new_sp <= sp {
                     return Err(Error::FramepointerUnwindingMovedBackwards);
                 }
                 (new_lr, new_sp, new_fp)
@@ -284,5 +282,34 @@ mod test {
             assert_eq!(res, Ok(None));
             assert_eq!(regs, original_regs);
         }
+    }
+
+    #[test]
+    fn test_caller_without_frame_pointer() {
+        // The function at 0x100300 has a frame record at 0x30, as described by
+        // its CFI (CFA = fp + 32, fp at CFA - 32, lr at CFA - 24). Its caller
+        // doesn't use frame pointers and had 0x8 in x29, which is saved in the
+        // frame record and is lower than the current fp.
+        let stack = [1, 2, 3, 4, 5, 6, 0x8, 0x100200, 7, 8, 9, 10];
+        let mut read_stack = |addr| Ok(stack[(addr / 8) as usize]);
+        let mut regs = UnwindRegsAarch64::new(0x100300, 0x10, 0x30);
+        let rule = UnwindRuleAarch64::UseFramepointerWithOffsets {
+            sp_offset_from_fp_by_8: 4,
+            fp_storage_offset_from_fp_by_8: 0,
+            lr_storage_offset_from_fp_by_8: 1,
+        };
+        let res = rule.exec(false, &mut regs, &mut read_stack);
+        assert_eq!(res, Ok(Some(0x100200)));
+        assert_eq!(regs.sp(), 0x50);
+        assert_eq!(regs.fp(), 0x8);
+
+        // Same with the standard frame record layout, and a caller with x29 == 0.
+        let stack = [1, 2, 3, 4, 5, 6, 0x0, 0x100200, 7, 8];
+        let mut read_stack = |addr| Ok(stack[(addr / 8) as usize]);
+        let mut regs = UnwindRegsAarch64::new(0x100300, 0x10, 0x30);
+        let res = UnwindRuleAarch64::UseFramePointer.exec(false, &mut regs, &mut read_stack);
+        assert_eq!(res, Ok(Some(0x100200)));
+        assert_eq!(regs.sp(), 0x40);
+        assert_eq!(regs.fp(), 0x0);
     }
 }
