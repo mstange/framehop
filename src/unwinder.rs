@@ -243,8 +243,8 @@ impl<D> Clone for ModuleChunk<D> {
 pub struct UnwinderInternal<D, A, P> {
     /// Sorted by avma_range.start, in chunks of up to `2 * MODULE_CHUNK` modules. Two
     /// neighboring chunks hold more than `MODULE_CHUNK` modules. Cloning the unwinder copies
-    /// only the list of chunks, and changing a clone copies only the modules of the chunk the
-    /// change is in.
+    /// only the list of chunks. Changing a clone copies only the modules of the chunk the
+    /// change is in, and of the neighbor that a removal joins it with.
     modules: Vec<ModuleChunk<D>>,
     /// Incremented every time modules is changed.
     modules_generation: u16,
@@ -1210,6 +1210,51 @@ mod module_chunk_tests {
     }
 
     #[test]
+    fn joining_chunks_leaves_shared_chunks_alone() {
+        let mut unw = Unw::new();
+        let mut reference: Vec<u64> = (0..3 * MODULE_CHUNK as u64 + 1)
+            .map(|i| i * 0x1000)
+            .collect();
+        for &start in &reference {
+            unw.add_module(module(start));
+        }
+        // Chunks of 64, 64 and 65 modules become chunks of 32, 33 and 65.
+        let removed: Vec<u64> = (32..64).chain(97..128).map(|i| i * 0x1000).collect();
+        for &start in &removed {
+            unw.remove_module(start);
+        }
+        reference.retain(|s| !removed.contains(s));
+        let sizes =
+            |unw: &Unw| -> Vec<usize> { unw.modules.iter().map(|c| c.modules.len()).collect() };
+        assert_eq!(sizes(&unw), [32, 33, 65]);
+
+        // The left chunk is changed and joined with its shared right neighbor.
+        let mut changed = unw.clone();
+        changed.remove_module(0);
+        assert_eq!(sizes(&changed), [64, 65]);
+        check(&changed, &reference[1..]);
+        assert!(Arc::ptr_eq(
+            &unw.modules[2].modules,
+            &changed.modules[1].modules
+        ));
+
+        // The right chunk is changed and joined with its shared left neighbor.
+        let mut changed = unw.clone();
+        changed.remove_module(64 * 0x1000);
+        assert_eq!(sizes(&changed), [64, 65]);
+        let mut expected = reference.clone();
+        expected.remove(32);
+        check(&changed, &expected);
+        assert!(Arc::ptr_eq(
+            &unw.modules[2].modules,
+            &changed.modules[1].modules
+        ));
+
+        assert_eq!(sizes(&unw), [32, 33, 65]);
+        check(&unw, &reference);
+    }
+
+    #[test]
     fn changed_clone_misses_the_rule_cache() {
         let mut unw = Unw::new();
         unw.add_module(module(0x1000));
@@ -1227,8 +1272,9 @@ mod module_chunk_tests {
         assert_eq!(step(&clone), (1, 1));
         clone.remove_module(0x1000);
         assert_eq!(step(&clone), (1, 2));
-        assert_eq!(step(&unw), (1, 3));
+        assert_eq!(step(&clone), (2, 2));
         clone.add_module(module(0x1000));
-        assert_eq!(step(&clone), (1, 4));
+        assert_eq!(step(&clone), (2, 3));
+        assert_eq!(step(&unw), (2, 4));
     }
 }
