@@ -1,6 +1,6 @@
 use core::fmt::Debug;
 
-use super::unwindregs::UnwindRegsAarch64;
+use super::unwindregs::{UnwindRegsAarch64, CALLEE_SAVED_COUNT, FIRST_CALLEE_SAVED};
 use crate::add_signed::checked_add_signed;
 use crate::error::Error;
 
@@ -242,25 +242,176 @@ impl UnwindRule for FrameRuleAarch64 {
     }
 }
 
-/// The unwind rule which is stored in the unwind rule cache on Aarch64. It wraps
-/// a [`FrameRuleAarch64`], which describes how to recover sp, fp and lr.
+/// How to recover one of the callee-saved registers x19 - x28 for the caller frame.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CalleeSavedRuleAarch64 {
+    /// The caller has the same value as the callee.
+    Unchanged,
+    /// The value cannot be known, e.g. because the frame was unwound without CFI.
+    Unknown,
+    /// The value is saved on the stack at CFA + the given (negative) offset in bytes.
+    SavedAtCfaOffset(i16),
+}
+
+/// Compact recovery rules for x19 - x28, 6 bits per register (bits 6i..6i+6 for
+/// x(19 + i)): 0 means unchanged, 63 means unknown, and any other value v means
+/// "saved at CFA - 8 * v". The top 4 bits are always zero.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct CalleeSavedRulesAarch64(u64);
+
+impl CalleeSavedRulesAarch64 {
+    const BITS: u32 = 6;
+    const MASK: u64 = (1 << Self::BITS) - 1;
+    const UNCHANGED: u64 = 0;
+    const UNKNOWN: u64 = Self::MASK;
+    const USED_BITS: u64 = (1 << (Self::BITS * CALLEE_SAVED_COUNT as u32)) - 1;
+
+    /// All registers keep their values.
+    pub const ALL_UNCHANGED: Self = Self(0);
+    /// All registers become unknown.
+    pub const ALL_UNKNOWN: Self = Self(Self::USED_BITS);
+
+    fn shift(reg: u16) -> Option<u32> {
+        let i = reg.checked_sub(FIRST_CALLEE_SAVED)?;
+        (usize::from(i) < CALLEE_SAVED_COUNT).then_some(u32::from(i) * Self::BITS)
+    }
+
+    /// The rule for x`reg`, for `reg` in 19..=28.
+    pub fn get(&self, reg: u16) -> Option<CalleeSavedRuleAarch64> {
+        Some(match (self.0 >> Self::shift(reg)?) & Self::MASK {
+            Self::UNCHANGED => CalleeSavedRuleAarch64::Unchanged,
+            Self::UNKNOWN => CalleeSavedRuleAarch64::Unknown,
+            v => CalleeSavedRuleAarch64::SavedAtCfaOffset(-(v as i16) * 8),
+        })
+    }
+
+    /// Set the rule for x`reg`, for `reg` in 19..=28. Returns false, and leaves the
+    /// rules unchanged, if `reg` is out of range or if the rule is `SavedAtCfaOffset`
+    /// with an offset that is not a multiple of 8 within -496..=-8.
+    #[must_use]
+    pub fn set(&mut self, reg: u16, rule: CalleeSavedRuleAarch64) -> bool {
+        let Some(shift) = Self::shift(reg) else {
+            return false;
+        };
+        let v = match rule {
+            CalleeSavedRuleAarch64::Unchanged => Self::UNCHANGED,
+            CalleeSavedRuleAarch64::Unknown => Self::UNKNOWN,
+            CalleeSavedRuleAarch64::SavedAtCfaOffset(offset) => {
+                if offset % 8 != 0 || offset >= 0 {
+                    return false;
+                }
+                let v = u64::from(offset.unsigned_abs() / 8);
+                if v >= Self::UNKNOWN {
+                    return false;
+                }
+                v
+            }
+        };
+        self.0 = (self.0 & !(Self::MASK << shift)) | (v << shift);
+        true
+    }
+
+    /// Apply the rules to `regs`, after `regs.sp()` has been set to the CFA.
+    #[inline]
+    fn apply<F>(self, regs: &mut UnwindRegsAarch64, read_stack: &mut F)
+    where
+        F: FnMut(u64) -> Result<u64, ()>,
+    {
+        if self == Self::ALL_UNCHANGED {
+            return;
+        }
+        if self == Self::ALL_UNKNOWN {
+            regs.clear_callee_saved();
+            return;
+        }
+        let cfa = regs.sp();
+        for i in 0..CALLEE_SAVED_COUNT {
+            let v = (self.0 >> (i as u32 * Self::BITS)) & Self::MASK;
+            match v {
+                Self::UNCHANGED => {}
+                Self::UNKNOWN => regs.set_callee_saved_by_index(i, None),
+                v => {
+                    let value = cfa
+                        .checked_sub(v * 8)
+                        .and_then(|addr| read_stack(addr).ok());
+                    regs.set_callee_saved_by_index(i, value);
+                }
+            }
+        }
+    }
+}
+
+impl Debug for CalleeSavedRulesAarch64 {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        if *self == Self::ALL_UNCHANGED {
+            return write!(f, "AllUnchanged");
+        }
+        if *self == Self::ALL_UNKNOWN {
+            return write!(f, "AllUnknown");
+        }
+        let mut list = f.debug_map();
+        for i in 0..CALLEE_SAVED_COUNT as u16 {
+            let reg = FIRST_CALLEE_SAVED + i;
+            match self.get(reg) {
+                Some(CalleeSavedRuleAarch64::Unchanged) | None => {}
+                Some(rule) => {
+                    list.entry(&format_args!("x{reg}"), &rule);
+                }
+            }
+        }
+        list.finish()
+    }
+}
+
+/// The unwind rule which is stored in the unwind rule cache on Aarch64. It combines
+/// a [`FrameRuleAarch64`] (for sp, fp and lr) with recovery rules for the callee-saved
+/// registers x19 - x28.
+///
+/// This is 16 bytes, 8-byte aligned, so that copying it out of the cache is cheap.
 #[derive(Clone, Copy, PartialEq, Eq)]
 #[repr(C)]
 pub struct UnwindRuleAarch64 {
     frame: FrameRuleAarch64,
+    callee_saved: CalleeSavedRulesAarch64,
+}
+
+impl UnwindRuleAarch64 {
+    /// Create a rule.
+    pub fn new(frame: FrameRuleAarch64, callee_saved: CalleeSavedRulesAarch64) -> Self {
+        Self {
+            frame,
+            callee_saved,
+        }
+    }
+
+    /// The rules for x19 - x28.
+    pub(crate) fn callee_saved(&self) -> CalleeSavedRulesAarch64 {
+        self.callee_saved
+    }
 }
 
 impl Debug for UnwindRuleAarch64 {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("UnwindRuleAarch64")
             .field("frame", &self.frame)
+            .field("callee_saved", &self.callee_saved())
             .finish()
     }
 }
 
 impl From<FrameRuleAarch64> for UnwindRuleAarch64 {
+    /// Wrap a rule which was not derived from CFI. Only `NoOp` keeps the
+    /// callee-saved registers; for other rules we don't know which registers
+    /// the callee clobbered.
     fn from(frame: FrameRuleAarch64) -> Self {
-        Self { frame }
+        let callee_saved = match frame {
+            FrameRuleAarch64::NoOp => CalleeSavedRulesAarch64::ALL_UNCHANGED,
+            _ => CalleeSavedRulesAarch64::ALL_UNKNOWN,
+        };
+        Self {
+            frame,
+            callee_saved,
+        }
     }
 }
 
@@ -287,13 +438,61 @@ impl UnwindRule for UnwindRuleAarch64 {
     where
         F: FnMut(u64) -> Result<u64, ()>,
     {
-        self.frame.exec(is_first_frame, regs, read_stack)
+        let result = self.frame.exec(is_first_frame, regs, read_stack);
+        if let Ok(Some(_)) = result {
+            self.callee_saved().apply(regs, read_stack);
+        }
+        result
     }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
+
+    #[test]
+    fn test_rule_size() {
+        assert_eq!(core::mem::size_of::<FrameRuleAarch64>(), 8);
+        assert_eq!(core::mem::size_of::<UnwindRuleAarch64>(), 16);
+    }
+
+    #[test]
+    fn test_callee_saved_rules() {
+        use CalleeSavedRuleAarch64::*;
+        let mut rules = CalleeSavedRulesAarch64::ALL_UNCHANGED;
+        assert!(rules.set(19, SavedAtCfaOffset(-8)));
+        assert!(rules.set(22, SavedAtCfaOffset(-496)));
+        assert!(rules.set(28, Unknown));
+        assert!(!rules.set(23, SavedAtCfaOffset(-504)));
+        assert!(!rules.set(23, SavedAtCfaOffset(i16::MIN)));
+        assert!(!rules.set(23, SavedAtCfaOffset(8)));
+        assert!(!rules.set(23, SavedAtCfaOffset(-12)));
+        assert!(!rules.set(29, Unknown));
+        assert_eq!(rules.get(19), Some(SavedAtCfaOffset(-8)));
+        assert_eq!(rules.get(22), Some(SavedAtCfaOffset(-496)));
+        assert_eq!(rules.get(23), Some(Unchanged));
+        assert_eq!(rules.get(28), Some(Unknown));
+        assert_eq!(rules.get(18), None);
+
+        let rule = UnwindRuleAarch64::new(FrameRuleAarch64::UseFramePointer, rules);
+        assert_eq!(rule.callee_saved(), rules);
+    }
+
+    #[test]
+    fn test_uncovered_first_frame_clears_callee_saved() {
+        let mut regs = UnwindRegsAarch64::new(0x1000, 0x100, 0x200);
+        regs.set_callee_saved_from_sample([0x300; CALLEE_SAVED_COUNT]);
+        let mut read_stack = |_| Err(());
+        let rule = UnwindRuleAarch64::from(FrameRuleAarch64::NoOpIfFirstFrameOtherwiseFp);
+
+        assert_eq!(
+            rule.exec(true, &mut regs, &mut read_stack),
+            Ok(Some(0x1000))
+        );
+        for reg in FIRST_CALLEE_SAVED..FIRST_CALLEE_SAVED + CALLEE_SAVED_COUNT as u16 {
+            assert_eq!(regs.callee_saved(reg), None);
+        }
+    }
 
     #[test]
     fn test_basic() {

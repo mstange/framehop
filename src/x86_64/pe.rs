@@ -370,6 +370,7 @@ mod tests {
                     (true, ra.unwrap(), regs)
                 }
                 UnwindResult::Uncacheable(ra) => (false, ra, regs),
+                UnwindResult::UncacheableError(err) => panic!("unexpected error: {err}"),
             })
         })
     }

@@ -175,6 +175,14 @@ impl<U: Unwinder, F: FnMut(u64) -> Result<u64, ()>> UnwindIterator<'_, '_, '_, U
     }
 }
 
+impl<U: Unwinder, F: FnMut(u64) -> Result<u64, ()>> UnwindIterator<'_, '_, '_, U, F> {
+    /// The current register values. After `next()` has returned a frame, these are the
+    /// (recovered) register values of that frame.
+    pub fn regs(&self) -> &U::UnwindRegs {
+        &self.regs
+    }
+}
+
 impl<U: Unwinder, F: FnMut(u64) -> Result<u64, ()>> FallibleIterator
     for UnwindIterator<'_, '_, '_, U, F>
 {
@@ -386,6 +394,7 @@ impl<D: Deref<Target = [u8]>, A: Unwinding, P: AllocationPolicy> UnwinderInterna
                     Ok(UnwindResult::Uncacheable(return_address)) => {
                         return Ok(Some(return_address))
                     }
+                    Ok(UnwindResult::UncacheableError(err)) => return Err(err),
                     Err(_err) => {
                         // eprintln!("Unwinder error: {}", err);
                         A::UnwindRule::fallback_rule()

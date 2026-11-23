@@ -1,3 +1,5 @@
+use core::cell::Cell;
+
 use gimli::{
     AArch64, CfaRule, Encoding, EvaluationStorage, Reader, ReaderOffset, Register, RegisterRule,
     UnwindContextStorage, UnwindSection, UnwindTableRow,
@@ -5,10 +7,13 @@ use gimli::{
 
 use super::{
     arch::ArchAarch64,
-    unwind_rule::{FrameRuleAarch64, UnwindRuleAarch64},
-    unwindregs::UnwindRegsAarch64,
+    unwind_rule::{
+        CalleeSavedRuleAarch64, CalleeSavedRulesAarch64, FrameRuleAarch64, UnwindRuleAarch64,
+    },
+    unwindregs::{UnwindRegsAarch64, CALLEE_SAVED_COUNT, FIRST_CALLEE_SAVED},
 };
 
+use crate::error::Error;
 use crate::unwind_result::UnwindResult;
 
 use crate::dwarf::{
@@ -18,12 +23,45 @@ use crate::dwarf::{
 
 impl DwarfUnwindRegs for UnwindRegsAarch64 {
     fn get(&self, register: Register) -> Option<u64> {
-        match register {
-            AArch64::SP => Some(self.sp()),
-            AArch64::X29 => Some(self.fp()),
-            AArch64::X30 => Some(self.lr()),
-            _ => None,
+        self.get_reg(register.0)
+    }
+}
+
+/// Wraps the registers for DWARF evaluation and records whether a rule asked for a
+/// callee-saved register whose value is unknown. Such a failure depends on the walk,
+/// not only on the unwind information.
+struct RecordUnknownReads<'a> {
+    regs: &'a UnwindRegsAarch64,
+    read_unknown: Cell<bool>,
+}
+
+impl<'a> RecordUnknownReads<'a> {
+    fn new(regs: &'a UnwindRegsAarch64) -> Self {
+        Self {
+            regs,
+            read_unknown: Cell::new(false),
         }
+    }
+
+    /// `err`, or `RegisterValueUnknown` if an unknown register was read.
+    fn error(&self, err: DwarfUnwinderError) -> DwarfUnwinderError {
+        if self.read_unknown.get() {
+            DwarfUnwinderError::RegisterValueUnknown
+        } else {
+            err
+        }
+    }
+}
+
+impl DwarfUnwindRegs for RecordUnknownReads<'_> {
+    fn get(&self, register: Register) -> Option<u64> {
+        let value = self.regs.get_reg(register.0);
+        let is_callee_saved = (FIRST_CALLEE_SAVED..FIRST_CALLEE_SAVED + CALLEE_SAVED_COUNT as u16)
+            .contains(&register.0);
+        if value.is_none() && is_callee_saved {
+            self.read_unknown.set(true);
+        }
+        value
     }
 }
 
@@ -52,15 +90,24 @@ impl DwarfUnwinding for ArchAarch64 {
             }
         }
 
-        let return_address = unwind_frame_generic::<F, R, UCS, ES>(
+        match unwind_frame_generic::<F, R, UCS, ES>(
             section,
             unwind_info,
             encoding,
             regs,
             is_first_frame,
             read_stack,
-        )?;
-        Ok(UnwindResult::Uncacheable(return_address))
+        ) {
+            Ok(return_address) => Ok(UnwindResult::Uncacheable(return_address)),
+            // Another walk may know the register, so cache nothing. End this walk, as
+            // UseDerefedRegister does when its register is unknown.
+            Err(DwarfUnwinderError::RegisterValueUnknown) => {
+                Ok(UnwindResult::UncacheableError(Error::RegisterValueUnknown))
+            }
+            // The failure only depends on the unwind information. The caller caches
+            // the fallback rule for this address.
+            Err(err) => Err(err),
+        }
     }
 
     fn rule_if_uncovered_by_fde() -> Self::UnwindRule {
@@ -88,8 +135,9 @@ where
     let fp_rule = unwind_info.register(AArch64::X29);
     let lr_rule = unwind_info.register(AArch64::X30);
 
-    let cfa = eval_cfa_rule::<R, F, _, ES>(section, cfa_rule, encoding, regs, read_stack)
-        .ok_or(DwarfUnwinderError::CouldNotRecoverCfa)?;
+    let reads = RecordUnknownReads::new(regs);
+    let cfa = eval_cfa_rule::<R, F, _, ES>(section, cfa_rule, encoding, &reads, read_stack)
+        .ok_or_else(|| reads.error(DwarfUnwinderError::CouldNotRecoverCfa))?;
 
     let lr = regs.lr();
     let fp = regs.fp();
@@ -100,13 +148,13 @@ where
             return Err(DwarfUnwinderError::StackPointerMovedBackwards);
         }
         let fp = eval_register_rule::<R, F, _, ES>(
-            section, fp_rule, cfa, encoding, fp, regs, read_stack,
+            section, fp_rule, cfa, encoding, fp, &reads, read_stack,
         )
-        .ok_or(DwarfUnwinderError::CouldNotRecoverFramePointer)?;
+        .ok_or_else(|| reads.error(DwarfUnwinderError::CouldNotRecoverFramePointer))?;
         let lr = eval_register_rule::<R, F, _, ES>(
-            section, lr_rule, cfa, encoding, lr, regs, read_stack,
+            section, lr_rule, cfa, encoding, lr, &reads, read_stack,
         )
-        .ok_or(DwarfUnwinderError::CouldNotRecoverReturnAddress)?;
+        .ok_or_else(|| reads.error(DwarfUnwinderError::CouldNotRecoverReturnAddress))?;
         (fp, lr)
     } else {
         // For the first frame, be more lenient when encountering errors.
@@ -122,6 +170,27 @@ where
         .unwrap_or(lr);
         (fp, lr)
     };
+
+    let mut callee_saved = [None; CALLEE_SAVED_COUNT];
+    for (i, value) in callee_saved.iter_mut().enumerate() {
+        let reg = FIRST_CALLEE_SAVED + i as u16;
+        let old_value = regs.callee_saved(reg);
+        *value = match unwind_info.register(Register(reg)) {
+            None | Some(RegisterRule::SameValue) => old_value,
+            rule @ Some(_) => eval_register_rule::<R, F, _, ES>(
+                section,
+                rule,
+                cfa,
+                encoding,
+                old_value.unwrap_or_default(),
+                regs,
+                read_stack,
+            ),
+        };
+    }
+    for (i, value) in callee_saved.into_iter().enumerate() {
+        regs.set_callee_saved(FIRST_CALLEE_SAVED + i as u16, value);
+    }
 
     regs.set_fp(fp);
     regs.set_sp(cfa);
@@ -148,10 +217,31 @@ where
     RO: ReaderOffset,
     UCS: UnwindContextStorage<RO>,
 {
+    let mut callee_saved = CalleeSavedRulesAarch64::ALL_UNCHANGED;
+    for (register, rule) in unwind_info.registers() {
+        let reg = register.0;
+        let is_callee_saved =
+            (FIRST_CALLEE_SAVED..FIRST_CALLEE_SAVED + CALLEE_SAVED_COUNT as u16).contains(&reg);
+        if !is_callee_saved {
+            continue;
+        }
+        let callee_saved_rule = match *rule {
+            RegisterRule::SameValue => CalleeSavedRuleAarch64::Unchanged,
+            RegisterRule::Undefined => CalleeSavedRuleAarch64::Unknown,
+            RegisterRule::Offset(offset) => CalleeSavedRuleAarch64::SavedAtCfaOffset(
+                i16::try_from(offset).map_err(|_| ConversionError::CalleeSavedRuleDoesNotFit)?,
+            ),
+            _ => return Err(ConversionError::CalleeSavedRuleNotCacheable),
+        };
+        if !callee_saved.set(reg, callee_saved_rule) {
+            return Err(ConversionError::CalleeSavedRuleDoesNotFit);
+        }
+    }
+
     let fp_rule = unwind_info.register(AArch64::X29);
     let lr_rule = unwind_info.register(AArch64::X30);
     let frame = translate_into_frame_rule(unwind_info.cfa(), fp_rule.as_ref(), lr_rule.as_ref())?;
-    Ok(frame.into())
+    Ok(UnwindRuleAarch64::new(frame, callee_saved))
 }
 
 fn translate_into_frame_rule<RO: ReaderOffset>(

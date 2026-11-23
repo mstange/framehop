@@ -12,6 +12,10 @@ pub enum Error {
     DidNotAdvance,
     IntegerOverflow,
     ReturnAddressIsNull,
+    /// The unwind rule needed the value of a register which was not known, for example
+    /// a callee-saved register which was neither sampled nor restored by the CFI of an
+    /// inner frame.
+    RegisterValueUnknown,
     StackPointerMovedBackwards,
 }
 
@@ -28,6 +32,12 @@ impl core::fmt::Display for Error {
             ),
             Self::IntegerOverflow => write!(f, "Unwinding caused integer overflow"),
             Self::ReturnAddressIsNull => write!(f, "Return address is null"),
+            Self::RegisterValueUnknown => {
+                write!(
+                    f,
+                    "The unwind rule needed a register whose value is unknown"
+                )
+            }
             Self::StackPointerMovedBackwards => write!(f, "Stack pointer moved backwards"),
         }
     }

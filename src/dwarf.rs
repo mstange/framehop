@@ -21,6 +21,8 @@ pub enum DwarfUnwinderError {
     CouldNotRecoverCfa,
     CouldNotRecoverReturnAddress,
     CouldNotRecoverFramePointer,
+    /// A rule needed a register whose value is unknown in this walk.
+    RegisterValueUnknown,
 }
 
 impl core::fmt::Display for DwarfUnwinderError {
@@ -38,6 +40,9 @@ impl core::fmt::Display for DwarfUnwinderError {
             Self::CouldNotRecoverCfa => write!(f, "Could not recover the CFA"),
             Self::CouldNotRecoverReturnAddress => write!(f, "Could not recover the return address"),
             Self::CouldNotRecoverFramePointer => write!(f, "Could not recover the frame pointer"),
+            Self::RegisterValueUnknown => {
+                write!(f, "A rule needed a register whose value is unknown")
+            }
         }
     }
 }
@@ -69,6 +74,8 @@ pub enum ConversionError {
     FramePointerRuleDoesNotRestoreFp,
     FramePointerRuleDoesNotRestoreBp,
     FramePointerRuleHasStrangeBpOffset,
+    CalleeSavedRuleNotCacheable,
+    CalleeSavedRuleDoesNotFit,
 }
 
 pub trait DwarfUnwinding: Arch {
@@ -393,6 +400,7 @@ pub trait DwarfUnwindRegs {
     fn get(&self, register: Register) -> Option<u64>;
 }
 
+/// Evaluate the CFA rule. `read_stack` is used for memory reads in DWARF expressions.
 pub fn eval_cfa_rule<R, F, UR, S>(
     section: &impl UnwindSection<R>,
     rule: &CfaRule<R::Offset>,

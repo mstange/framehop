@@ -139,7 +139,7 @@ mod tests {
         );
         assert_eq!(
             core::mem::size_of::<Option<CacheEntry<UnwindRuleAarch64>>>(),
-            24 // <-- larger than we'd like
+            32
         );
     }
 }
