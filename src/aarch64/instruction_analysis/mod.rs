@@ -13,13 +13,13 @@ impl InstructionAnalysis for ArchAarch64 {
         pc_offset: usize,
     ) -> Option<Self::UnwindRule> {
         let (slice_from_start, slice_to_end) = text_bytes.split_at(pc_offset);
-        unwind_rule_from_detected_prologue(slice_from_start, slice_to_end)
+        unwind_rule_from_detected_prologue(slice_from_start, slice_to_end).map(Into::into)
     }
 
     fn rule_from_epilogue_analysis(
         text_bytes: &[u8],
         pc_offset: usize,
     ) -> Option<Self::UnwindRule> {
-        unwind_rule_from_detected_epilogue(text_bytes, pc_offset)
+        unwind_rule_from_detected_epilogue(text_bytes, pc_offset).map(Into::into)
     }
 }

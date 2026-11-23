@@ -1,3 +1,5 @@
+use core::fmt::Debug;
+
 use super::unwindregs::UnwindRegsAarch64;
 use crate::add_signed::checked_add_signed;
 use crate::error::Error;
@@ -237,6 +239,55 @@ impl UnwindRule for FrameRuleAarch64 {
         regs.set_fp(new_fp);
 
         Ok(Some(return_address))
+    }
+}
+
+/// The unwind rule which is stored in the unwind rule cache on Aarch64. It wraps
+/// a [`FrameRuleAarch64`], which describes how to recover sp, fp and lr.
+#[derive(Clone, Copy, PartialEq, Eq)]
+#[repr(C)]
+pub struct UnwindRuleAarch64 {
+    frame: FrameRuleAarch64,
+}
+
+impl Debug for UnwindRuleAarch64 {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("UnwindRuleAarch64")
+            .field("frame", &self.frame)
+            .finish()
+    }
+}
+
+impl From<FrameRuleAarch64> for UnwindRuleAarch64 {
+    fn from(frame: FrameRuleAarch64) -> Self {
+        Self { frame }
+    }
+}
+
+impl UnwindRule for UnwindRuleAarch64 {
+    type UnwindRegs = UnwindRegsAarch64;
+
+    fn rule_for_stub_functions() -> Self {
+        FrameRuleAarch64::rule_for_stub_functions().into()
+    }
+    fn rule_for_function_start() -> Self {
+        FrameRuleAarch64::rule_for_function_start().into()
+    }
+    fn fallback_rule() -> Self {
+        FrameRuleAarch64::fallback_rule().into()
+    }
+
+    #[inline]
+    fn exec<F>(
+        self,
+        is_first_frame: bool,
+        regs: &mut UnwindRegsAarch64,
+        read_stack: &mut F,
+    ) -> Result<Option<u64>, Error>
+    where
+        F: FnMut(u64) -> Result<u64, ()>,
+    {
+        self.frame.exec(is_first_frame, regs, read_stack)
     }
 }
 

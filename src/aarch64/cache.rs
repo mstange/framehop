@@ -3,7 +3,7 @@ use crate::cache::*;
 
 /// The unwinder cache type for [`UnwinderAarch64`](super::UnwinderAarch64).
 pub struct CacheAarch64<P: AllocationPolicy = MayAllocateDuringUnwind>(
-    pub Cache<FrameRuleAarch64, P>,
+    pub Cache<UnwindRuleAarch64, P>,
 );
 
 impl CacheAarch64<MayAllocateDuringUnwind> {

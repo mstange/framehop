@@ -126,7 +126,7 @@ impl CacheStats {
 
 #[cfg(test)]
 mod tests {
-    use crate::{aarch64::FrameRuleAarch64, x86_64::UnwindRuleX86_64};
+    use crate::{aarch64::UnwindRuleAarch64, x86_64::UnwindRuleX86_64};
 
     use super::*;
 
@@ -138,7 +138,7 @@ mod tests {
             24
         );
         assert_eq!(
-            core::mem::size_of::<Option<CacheEntry<FrameRuleAarch64>>>(),
+            core::mem::size_of::<Option<CacheEntry<UnwindRuleAarch64>>>(),
             24 // <-- larger than we'd like
         );
     }

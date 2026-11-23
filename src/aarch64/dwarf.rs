@@ -3,7 +3,11 @@ use gimli::{
     UnwindContextStorage, UnwindSection, UnwindTableRow,
 };
 
-use super::{arch::ArchAarch64, unwind_rule::FrameRuleAarch64, unwindregs::UnwindRegsAarch64};
+use super::{
+    arch::ArchAarch64,
+    unwind_rule::{FrameRuleAarch64, UnwindRuleAarch64},
+    unwindregs::UnwindRegsAarch64,
+};
 
 use crate::unwind_result::UnwindResult;
 
@@ -60,7 +64,7 @@ impl DwarfUnwinding for ArchAarch64 {
     }
 
     fn rule_if_uncovered_by_fde() -> Self::UnwindRule {
-        FrameRuleAarch64::NoOpIfFirstFrameOtherwiseFp
+        FrameRuleAarch64::NoOpIfFirstFrameOtherwiseFp.into()
     }
 }
 
@@ -139,14 +143,15 @@ fn register_rule_to_cfa_offset<RO: ReaderOffset>(
 
 fn translate_into_unwind_rule<RO, UCS>(
     unwind_info: &UnwindTableRow<RO, UCS>,
-) -> Result<FrameRuleAarch64, ConversionError>
+) -> Result<UnwindRuleAarch64, ConversionError>
 where
     RO: ReaderOffset,
     UCS: UnwindContextStorage<RO>,
 {
     let fp_rule = unwind_info.register(AArch64::X29);
     let lr_rule = unwind_info.register(AArch64::X30);
-    translate_into_frame_rule(unwind_info.cfa(), fp_rule.as_ref(), lr_rule.as_ref())
+    let frame = translate_into_frame_rule(unwind_info.cfa(), fp_rule.as_ref(), lr_rule.as_ref())?;
+    Ok(frame.into())
 }
 
 fn translate_into_frame_rule<RO: ReaderOffset>(
