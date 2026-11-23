@@ -40,11 +40,7 @@ impl DwarfUnwinding for ArchAarch64 {
         UCS: UnwindContextStorage<R::Offset>,
         ES: EvaluationStorage<R>,
     {
-        let cfa_rule = unwind_info.cfa();
-        let fp_rule = unwind_info.register(AArch64::X29);
-        let lr_rule = unwind_info.register(AArch64::X30);
-
-        match translate_into_unwind_rule(cfa_rule, fp_rule.as_ref(), lr_rule.as_ref()) {
+        match translate_into_unwind_rule(unwind_info) {
             Ok(unwind_rule) => return Ok(UnwindResult::ExecRule(unwind_rule)),
             Err(_err) => {
                 // Could not translate into a cacheable unwind rule. Fall back to the generic path.
@@ -52,51 +48,82 @@ impl DwarfUnwinding for ArchAarch64 {
             }
         }
 
-        let cfa = eval_cfa_rule::<R, F, _, ES>(section, cfa_rule, encoding, regs, read_stack)
-            .ok_or(DwarfUnwinderError::CouldNotRecoverCfa)?;
-
-        let lr = regs.lr();
-        let fp = regs.fp();
-        let sp = regs.sp();
-
-        let (fp, lr) = if !is_first_frame {
-            if cfa <= sp {
-                return Err(DwarfUnwinderError::StackPointerMovedBackwards);
-            }
-            let fp = eval_register_rule::<R, F, _, ES>(
-                section, fp_rule, cfa, encoding, fp, regs, read_stack,
-            )
-            .ok_or(DwarfUnwinderError::CouldNotRecoverFramePointer)?;
-            let lr = eval_register_rule::<R, F, _, ES>(
-                section, lr_rule, cfa, encoding, lr, regs, read_stack,
-            )
-            .ok_or(DwarfUnwinderError::CouldNotRecoverReturnAddress)?;
-            (fp, lr)
-        } else {
-            // For the first frame, be more lenient when encountering errors.
-            // TODO: Find evidence of what this gives us. I think on macOS the prologue often has Unknown register rules
-            // and we only encounter prologues for the first frame.
-            let fp = eval_register_rule::<R, F, _, ES>(
-                section, fp_rule, cfa, encoding, fp, regs, read_stack,
-            )
-            .unwrap_or(fp);
-            let lr = eval_register_rule::<R, F, _, ES>(
-                section, lr_rule, cfa, encoding, lr, regs, read_stack,
-            )
-            .unwrap_or(lr);
-            (fp, lr)
-        };
-
-        regs.set_fp(fp);
-        regs.set_sp(cfa);
-        regs.set_lr(lr);
-
-        Ok(UnwindResult::Uncacheable(lr))
+        let return_address = unwind_frame_generic::<F, R, UCS, ES>(
+            section,
+            unwind_info,
+            encoding,
+            regs,
+            is_first_frame,
+            read_stack,
+        )?;
+        Ok(UnwindResult::Uncacheable(return_address))
     }
 
     fn rule_if_uncovered_by_fde() -> Self::UnwindRule {
         UnwindRuleAarch64::NoOpIfFirstFrameOtherwiseFp
     }
+}
+
+/// Evaluate the row directly. All rules are evaluated against the register values
+/// before the step.
+fn unwind_frame_generic<F, R, UCS, ES>(
+    section: &impl UnwindSection<R>,
+    unwind_info: &UnwindTableRow<R::Offset, UCS>,
+    encoding: Encoding,
+    regs: &mut UnwindRegsAarch64,
+    is_first_frame: bool,
+    read_stack: &mut F,
+) -> Result<u64, DwarfUnwinderError>
+where
+    F: FnMut(u64) -> Result<u64, ()>,
+    R: Reader,
+    UCS: UnwindContextStorage<R::Offset>,
+    ES: EvaluationStorage<R>,
+{
+    let cfa_rule = unwind_info.cfa();
+    let fp_rule = unwind_info.register(AArch64::X29);
+    let lr_rule = unwind_info.register(AArch64::X30);
+
+    let cfa = eval_cfa_rule::<R, F, _, ES>(section, cfa_rule, encoding, regs, read_stack)
+        .ok_or(DwarfUnwinderError::CouldNotRecoverCfa)?;
+
+    let lr = regs.lr();
+    let fp = regs.fp();
+    let sp = regs.sp();
+
+    let (fp, lr) = if !is_first_frame {
+        if cfa <= sp {
+            return Err(DwarfUnwinderError::StackPointerMovedBackwards);
+        }
+        let fp = eval_register_rule::<R, F, _, ES>(
+            section, fp_rule, cfa, encoding, fp, regs, read_stack,
+        )
+        .ok_or(DwarfUnwinderError::CouldNotRecoverFramePointer)?;
+        let lr = eval_register_rule::<R, F, _, ES>(
+            section, lr_rule, cfa, encoding, lr, regs, read_stack,
+        )
+        .ok_or(DwarfUnwinderError::CouldNotRecoverReturnAddress)?;
+        (fp, lr)
+    } else {
+        // For the first frame, be more lenient when encountering errors.
+        // TODO: Find evidence of what this gives us. I think on macOS the prologue often has Unknown register rules
+        // and we only encounter prologues for the first frame.
+        let fp = eval_register_rule::<R, F, _, ES>(
+            section, fp_rule, cfa, encoding, fp, regs, read_stack,
+        )
+        .unwrap_or(fp);
+        let lr = eval_register_rule::<R, F, _, ES>(
+            section, lr_rule, cfa, encoding, lr, regs, read_stack,
+        )
+        .unwrap_or(lr);
+        (fp, lr)
+    };
+
+    regs.set_fp(fp);
+    regs.set_sp(cfa);
+    regs.set_lr(lr);
+
+    Ok(lr)
 }
 
 fn register_rule_to_cfa_offset<RO: ReaderOffset>(
@@ -110,7 +137,19 @@ fn register_rule_to_cfa_offset<RO: ReaderOffset>(
     }
 }
 
-fn translate_into_unwind_rule<RO: ReaderOffset>(
+fn translate_into_unwind_rule<RO, UCS>(
+    unwind_info: &UnwindTableRow<RO, UCS>,
+) -> Result<UnwindRuleAarch64, ConversionError>
+where
+    RO: ReaderOffset,
+    UCS: UnwindContextStorage<RO>,
+{
+    let fp_rule = unwind_info.register(AArch64::X29);
+    let lr_rule = unwind_info.register(AArch64::X30);
+    translate_into_base_unwind_rule(unwind_info.cfa(), fp_rule.as_ref(), lr_rule.as_ref())
+}
+
+fn translate_into_base_unwind_rule<RO: ReaderOffset>(
     cfa_rule: &CfaRule<RO>,
     fp_rule: Option<&RegisterRule<RO>>,
     lr_rule: Option<&RegisterRule<RO>>,
