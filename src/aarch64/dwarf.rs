@@ -50,7 +50,7 @@ impl DwarfUnwinding for ArchAarch64 {
             }
         }
 
-        let cfa = eval_cfa_rule::<R, _, ES>(section, cfa_rule, encoding, regs)
+        let cfa = eval_cfa_rule::<R, F, _, ES>(section, cfa_rule, encoding, regs, read_stack)
             .ok_or(DwarfUnwinderError::CouldNotRecoverCfa)?;
 
         let lr = regs.lr();
