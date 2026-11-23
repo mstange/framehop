@@ -76,6 +76,8 @@ pub enum ConversionError {
     FramePointerRuleHasStrangeBpOffset,
     CalleeSavedRuleNotCacheable,
     CalleeSavedRuleDoesNotFit,
+    CfaExpressionRuleDoesNotRestoreLrAndFp,
+    CfaExpressionOffsetDoesNotFit,
 }
 
 pub trait DwarfUnwinding: Arch {

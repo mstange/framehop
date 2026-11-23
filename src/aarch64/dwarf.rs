@@ -2,7 +2,7 @@ use core::cell::Cell;
 
 use gimli::{
     AArch64, CfaRule, Encoding, EvaluationStorage, Reader, ReaderOffset, Register, RegisterRule,
-    UnwindContextStorage, UnwindSection, UnwindTableRow,
+    UnwindContextStorage, UnwindExpression, UnwindSection, UnwindTableRow,
 };
 
 use super::{
@@ -82,7 +82,7 @@ impl DwarfUnwinding for ArchAarch64 {
         UCS: UnwindContextStorage<R::Offset>,
         ES: EvaluationStorage<R>,
     {
-        match translate_into_unwind_rule(unwind_info) {
+        match translate_into_unwind_rule(section, unwind_info) {
             Ok(unwind_rule) => return Ok(UnwindResult::ExecRule(unwind_rule)),
             Err(_err) => {
                 // Could not translate into a cacheable unwind rule. Fall back to the generic path.
@@ -199,6 +199,42 @@ where
     Ok(lr)
 }
 
+/// Recognize the CFA expression `DW_OP_breg<N>/DW_OP_bregx <reg> <offset>; DW_OP_deref;
+/// [DW_OP_plus_uconst <cfa offset>]`. Returns (reg, offset, cfa offset).
+fn parse_deref_register_cfa_expression<R: Reader>(
+    section: &impl UnwindSection<R>,
+    expr: &UnwindExpression<R::Offset>,
+) -> Option<(u16, i64, u64)> {
+    const DW_OP_DEREF: u8 = 0x06;
+    const DW_OP_PLUS_UCONST: u8 = 0x23;
+    const DW_OP_BREG0: u8 = 0x70;
+    const DW_OP_BREG31: u8 = 0x8f;
+    const DW_OP_BREGX: u8 = 0x92;
+
+    let mut r = expr.get(section).ok()?.0;
+    let reg = match r.read_u8().ok()? {
+        op @ DW_OP_BREG0..=DW_OP_BREG31 => u16::from(op - DW_OP_BREG0),
+        DW_OP_BREGX => u16::try_from(r.read_uleb128().ok()?).ok()?,
+        _ => return None,
+    };
+    let offset = r.read_sleb128().ok()?;
+    if r.read_u8().ok()? != DW_OP_DEREF {
+        return None;
+    }
+    let cfa_offset = if r.is_empty() {
+        0
+    } else {
+        if r.read_u8().ok()? != DW_OP_PLUS_UCONST {
+            return None;
+        }
+        r.read_uleb128().ok()?
+    };
+    if !r.is_empty() {
+        return None;
+    }
+    Some((reg, offset, cfa_offset))
+}
+
 fn register_rule_to_cfa_offset<RO: ReaderOffset>(
     rule: Option<&RegisterRule<RO>>,
 ) -> Result<Option<i64>, ConversionError> {
@@ -210,12 +246,13 @@ fn register_rule_to_cfa_offset<RO: ReaderOffset>(
     }
 }
 
-fn translate_into_unwind_rule<RO, UCS>(
-    unwind_info: &UnwindTableRow<RO, UCS>,
+fn translate_into_unwind_rule<R, UCS>(
+    section: &impl UnwindSection<R>,
+    unwind_info: &UnwindTableRow<R::Offset, UCS>,
 ) -> Result<UnwindRuleAarch64, ConversionError>
 where
-    RO: ReaderOffset,
-    UCS: UnwindContextStorage<RO>,
+    R: Reader,
+    UCS: UnwindContextStorage<R::Offset>,
 {
     let mut callee_saved = CalleeSavedRulesAarch64::ALL_UNCHANGED;
     for (register, rule) in unwind_info.registers() {
@@ -240,14 +277,20 @@ where
 
     let fp_rule = unwind_info.register(AArch64::X29);
     let lr_rule = unwind_info.register(AArch64::X30);
-    let frame = translate_into_frame_rule(unwind_info.cfa(), fp_rule.as_ref(), lr_rule.as_ref())?;
+    let frame = translate_into_frame_rule(
+        section,
+        unwind_info.cfa(),
+        fp_rule.as_ref(),
+        lr_rule.as_ref(),
+    )?;
     Ok(UnwindRuleAarch64::new(frame, callee_saved))
 }
 
-fn translate_into_frame_rule<RO: ReaderOffset>(
-    cfa_rule: &CfaRule<RO>,
-    fp_rule: Option<&RegisterRule<RO>>,
-    lr_rule: Option<&RegisterRule<RO>>,
+fn translate_into_frame_rule<R: Reader>(
+    section: &impl UnwindSection<R>,
+    cfa_rule: &CfaRule<R::Offset>,
+    fp_rule: Option<&RegisterRule<R::Offset>>,
+    lr_rule: Option<&RegisterRule<R::Offset>>,
 ) -> Result<FrameRuleAarch64, ConversionError> {
     match cfa_rule {
         CfaRule::RegisterAndOffset { register, offset } => match *register {
@@ -329,6 +372,33 @@ fn translate_into_frame_rule<RO: ReaderOffset>(
             }
             _ => Err(ConversionError::CfaIsOffsetFromUnknownRegister),
         },
-        CfaRule::Expression(_) => Err(ConversionError::CfaIsExpression),
+        CfaRule::Expression(expr) => {
+            let (reg, reg_offset, cfa_offset) = parse_deref_register_cfa_expression(section, expr)
+                .ok_or(ConversionError::CfaIsExpression)?;
+            if !(FIRST_CALLEE_SAVED..=31).contains(&reg) {
+                return Err(ConversionError::CfaIsExpression);
+            }
+            let lr_cfa_offset = register_rule_to_cfa_offset(lr_rule)?
+                .ok_or(ConversionError::CfaExpressionRuleDoesNotRestoreLrAndFp)?;
+            let fp_cfa_offset = register_rule_to_cfa_offset(fp_rule)?
+                .ok_or(ConversionError::CfaExpressionRuleDoesNotRestoreLrAndFp)?;
+            let by_8_i8 = |offset: i64| -> Result<i8, ConversionError> {
+                if offset % 8 != 0 {
+                    return Err(ConversionError::CfaExpressionOffsetDoesNotFit);
+                }
+                i8::try_from(offset / 8).map_err(|_| ConversionError::CfaExpressionOffsetDoesNotFit)
+            };
+            if cfa_offset % 8 != 0 {
+                return Err(ConversionError::CfaExpressionOffsetDoesNotFit);
+            }
+            Ok(FrameRuleAarch64::UseDerefedRegister {
+                reg: reg as u8,
+                reg_offset_by_8: by_8_i8(reg_offset)?,
+                cfa_offset_by_8: u16::try_from(cfa_offset / 8)
+                    .map_err(|_| ConversionError::CfaExpressionOffsetDoesNotFit)?,
+                fp_storage_offset_from_cfa_by_8: by_8_i8(fp_cfa_offset)?,
+                lr_storage_offset_from_cfa_by_8: by_8_i8(lr_cfa_offset)?,
+            })
+        }
     }
 }

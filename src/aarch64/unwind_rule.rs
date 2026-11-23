@@ -45,6 +45,19 @@ pub enum FrameRuleAarch64 {
         fp_storage_offset_from_fp_by_8: i16,
         lr_storage_offset_from_fp_by_8: i16,
     },
+    /// cfa = *(reg + 8w) + 8x
+    /// (sp, fp, lr) = (cfa, *(cfa + 8y), *(cfa + 8z))
+    /// `reg` is a DWARF register number (x19 - x28, x29, x30 or sp). This is the
+    /// shape of the CFA expression of the Android ART nterp interpreter,
+    /// `DW_OP_bregx x25 -8; DW_OP_deref; DW_OP_plus_uconst 0xa0`. If `reg` is one of
+    /// x19 - x28, its value may be unknown, in which case the rule fails.
+    UseDerefedRegister {
+        reg: u8,
+        reg_offset_by_8: i8,
+        cfa_offset_by_8: u16,
+        fp_storage_offset_from_cfa_by_8: i8,
+        lr_storage_offset_from_cfa_by_8: i8,
+    },
 }
 
 impl UnwindRule for FrameRuleAarch64 {
@@ -224,6 +237,37 @@ impl UnwindRule for FrameRuleAarch64 {
                 if new_sp <= sp {
                     return Err(Error::StackPointerMovedBackwards);
                 }
+                (new_lr, new_sp, new_fp)
+            }
+            FrameRuleAarch64::UseDerefedRegister {
+                reg,
+                reg_offset_by_8,
+                cfa_offset_by_8,
+                fp_storage_offset_from_cfa_by_8,
+                lr_storage_offset_from_cfa_by_8,
+            } => {
+                let reg_value = regs
+                    .get_reg(u16::from(reg))
+                    .ok_or(Error::RegisterValueUnknown)?;
+                let cfa_location = checked_add_signed(reg_value, i64::from(reg_offset_by_8) * 8)
+                    .ok_or(Error::IntegerOverflow)?;
+                let new_sp = read_stack(cfa_location)
+                    .map_err(|_| Error::CouldNotReadStack(cfa_location))?
+                    .checked_add(u64::from(cfa_offset_by_8) * 8)
+                    .ok_or(Error::IntegerOverflow)?;
+                if new_sp <= sp {
+                    return Err(Error::StackPointerMovedBackwards);
+                }
+                let lr_location =
+                    checked_add_signed(new_sp, i64::from(lr_storage_offset_from_cfa_by_8) * 8)
+                        .ok_or(Error::IntegerOverflow)?;
+                let new_lr =
+                    read_stack(lr_location).map_err(|_| Error::CouldNotReadStack(lr_location))?;
+                let fp_location =
+                    checked_add_signed(new_sp, i64::from(fp_storage_offset_from_cfa_by_8) * 8)
+                        .ok_or(Error::IntegerOverflow)?;
+                let new_fp =
+                    read_stack(fp_location).map_err(|_| Error::CouldNotReadStack(fp_location))?;
                 (new_lr, new_sp, new_fp)
             }
         };
