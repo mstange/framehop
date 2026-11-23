@@ -79,10 +79,8 @@ impl PrologueDetectorAarch64 {
         if next_instruction_type == PrologueInstructionType::NotExpectedInPrologue {
             return PrologueResult::ProbablyAlreadyInBody(UnexpectedInstructionType::Unknown);
         }
-        let instructions = slice_from_start
-            .chunks_exact(4)
-            .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]]))
-            .rev();
+        let (chunks, _) = slice_from_start.as_chunks::<4>();
+        let instructions = chunks.iter().map(|c| u32::from_le_bytes(*c)).rev();
         for instruction in instructions {
             if let PrologueStepResult::UnexpectedInstruction(_) =
                 self.reverse_step_instruction(instruction)

@@ -97,26 +97,6 @@ impl UnwindRegsX86_64 {
     }
 }
 
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    #[test]
-    fn clear_unrestored_caller_registers_keeps_frame_registers() {
-        let mut regs = UnwindRegsX86_64::new(0x100, 0x200, 0x300);
-        regs.set(Reg::RAX, 0x400);
-        regs.set(Reg::RBX, 0x500);
-
-        regs.clear_unrestored_caller_registers();
-
-        assert_eq!(regs.ip(), 0x100);
-        assert_eq!(regs.get_if_set(Reg::RSP), Some(0x200));
-        assert_eq!(regs.get_if_set(Reg::RBP), Some(0x300));
-        assert_eq!(regs.get_if_set(Reg::RAX), None);
-        assert_eq!(regs.get_if_set(Reg::RBX), None);
-    }
-}
-
 impl Debug for UnwindRegsX86_64 {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("UnwindRegsX86_64")
@@ -138,5 +118,25 @@ impl Debug for UnwindRegsX86_64 {
             .field("r14", &self.get_if_set(Reg::R14).map(HexNum))
             .field("r15", &self.get_if_set(Reg::R15).map(HexNum))
             .finish()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn clear_unrestored_caller_registers_keeps_frame_registers() {
+        let mut regs = UnwindRegsX86_64::new(0x100, 0x200, 0x300);
+        regs.set(Reg::RAX, 0x400);
+        regs.set(Reg::RBX, 0x500);
+
+        regs.clear_unrestored_caller_registers();
+
+        assert_eq!(regs.ip(), 0x100);
+        assert_eq!(regs.get_if_set(Reg::RSP), Some(0x200));
+        assert_eq!(regs.get_if_set(Reg::RBP), Some(0x300));
+        assert_eq!(regs.get_if_set(Reg::RAX), None);
+        assert_eq!(regs.get_if_set(Reg::RBX), None);
     }
 }
