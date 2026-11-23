@@ -3,7 +3,11 @@ use gimli::{
     UnwindContextStorage, UnwindSection, UnwindTableRow, X86_64,
 };
 
-use super::{arch::ArchX86_64, unwind_rule::UnwindRuleX86_64, unwindregs::UnwindRegsX86_64};
+use super::{
+    arch::ArchX86_64,
+    unwind_rule::UnwindRuleX86_64,
+    unwindregs::{Reg, UnwindRegsX86_64},
+};
 use crate::dwarf::{
     eval_cfa_rule, eval_register_rule, ConversionError, DwarfUnwindRegs, DwarfUnwinderError,
     DwarfUnwinding,
@@ -14,8 +18,23 @@ impl DwarfUnwindRegs for UnwindRegsX86_64 {
     fn get(&self, register: Register) -> Option<u64> {
         match register {
             X86_64::RA => Some(self.ip()),
+            X86_64::RAX => self.get_if_set(Reg::RAX),
+            X86_64::RDX => self.get_if_set(Reg::RDX),
+            X86_64::RCX => self.get_if_set(Reg::RCX),
+            X86_64::RBX => self.get_if_set(Reg::RBX),
+            X86_64::RSI => self.get_if_set(Reg::RSI),
+            X86_64::RDI => self.get_if_set(Reg::RDI),
+            // RSP/RBP are always populated by `UnwindRegsX86_64::new`.
             X86_64::RSP => Some(self.sp()),
             X86_64::RBP => Some(self.bp()),
+            X86_64::R8 => self.get_if_set(Reg::R8),
+            X86_64::R9 => self.get_if_set(Reg::R9),
+            X86_64::R10 => self.get_if_set(Reg::R10),
+            X86_64::R11 => self.get_if_set(Reg::R11),
+            X86_64::R12 => self.get_if_set(Reg::R12),
+            X86_64::R13 => self.get_if_set(Reg::R13),
+            X86_64::R14 => self.get_if_set(Reg::R14),
+            X86_64::R15 => self.get_if_set(Reg::R15),
             _ => None,
         }
     }
@@ -48,7 +67,7 @@ impl DwarfUnwinding for ArchX86_64 {
             }
         }
 
-        let cfa = eval_cfa_rule::<R, _, ES>(section, cfa_rule, encoding, regs)
+        let cfa = eval_cfa_rule::<R, F, _, ES>(section, cfa_rule, encoding, regs, read_stack)
             .ok_or(DwarfUnwinderError::CouldNotRecoverCfa)?;
 
         let ip = regs.ip();
@@ -76,6 +95,7 @@ impl DwarfUnwinding for ArchX86_64 {
             return Err(DwarfUnwinderError::StackPointerMovedBackwards);
         }
 
+        regs.clear_unrestored_caller_registers();
         regs.set_ip(return_address);
         regs.set_bp(new_bp);
         regs.set_sp(cfa);

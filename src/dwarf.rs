@@ -386,12 +386,19 @@ pub trait DwarfUnwindRegs {
     fn get(&self, register: Register) -> Option<u64>;
 }
 
-pub fn eval_cfa_rule<R: Reader, UR: DwarfUnwindRegs, S: EvaluationStorage<R>>(
+pub fn eval_cfa_rule<R, F, UR, S>(
     section: &impl UnwindSection<R>,
     rule: &CfaRule<R::Offset>,
     encoding: Encoding,
     regs: &UR,
-) -> Option<u64> {
+    read_stack: &mut F,
+) -> Option<u64>
+where
+    R: Reader,
+    F: FnMut(u64) -> Result<u64, ()>,
+    UR: DwarfUnwindRegs,
+    S: EvaluationStorage<R>,
+{
     match rule {
         CfaRule::RegisterAndOffset { register, offset } => {
             let val = regs.get(*register)?;
@@ -399,16 +406,23 @@ pub fn eval_cfa_rule<R: Reader, UR: DwarfUnwindRegs, S: EvaluationStorage<R>>(
         }
         CfaRule::Expression(expr) => {
             let expr = expr.get(section).ok()?;
-            eval_expr::<R, UR, S>(expr, encoding, regs)
+            eval_expr::<R, F, UR, S>(expr, encoding, regs, read_stack)
         }
     }
 }
 
-fn eval_expr<R: Reader, UR: DwarfUnwindRegs, S: EvaluationStorage<R>>(
+fn eval_expr<R, F, UR, S>(
     expr: Expression<R>,
     encoding: Encoding,
     regs: &UR,
-) -> Option<u64> {
+    read_stack: &mut F,
+) -> Option<u64>
+where
+    R: Reader,
+    F: FnMut(u64) -> Result<u64, ()>,
+    UR: DwarfUnwindRegs,
+    S: EvaluationStorage<R>,
+{
     let mut eval = Evaluation::<R, S>::new_in(expr.0, encoding);
     let mut result = eval.evaluate().ok()?;
     loop {
@@ -416,7 +430,19 @@ fn eval_expr<R: Reader, UR: DwarfUnwindRegs, S: EvaluationStorage<R>>(
             EvaluationResult::Complete => break,
             EvaluationResult::RequiresRegister { register, .. } => {
                 let value = regs.get(register)?;
-                result = eval.resume_with_register(Value::Generic(value as _)).ok()?;
+                result = eval.resume_with_register(Value::Generic(value)).ok()?;
+            }
+            EvaluationResult::RequiresMemory {
+                address,
+                size,
+                space,
+                ..
+            } => {
+                if space.is_some() || size != encoding.address_size {
+                    return None;
+                }
+                let value = read_stack(address).ok()?;
+                result = eval.resume_with_memory(Value::Generic(value)).ok()?;
             }
             _ => return None,
         }
@@ -459,12 +485,12 @@ where
         RegisterRule::Register(register) => regs.get(register),
         RegisterRule::Expression(expr) => {
             let expr = expr.get(section).ok()?;
-            let val = eval_expr::<R, UR, S>(expr, encoding, regs)?;
+            let val = eval_expr::<R, F, UR, S>(expr, encoding, regs, read_stack)?;
             read_stack(val).ok()
         }
         RegisterRule::ValExpression(expr) => {
             let expr = expr.get(section).ok()?;
-            eval_expr::<R, UR, S>(expr, encoding, regs)
+            eval_expr::<R, F, UR, S>(expr, encoding, regs, read_stack)
         }
         RegisterRule::Architectural => {
             // Unimplemented
@@ -472,5 +498,134 @@ where
             None
         }
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use gimli::{AArch64, DebugFrame, Format, StoreOnHeap, UnwindExpression, X86_64};
+
+    use crate::{
+        aarch64::UnwindRegsAarch64,
+        x86_64::{Reg, UnwindRegsX86_64},
+    };
+
+    use super::*;
+
+    fn encoding() -> Encoding {
+        Encoding {
+            address_size: 8,
+            format: Format::Dwarf32,
+            version: 4,
+        }
+    }
+
+    #[test]
+    fn eval_cfa_expression_can_read_memory_with_x86_64_regs() {
+        // DW_OP_breg6(RBP) -40; DW_OP_deref
+        let expression = [0x76, 0x58, 0x06];
+        let mut section = DebugFrame::from(EndianSlice::new(&expression, LittleEndian));
+        section.set_address_size(8);
+        let rule = CfaRule::Expression(UnwindExpression {
+            offset: 0,
+            length: expression.len(),
+        });
+        let regs = UnwindRegsX86_64::new(0, 0, 0x1000);
+
+        let mut unreadable_stack = |_| Err(());
+        assert_eq!(
+            eval_cfa_rule::<_, _, _, StoreOnHeap>(
+                &section,
+                &rule,
+                encoding(),
+                &regs,
+                &mut unreadable_stack,
+            ),
+            None
+        );
+
+        let mut read_stack = |address| {
+            assert_eq!(address, 0xfd8);
+            Ok(0x2000)
+        };
+
+        assert_eq!(
+            eval_cfa_rule::<_, _, _, StoreOnHeap>(
+                &section,
+                &rule,
+                encoding(),
+                &regs,
+                &mut read_stack,
+            ),
+            Some(0x2000)
+        );
+    }
+
+    #[test]
+    fn eval_cfa_expression_can_read_memory_with_aarch64_regs() {
+        // DW_OP_breg29(X29/FP) -16; DW_OP_deref
+        let expression = [0x8d, 0x70, 0x06];
+        let mut section = DebugFrame::from(EndianSlice::new(&expression, LittleEndian));
+        section.set_address_size(8);
+        let rule = CfaRule::Expression(UnwindExpression {
+            offset: 0,
+            length: expression.len(),
+        });
+        let regs = UnwindRegsAarch64::new(0, 0, 0x3000);
+        assert_eq!(DwarfUnwindRegs::get(&regs, AArch64::X29), Some(0x3000));
+
+        let mut read_stack = |address| {
+            assert_eq!(address, 0x2ff0);
+            Ok(0x4000)
+        };
+
+        assert_eq!(
+            eval_cfa_rule::<_, _, _, StoreOnHeap>(
+                &section,
+                &rule,
+                encoding(),
+                &regs,
+                &mut read_stack,
+            ),
+            Some(0x4000)
+        );
+    }
+
+    #[test]
+    fn eval_cfa_expression_rejects_partial_memory_reads() {
+        // DW_OP_breg6(RBP) -40; DW_OP_deref_size 4
+        let expression = [0x76, 0x58, 0x94, 0x04];
+        let mut section = DebugFrame::from(EndianSlice::new(&expression, LittleEndian));
+        section.set_address_size(8);
+        let rule = CfaRule::Expression(UnwindExpression {
+            offset: 0,
+            length: expression.len(),
+        });
+        let regs = UnwindRegsX86_64::new(0, 0, 0x1000);
+
+        let mut read_stack =
+            |_: u64| -> Result<u64, ()> { panic!("partial memory reads are unsupported") };
+
+        assert_eq!(
+            eval_cfa_rule::<_, _, _, StoreOnHeap>(
+                &section,
+                &rule,
+                encoding(),
+                &regs,
+                &mut read_stack,
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn x86_64_dwarf_regs_expose_provided_general_purpose_registers() {
+        let mut regs = UnwindRegsX86_64::new(0, 0, 0);
+        assert_eq!(DwarfUnwindRegs::get(&regs, X86_64::R10), None);
+
+        regs.set(Reg::R10, 0x1234);
+
+        assert_eq!(DwarfUnwindRegs::get(&regs, X86_64::R10), Some(0x1234));
+        assert_eq!(DwarfUnwindRegs::get(&regs, X86_64::R11), None);
     }
 }
