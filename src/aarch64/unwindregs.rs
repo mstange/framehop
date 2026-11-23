@@ -13,7 +13,9 @@ use crate::display_utils::HexNum;
 /// frame pointer unwinding), because the callee may have clobbered it.
 ///
 /// These registers are needed for unwinding through code whose CFI refers to them,
-/// for example the Android ART nterp interpreter. Supplying their sampled values
+/// for example the Android ART nterp interpreter, and for computing the values of
+/// `DW_CFA_val_expression` rules ([`UnwindRegsAarch64::val_expression_values`]), which
+/// ART uses to mark the dex pc of interpreter frames. Supplying their sampled values
 /// is optional: the CFI of inner frames often restores them.
 ///
 /// We also have a [`PtrAuthMask`] which allows stripping off the pointer authentication
@@ -29,7 +31,26 @@ pub struct UnwindRegsAarch64 {
     callee_saved: [u64; CALLEE_SAVED_COUNT],
     /// Bit i is set if the value of x(19 + i) is known.
     callee_saved_known: u16,
+    val_expressions: [Option<ValExpressionValue>; MAX_VAL_EXPRESSIONS],
 }
+
+/// The value of a `DW_CFA_val_expression` rule in the CFI of an unwound frame; see
+/// [`UnwindRegsAarch64::val_expression_values`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ValExpressionValue {
+    /// The DWARF register number which the rule is for.
+    pub register: u16,
+    /// The constant which the expression pushes and drops before computing the value,
+    /// if it has one. For example, Android's ART runtime uses the tag "DEX1"
+    /// (0x31584544) for the dex pc of interpreter frames.
+    pub tag: Option<u32>,
+    /// The value which the expression computes.
+    pub value: u64,
+}
+
+/// The most val_expression values which are reported for one frame. Further rules
+/// are ignored.
+pub const MAX_VAL_EXPRESSIONS: usize = 2;
 
 /// The DWARF register number of the first tracked callee-saved register, x19.
 pub(crate) const FIRST_CALLEE_SAVED: u16 = 19;
@@ -108,6 +129,7 @@ impl UnwindRegsAarch64 {
             fp,
             callee_saved: [0; CALLEE_SAVED_COUNT],
             callee_saved_known: 0,
+            val_expressions: [None; MAX_VAL_EXPRESSIONS],
         }
     }
 
@@ -176,6 +198,35 @@ impl UnwindRegsAarch64 {
         self.callee_saved_known = 0;
     }
 
+    /// The values of the `DW_CFA_val_expression` rules in the CFI of the frame that
+    /// was stepped by the most recent unwind step.
+    ///
+    /// Only rules of the form `[DW_OP_const4u <tag>; DW_OP_drop;] DW_OP_breg<N>
+    /// <offset>` (or `DW_OP_bregx`) are evaluated, and at most
+    /// [`MAX_VAL_EXPRESSIONS`] per frame. A value is missing if register N is unknown.
+    /// The values are computed from the stepped frame's own registers, i.e. before
+    /// the step. Unless that frame is the innermost frame, register N must have been
+    /// restored through the CFI of the inner frames.
+    ///
+    /// Android's ART runtime uses such a rule with the tag "DEX1" (0x31584544) in its
+    /// interpreters (nterp's `ExecuteNterpImpl` and the switch interpreter's
+    /// `ExecuteSwitchImplAsm`). Its value is the dex pc: the address of the current
+    /// dex instruction in nterp, and of the method's first instruction in the switch
+    /// interpreter.
+    ///
+    /// This is reset at the start of every unwind step.
+    pub fn val_expression_values(&self) -> impl Iterator<Item = ValExpressionValue> + '_ {
+        self.val_expressions.iter().flatten().copied()
+    }
+
+    #[inline(always)]
+    pub(crate) fn set_val_expressions(
+        &mut self,
+        values: [Option<ValExpressionValue>; MAX_VAL_EXPRESSIONS],
+    ) {
+        self.val_expressions = values;
+    }
+
     /// Get the [`PtrAuthMask`] which we apply to the `lr` value.
     #[inline(always)]
     pub fn lr_mask(&self) -> PtrAuthMask {
@@ -235,6 +286,9 @@ impl Debug for UnwindRegsAarch64 {
                     &self.callee_saved(FIRST_CALLEE_SAVED + i as u16).map(HexNum),
                 );
             }
+        }
+        for value in self.val_expression_values() {
+            s.field("val_expression", &value);
         }
         s.finish()
     }

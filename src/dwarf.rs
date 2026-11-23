@@ -76,6 +76,8 @@ pub enum ConversionError {
     FramePointerRuleHasStrangeBpOffset,
     CalleeSavedRuleNotCacheable,
     CalleeSavedRuleDoesNotFit,
+    RuleTableFull,
+    TooManyValExpressions,
     CfaExpressionRuleDoesNotRestoreLrAndFp,
     CfaExpressionOffsetDoesNotFit,
 }

@@ -183,6 +183,36 @@ impl<U: Unwinder, F: FnMut(u64) -> Result<u64, ()>> UnwindIterator<'_, '_, '_, U
     }
 }
 
+impl<U, F> UnwindIterator<'_, '_, '_, U, F>
+where
+    U: Unwinder<UnwindRegs = crate::aarch64::UnwindRegsAarch64>,
+    F: FnMut(u64) -> Result<u64, ()>,
+{
+    /// The val_expression values of the frame that was stepped by the most recent call
+    /// to `next()`, for example the dex pc of an Android ART interpreter frame.
+    ///
+    /// When `next()` returns frame `n + 1` (a return address), the unwinder has just
+    /// stepped out of frame `n`, and this method returns the values of frame `n`.
+    /// It returns nothing after the first call to `next()` (which returns the
+    /// instruction pointer without stepping). If `next()` returned `Ok(None)`, these
+    /// are the values of the last frame, i.e. the one whose step ended the iteration.
+    ///
+    /// See [`UnwindRegsAarch64::val_expression_values`](crate::aarch64::UnwindRegsAarch64::val_expression_values).
+    pub fn last_val_expression_values(
+        &self,
+    ) -> impl Iterator<Item = crate::aarch64::ValExpressionValue> + '_ {
+        let stepped = !matches!(
+            self.state,
+            UnwindIteratorState::Initial(_)
+                | UnwindIteratorState::Unwinding(FrameAddress::InstructionPointer(_))
+        );
+        stepped
+            .then_some(&self.regs)
+            .into_iter()
+            .flat_map(|regs| regs.val_expression_values())
+    }
+}
+
 impl<U: Unwinder, F: FnMut(u64) -> Result<u64, ()>> FallibleIterator
     for UnwindIterator<'_, '_, '_, U, F>
 {

@@ -7,10 +7,11 @@ use gimli::{
 
 use super::{
     arch::ArchAarch64,
+    rule_table::{RuleTableAarch64, ValExpressionRuleAarch64},
     unwind_rule::{
         CalleeSavedRuleAarch64, CalleeSavedRulesAarch64, FrameRuleAarch64, UnwindRuleAarch64,
     },
-    unwindregs::{UnwindRegsAarch64, CALLEE_SAVED_COUNT, FIRST_CALLEE_SAVED},
+    unwindregs::{UnwindRegsAarch64, CALLEE_SAVED_COUNT, FIRST_CALLEE_SAVED, MAX_VAL_EXPRESSIONS},
 };
 
 use crate::error::Error;
@@ -72,7 +73,7 @@ impl DwarfUnwinding for ArchAarch64 {
         section: &impl UnwindSection<R>,
         unwind_info: &UnwindTableRow<R::Offset, UCS>,
         encoding: Encoding,
-        _rule_table: &mut (),
+        rule_table: &mut RuleTableAarch64,
         regs: &mut Self::UnwindRegs,
         is_first_frame: bool,
         read_stack: &mut F,
@@ -83,7 +84,7 @@ impl DwarfUnwinding for ArchAarch64 {
         UCS: UnwindContextStorage<R::Offset>,
         ES: EvaluationStorage<R>,
     {
-        match translate_into_unwind_rule(section, unwind_info) {
+        match translate_into_unwind_rule(section, unwind_info, rule_table) {
             Ok(unwind_rule) => return Ok(UnwindResult::ExecRule(unwind_rule)),
             Err(_err) => {
                 // Could not translate into a cacheable unwind rule. Fall back to the generic path.
@@ -189,15 +190,68 @@ where
             ),
         };
     }
+    let mut val_expressions = [None; MAX_VAL_EXPRESSIONS];
+    let rules = unwind_info
+        .registers()
+        .filter_map(|(register, rule)| match rule {
+            RegisterRule::ValExpression(expr) => parse_val_expression(section, register.0, expr),
+            _ => None,
+        });
+    for (value, rule) in val_expressions.iter_mut().zip(rules) {
+        *value = rule.evaluate(regs);
+    }
     for (i, value) in callee_saved.into_iter().enumerate() {
         regs.set_callee_saved(FIRST_CALLEE_SAVED + i as u16, value);
     }
+    regs.set_val_expressions(val_expressions);
 
     regs.set_fp(fp);
     regs.set_sp(cfa);
     regs.set_lr(lr);
 
     Ok(lr)
+}
+
+/// Recognize the val_expression `[DW_OP_const4u <tag>; DW_OP_drop;] DW_OP_breg<N>
+/// <offset>` (or `DW_OP_bregx <N> <offset>`) for the DWARF register `register`.
+fn parse_val_expression<R: Reader>(
+    section: &impl UnwindSection<R>,
+    register: u16,
+    expr: &UnwindExpression<R::Offset>,
+) -> Option<ValExpressionRuleAarch64> {
+    const DW_OP_CONST4U: u8 = 0x0c;
+    const DW_OP_DROP: u8 = 0x13;
+    const DW_OP_BREG0: u8 = 0x70;
+    const DW_OP_BREG31: u8 = 0x8f;
+    const DW_OP_BREGX: u8 = 0x92;
+
+    let mut r = expr.get(section).ok()?.0;
+    let mut op = r.read_u8().ok()?;
+    let tag = if op == DW_OP_CONST4U {
+        let tag = r.read_u32().ok()?;
+        if r.read_u8().ok()? != DW_OP_DROP {
+            return None;
+        }
+        op = r.read_u8().ok()?;
+        Some(tag)
+    } else {
+        None
+    };
+    let source = match op {
+        DW_OP_BREG0..=DW_OP_BREG31 => u16::from(op - DW_OP_BREG0),
+        DW_OP_BREGX => u16::try_from(r.read_uleb128().ok()?).ok()?,
+        _ => return None,
+    };
+    let offset = r.read_sleb128().ok()?;
+    if !r.is_empty() {
+        return None;
+    }
+    Some(ValExpressionRuleAarch64 {
+        register,
+        tag,
+        source,
+        offset,
+    })
 }
 
 /// Recognize the CFA expression `DW_OP_breg<N>/DW_OP_bregx <reg> <offset>; DW_OP_deref;
@@ -250,16 +304,32 @@ fn register_rule_to_cfa_offset<RO: ReaderOffset>(
 fn translate_into_unwind_rule<R, UCS>(
     section: &impl UnwindSection<R>,
     unwind_info: &UnwindTableRow<R::Offset, UCS>,
+    rule_table: &mut RuleTableAarch64,
 ) -> Result<UnwindRuleAarch64, ConversionError>
 where
     R: Reader,
     UCS: UnwindContextStorage<R::Offset>,
 {
     let mut callee_saved = CalleeSavedRulesAarch64::ALL_UNCHANGED;
+    let mut val_expressions = [None; MAX_VAL_EXPRESSIONS];
     for (register, rule) in unwind_info.registers() {
         let reg = register.0;
         let is_callee_saved =
             (FIRST_CALLEE_SAVED..FIRST_CALLEE_SAVED + CALLEE_SAVED_COUNT as u16).contains(&reg);
+        if let RegisterRule::ValExpression(expr) = rule {
+            if let Some(val_expression) = parse_val_expression(section, reg, expr) {
+                let slot = val_expressions
+                    .iter_mut()
+                    .find(|slot| slot.is_none())
+                    .ok_or(ConversionError::TooManyValExpressions)?;
+                *slot = Some(val_expression);
+                if is_callee_saved {
+                    // Cannot fail: reg is in range.
+                    let _ = callee_saved.set(reg, CalleeSavedRuleAarch64::Unknown);
+                }
+                continue;
+            }
+        }
         if !is_callee_saved {
             continue;
         }
@@ -284,7 +354,10 @@ where
         fp_rule.as_ref(),
         lr_rule.as_ref(),
     )?;
-    Ok(UnwindRuleAarch64::new(frame, callee_saved))
+    let val_expressions = rule_table
+        .intern(&val_expressions)
+        .ok_or(ConversionError::RuleTableFull)?;
+    Ok(UnwindRuleAarch64::new(frame, callee_saved, val_expressions))
 }
 
 fn translate_into_frame_rule<R: Reader>(

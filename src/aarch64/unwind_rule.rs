@@ -1,6 +1,9 @@
 use core::fmt::Debug;
 
-use super::unwindregs::{UnwindRegsAarch64, CALLEE_SAVED_COUNT, FIRST_CALLEE_SAVED};
+use super::rule_table::RuleTableAarch64;
+use super::unwindregs::{
+    UnwindRegsAarch64, CALLEE_SAVED_COUNT, FIRST_CALLEE_SAVED, MAX_VAL_EXPRESSIONS,
+};
 use crate::add_signed::checked_add_signed;
 use crate::error::Error;
 
@@ -398,28 +401,44 @@ impl Debug for CalleeSavedRulesAarch64 {
 
 /// The unwind rule which is stored in the unwind rule cache on Aarch64. It combines
 /// a [`FrameRuleAarch64`] (for sp, fp and lr) with recovery rules for the callee-saved
-/// registers x19 - x28.
+/// registers x19 - x28 and the index of the row's val_expression rules in the cache's
+/// [`RuleTableAarch64`].
 ///
 /// This is 16 bytes, 8-byte aligned, so that copying it out of the cache is cheap.
 #[derive(Clone, Copy, PartialEq, Eq)]
 #[repr(C)]
 pub struct UnwindRuleAarch64 {
     frame: FrameRuleAarch64,
-    callee_saved: CalleeSavedRulesAarch64,
+    /// Bits 0..60: `CalleeSavedRulesAarch64`. Bits 60..64: 0 if the row has no
+    /// val_expression rules, otherwise their index in the rule table.
+    extra: u64,
 }
 
 impl UnwindRuleAarch64 {
-    /// Create a rule.
-    pub fn new(frame: FrameRuleAarch64, callee_saved: CalleeSavedRulesAarch64) -> Self {
+    const VAL_EXPRESSIONS_SHIFT: u32 = 60;
+
+    /// Create a rule. `val_expressions` is the index which [`RuleTableAarch64`]
+    /// returned when interning the row's val_expression rules; it must be less than 16.
+    pub(crate) fn new(
+        frame: FrameRuleAarch64,
+        callee_saved: CalleeSavedRulesAarch64,
+        val_expressions: u8,
+    ) -> Self {
+        debug_assert!(val_expressions < 16);
         Self {
             frame,
-            callee_saved,
+            extra: callee_saved.0 | (u64::from(val_expressions) << Self::VAL_EXPRESSIONS_SHIFT),
         }
     }
 
     /// The rules for x19 - x28.
     pub(crate) fn callee_saved(&self) -> CalleeSavedRulesAarch64 {
-        self.callee_saved
+        CalleeSavedRulesAarch64(self.extra & CalleeSavedRulesAarch64::USED_BITS)
+    }
+
+    #[inline(always)]
+    fn val_expressions_index(&self) -> u8 {
+        (self.extra >> Self::VAL_EXPRESSIONS_SHIFT) as u8
     }
 }
 
@@ -428,6 +447,7 @@ impl Debug for UnwindRuleAarch64 {
         f.debug_struct("UnwindRuleAarch64")
             .field("frame", &self.frame)
             .field("callee_saved", &self.callee_saved())
+            .field("val_expressions", &self.val_expressions_index())
             .finish()
     }
 }
@@ -443,14 +463,14 @@ impl From<FrameRuleAarch64> for UnwindRuleAarch64 {
         };
         Self {
             frame,
-            callee_saved,
+            extra: callee_saved.0,
         }
     }
 }
 
 impl UnwindRule for UnwindRuleAarch64 {
     type UnwindRegs = UnwindRegsAarch64;
-    type RuleTable = ();
+    type RuleTable = RuleTableAarch64;
 
     fn rule_for_stub_functions() -> Self {
         FrameRuleAarch64::NoOp.into()
@@ -465,7 +485,7 @@ impl UnwindRule for UnwindRuleAarch64 {
     #[inline]
     fn exec<F>(
         self,
-        _table: &(),
+        table: &RuleTableAarch64,
         is_first_frame: bool,
         regs: &mut UnwindRegsAarch64,
         read_stack: &mut F,
@@ -473,6 +493,13 @@ impl UnwindRule for UnwindRuleAarch64 {
     where
         F: FnMut(u64) -> Result<u64, ()>,
     {
+        let values = match self.val_expressions_index() {
+            0 => [None; MAX_VAL_EXPRESSIONS],
+            i => table
+                .get(i)
+                .map(|rule| rule.and_then(|rule| rule.evaluate(regs))),
+        };
+        regs.set_val_expressions(values);
         let result = self.frame.exec(is_first_frame, regs, read_stack);
         if let Ok(Some(_)) = result {
             self.callee_saved().apply(regs, read_stack);
@@ -509,8 +536,9 @@ mod test {
         assert_eq!(rules.get(28), Some(Unknown));
         assert_eq!(rules.get(18), None);
 
-        let rule = UnwindRuleAarch64::new(FrameRuleAarch64::UseFramePointer, rules);
+        let rule = UnwindRuleAarch64::new(FrameRuleAarch64::UseFramePointer, rules, 15);
         assert_eq!(rule.callee_saved(), rules);
+        assert_eq!(rule.val_expressions_index(), 15);
     }
 
     #[test]
@@ -519,9 +547,10 @@ mod test {
         regs.set_callee_saved_from_sample([0x300; CALLEE_SAVED_COUNT]);
         let mut read_stack = |_| Err(());
         let rule = UnwindRuleAarch64::from(FrameRuleAarch64::NoOpIfFirstFrameOtherwiseFp);
+        let table = RuleTableAarch64::default();
 
         assert_eq!(
-            rule.exec(&(), true, &mut regs, &mut read_stack),
+            rule.exec(&table, true, &mut regs, &mut read_stack),
             Ok(Some(0x1000))
         );
         for reg in FIRST_CALLEE_SAVED..FIRST_CALLEE_SAVED + CALLEE_SAVED_COUNT as u16 {
