@@ -12,6 +12,7 @@ pub enum Error {
     DidNotAdvance,
     IntegerOverflow,
     ReturnAddressIsNull,
+    StackPointerMovedBackwards,
 }
 
 impl core::fmt::Display for Error {
@@ -27,6 +28,7 @@ impl core::fmt::Display for Error {
             ),
             Self::IntegerOverflow => write!(f, "Unwinding caused integer overflow"),
             Self::ReturnAddressIsNull => write!(f, "Return address is null"),
+            Self::StackPointerMovedBackwards => write!(f, "Stack pointer moved backwards"),
         }
     }
 }

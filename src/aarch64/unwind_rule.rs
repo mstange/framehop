@@ -91,7 +91,7 @@ impl UnwindRule for UnwindRuleAarch64 {
                         read_stack(fp + 8).map_err(|_| Error::CouldNotReadStack(fp + 8))?;
                     let new_fp = read_stack(fp).map_err(|_| Error::CouldNotReadStack(fp))?;
                     if new_sp <= sp {
-                        return Err(Error::FramepointerUnwindingMovedBackwards);
+                        return Err(Error::StackPointerMovedBackwards);
                     }
                     (new_lr, new_sp, new_fp)
                 }
@@ -189,7 +189,7 @@ impl UnwindRule for UnwindRuleAarch64 {
                 }
                 let new_sp = fp.checked_add(16).ok_or(Error::IntegerOverflow)?;
                 if new_sp <= sp {
-                    return Err(Error::FramepointerUnwindingMovedBackwards);
+                    return Err(Error::StackPointerMovedBackwards);
                 }
                 let new_lr = read_stack(fp + 8).map_err(|_| Error::CouldNotReadStack(fp + 8))?;
                 let new_fp = read_stack(fp).map_err(|_| Error::CouldNotReadStack(fp))?;
@@ -220,7 +220,7 @@ impl UnwindRule for UnwindRuleAarch64 {
                     read_stack(fp_location).map_err(|_| Error::CouldNotReadStack(fp_location))?;
                 // As in UseFramePointer, the caller's fp may not be a frame pointer.
                 if new_sp <= sp {
-                    return Err(Error::FramepointerUnwindingMovedBackwards);
+                    return Err(Error::StackPointerMovedBackwards);
                 }
                 (new_lr, new_sp, new_fp)
             }
