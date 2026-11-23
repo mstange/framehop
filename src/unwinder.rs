@@ -23,7 +23,7 @@ use crate::FrameAddress;
 
 use core::marker::PhantomData;
 use core::ops::{Deref, Range};
-use core::sync::atomic::{AtomicU16, Ordering};
+use core::sync::atomic::Ordering;
 
 /// Unwinder is the trait that each CPU architecture's concrete unwinder type implements.
 /// This trait's methods are what let you do the actual unwinding.
@@ -188,14 +188,35 @@ impl<U: Unwinder, F: FnMut(u64) -> Result<u64, ()>> FallibleIterator
 
 /// This global generation counter makes it so that the cache can be shared
 /// between multiple unwinders.
-/// This is a u16, so if you make it wrap around by adding / removing modules
-/// more than 65535 times, then you risk collisions in the cache; meaning:
-/// unwinding might not work properly if an old unwind rule was found in the
-/// cache for the same address and the same (pre-wraparound) modules_generation.
-static GLOBAL_MODULES_GENERATION: AtomicU16 = AtomicU16::new(0);
+/// A generation is never reused, because a cache can outlive any number of module
+/// changes, and a reused generation could make it apply a rule from an old module.
+/// When the counter runs out, changing modules panics instead. Targets without
+/// 64-bit atomics use a 32-bit counter.
+#[cfg(target_has_atomic = "64")]
+type GenerationCounter = core::sync::atomic::AtomicU64;
+#[cfg(not(target_has_atomic = "64"))]
+type GenerationCounter = core::sync::atomic::AtomicU32;
 
-fn next_global_modules_generation() -> u16 {
-    GLOBAL_MODULES_GENERATION.fetch_add(1, Ordering::Relaxed)
+static GLOBAL_MODULES_GENERATION: GenerationCounter = GenerationCounter::new(0);
+
+fn next_global_modules_generation() -> u64 {
+    next_modules_generation(&GLOBAL_MODULES_GENERATION)
+}
+
+// The conversion widens a u32 on targets without 64-bit atomics.
+#[allow(clippy::useless_conversion)]
+fn next_modules_generation(counter: &GenerationCounter) -> u64 {
+    let mut generation = counter.load(Ordering::Relaxed);
+    loop {
+        let next = generation
+            .checked_add(1)
+            .expect("module generation exhausted");
+        match counter.compare_exchange_weak(generation, next, Ordering::Relaxed, Ordering::Relaxed)
+        {
+            Ok(_) => return generation.into(),
+            Err(current) => generation = current,
+        }
+    }
 }
 
 cfg_if::cfg_if! {
@@ -222,7 +243,7 @@ pub struct UnwinderInternal<D, A, P> {
     /// sorted by avma_range.start
     modules: Vec<Module<D>>,
     /// Incremented every time modules is changed.
-    modules_generation: u16,
+    modules_generation: u64,
     _arch: PhantomData<A>,
     _allocation_policy: PhantomData<P>,
 }
@@ -953,5 +974,27 @@ impl<D: Deref<Target = [u8]>> Module<D> {
 
     pub fn name(&self) -> &str {
         &self.name
+    }
+}
+
+#[cfg(test)]
+mod generation_tests {
+    use super::*;
+
+    #[test]
+    fn generations_do_not_wrap_at_sixteen_bits() {
+        let counter = GenerationCounter::new(u16::MAX.into());
+        assert_eq!(next_modules_generation(&counter), 65535);
+        assert_eq!(next_modules_generation(&counter), 65536);
+    }
+
+    #[cfg(target_has_atomic = "64")]
+    #[test]
+    fn exhausted_generation_is_never_reused() {
+        let counter = GenerationCounter::new(u64::MAX - 1);
+        assert_eq!(next_modules_generation(&counter), u64::MAX - 1);
+        assert!(std::panic::catch_unwind(|| next_modules_generation(&counter)).is_err());
+        assert_eq!(counter.load(Ordering::Relaxed), u64::MAX);
+        assert!(std::panic::catch_unwind(|| next_modules_generation(&counter)).is_err());
     }
 }
