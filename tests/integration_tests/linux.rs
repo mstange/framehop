@@ -2,6 +2,7 @@ use std::path::Path;
 
 use framehop::aarch64::*;
 use framehop::x86_64::*;
+use framehop::Error;
 use framehop::FrameAddress;
 use framehop::Unwinder;
 
@@ -184,6 +185,194 @@ fn test_signal_trampoline_cfa_expr_with_memory_deref() {
     assert_eq!(res, Ok(Some(0x123456)));
     assert_eq!(regs.sp(), 0x188);
     assert_eq!(regs.bp(), 0x4567);
+}
+
+#[test]
+fn test_signal_trampoline_reports_interrupted_frame() {
+    let mut cache = CacheX86_64::<_>::new();
+    let mut unwinder = UnwinderX86_64::new();
+    common::add_object(
+        &mut unwinder,
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/linux/x86_64/nofp/libc.so.6"),
+        0x0,
+    );
+
+    // The signal handler returns to __restore_rt at 0x46520; see the test above for its
+    // FDE, which the CIE marks as a signal frame. The handler ran on an alternate stack
+    // at 0x100, and the interrupted code has a lower stack pointer, 0x40.
+    let mut stack = vec![0u64; 0x200 / 8];
+    stack[0x178 / 8] = 0x4567; // [RSP+120]: RBP
+    stack[0x1a0 / 8] = 0x40; // [RSP+160]: RSP
+    stack[0x1a8 / 8] = 0x123456; // [RSP+168]: RIP
+    let mut read_stack = |addr| stack.get((addr / 8) as usize).cloned().ok_or(());
+
+    // unwind_frame does not step to a lower stack pointer. It follows the frame pointer
+    // instead, which is not readable here.
+    let mut regs = UnwindRegsX86_64::new(0x46520, 0x100, 0x9999);
+    let res = unwinder.unwind_frame(
+        FrameAddress::from_return_address(0x46520).unwrap(),
+        &mut regs,
+        &mut cache,
+        &mut read_stack,
+    );
+    assert_eq!(res, Err(Error::CouldNotReadStack(0x9999)));
+
+    // That failure is not cached for the address.
+    let mut regs = UnwindRegsX86_64::new(0x46520, 0x100, 0x9999);
+    let res = unwinder.unwind_frame_signal_aware(
+        FrameAddress::from_return_address(0x46520).unwrap(),
+        &mut regs,
+        &mut cache,
+        &mut read_stack,
+    );
+    assert_eq!(res, Ok(Some(FrameAddress::InstructionPointer(0x123456))));
+    assert_eq!(regs.sp(), 0x40);
+    assert_eq!(regs.bp(), 0x4567);
+
+    // If the interrupted code is on the same stack, unwind_frame returns the same address.
+    stack[0x1a0 / 8] = 0x1c0;
+    let mut read_stack = |addr| stack.get((addr / 8) as usize).cloned().ok_or(());
+    let mut regs = UnwindRegsX86_64::new(0x46520, 0x100, 0x9999);
+    let res = unwinder.unwind_frame(
+        FrameAddress::from_return_address(0x46520).unwrap(),
+        &mut regs,
+        &mut cache,
+        &mut read_stack,
+    );
+    assert_eq!(res, Ok(Some(0x123456)));
+    assert_eq!(regs.sp(), 0x1c0);
+    assert_eq!(regs.bp(), 0x4567);
+
+    // A frame that is not a signal frame yields a return address. This address is outside
+    // the module, so the frame pointer is followed.
+    stack[0x80 / 8] = 0x1234;
+    stack[0x88 / 8] = 0xabcdef;
+    let mut read_stack = |addr| stack.get((addr / 8) as usize).cloned().ok_or(());
+    let mut regs = UnwindRegsX86_64::new(0x7000_0000, 0x40, 0x80);
+    let res = unwinder.unwind_frame_signal_aware(
+        FrameAddress::from_return_address(0x7000_0000).unwrap(),
+        &mut regs,
+        &mut cache,
+        &mut read_stack,
+    );
+    assert_eq!(res, Ok(FrameAddress::from_return_address(0xabcdef)));
+    assert_eq!(regs.sp(), 0x90);
+    assert_eq!(regs.bp(), 0x1234);
+}
+
+#[test]
+fn test_iterator_unwinds_interrupted_frame_from_its_instruction_pointer() {
+    let mut cache = CacheX86_64::<_>::new();
+    let mut unwinder = UnwinderX86_64::new();
+    common::add_object(
+        &mut unwinder,
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/linux/x86_64/nofp/libc.so.6"),
+        0x0,
+    );
+
+    // The signal interrupted the function after __restore_rt at 0x4653b, where its DWARF
+    // CFI changes:
+    //
+    // 0x46530: CFA=RSP+8    RIP=[CFA-8]
+    // 0x4653b: CFA=RSP+336  RIP=[CFA-8]
+    //
+    // 0x4653b has not run yet, so the second row applies. For a return address the first
+    // row would, because the call before it is what would be looked up.
+    let mut stack = vec![0u64; 0x400 / 8];
+    stack[0x1a0 / 8] = 0x200; // [RSP+160]: RSP
+    stack[0x1a8 / 8] = 0x4653b; // [RSP+168]: RIP
+    stack[0x200 / 8] = 0xbad; // [RSP]
+    stack[0x348 / 8] = 0x7000_0000; // [RSP+328]
+    let mut read_stack = |addr| stack.get((addr / 8) as usize).cloned().ok_or(());
+
+    let regs = UnwindRegsX86_64::new(0x46527, 0x100, 0x9999);
+    let mut iter = unwinder.iter_frames(0x46527, regs, &mut cache, &mut read_stack);
+    assert_eq!(
+        iter.next(),
+        Ok(Some(FrameAddress::from_instruction_pointer(0x46527)))
+    );
+    assert_eq!(
+        iter.next(),
+        Ok(Some(FrameAddress::from_instruction_pointer(0x4653b)))
+    );
+    assert_eq!(
+        iter.next(),
+        Ok(FrameAddress::from_return_address(0x7000_0000))
+    );
+}
+
+#[test]
+fn test_iterator_ends_a_cycle_of_signal_frames() {
+    let mut cache = CacheX86_64::<_>::new();
+    let mut unwinder = UnwinderX86_64::new();
+    common::add_object(
+        &mut unwinder,
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/linux/x86_64/nofp/libc.so.6"),
+        0x0,
+    );
+
+    // This stack says that __restore_rt, with the stack pointer at 0x200, was interrupted
+    // at 0x4653b with the stack pointer at 0xb0, and that 0x4653b, whose CFA is RSP+336,
+    // returns to __restore_rt.
+    let mut stack = vec![0u64; 0x400 / 8];
+    stack[0x2a0 / 8] = 0xb0; // [RSP+160]: RSP
+    stack[0x2a8 / 8] = 0x4653b; // [RSP+168]: RIP
+    stack[0x1f8 / 8] = 0x46520; // [0xb0+328]
+    let mut read_stack = |addr| stack.get((addr / 8) as usize).cloned().ok_or(());
+
+    let regs = UnwindRegsX86_64::new(0x46527, 0x200, 0x9999);
+    let mut iter = unwinder.iter_frames(0x46527, regs, &mut cache, &mut read_stack);
+    let mut frames = 0;
+    let res = loop {
+        match iter.next() {
+            Ok(Some(_)) => frames += 1,
+            res => break res,
+        }
+    };
+    assert_eq!(res, Err(Error::DidNotAdvance));
+    assert_eq!(frames, 1 + 2 * 64);
+}
+
+#[test]
+fn test_signal_trampoline_restores_general_purpose_registers() {
+    let mut cache = CacheX86_64::<_>::new();
+    let mut unwinder = UnwinderX86_64::new();
+    common::add_object(
+        &mut unwinder,
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/linux/x86_64/nofp/libc.so.6"),
+        0x0,
+    );
+    common::add_object(
+        &mut unwinder,
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/linux/x86_64/nofp/rustup"),
+        0x1000_0000,
+    );
+
+    // The signal interrupted GFp_bn_mul_mont at 0x5f2616, where the CFA is
+    // [RSP + 8 + R9 * 8] + 8; see test_cfa_expr_with_general_purpose_register.
+    // __restore_rt has the DWARF CFI R9=DW_OP_breg7(RSP) +48.
+    let mut stack = vec![0u64; 0x400 / 8];
+    stack[0x130 / 8] = 4; // [RSP+48]: R9
+    stack[0x1a0 / 8] = 0x200; // [RSP+160]: RSP
+    stack[0x1a8 / 8] = 0x105f_2616; // [RSP+168]: RIP
+    stack[0x228 / 8] = 0x300; // [RSP + 8 + R9 * 8]
+    stack[0x300 / 8] = 0x7000_0000; // [CFA-8]
+    let mut read_stack = |addr| stack.get((addr / 8) as usize).cloned().ok_or(());
+
+    let regs = UnwindRegsX86_64::new(0x46527, 0x100, 0x9999);
+    let mut iter = unwinder.iter_frames(0x46527, regs, &mut cache, &mut read_stack);
+    assert_eq!(
+        iter.next(),
+        Ok(Some(FrameAddress::from_instruction_pointer(0x46527)))
+    );
+    assert_eq!(
+        iter.next(),
+        Ok(Some(FrameAddress::from_instruction_pointer(0x105f_2616)))
+    );
+    assert_eq!(
+        iter.next(),
+        Ok(FrameAddress::from_return_address(0x7000_0000))
+    );
 }
 
 #[test]

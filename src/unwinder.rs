@@ -62,6 +62,12 @@ pub trait Unwinder: Clone {
 
     /// Unwind a single frame, to recover return address and caller register values.
     /// This is the main entry point for unwinding.
+    ///
+    /// If the frame is a signal frame, the returned address is where its caller was
+    /// interrupted. A signal frame whose caller has a lower stack pointer, as when the
+    /// handler ran on its own stack, is only stepped through if it is the first frame.
+    /// [`unwind_frame_signal_aware`](Self::unwind_frame_signal_aware) steps through it
+    /// anywhere.
     fn unwind_frame<F>(
         &self,
         address: FrameAddress,
@@ -71,6 +77,39 @@ pub trait Unwinder: Clone {
     ) -> Result<Option<u64>, Error>
     where
         F: FnMut(u64) -> Result<u64, ()>;
+
+    /// Like [`unwind_frame`](Self::unwind_frame), but returns the address to unwind the
+    /// caller with, and steps through a signal frame wherever its caller's stack is.
+    ///
+    /// After a signal frame that address is a [`FrameAddress::InstructionPointer`], because
+    /// the caller was interrupted there and did not call anything. Its stack pointer can be
+    /// lower than the signal frame's, because a signal handler can run on its own stack.
+    ///
+    /// Pass the returned address to the next call unchanged. The stack pointer does not
+    /// bound a walk that crosses signal frames, so a loop needs a limit on their number.
+    ///
+    /// Signal frames are recognized on x86-64, from DWARF CFI that marks them. If that CFI
+    /// cannot be evaluated, the frame is unwound with the fallback rule, like any other.
+    /// Elsewhere, and in this default implementation, the step is that of `unwind_frame`
+    /// and every address is a return address. An implementation that wraps another
+    /// unwinder should forward this method to it.
+    fn unwind_frame_signal_aware<F>(
+        &self,
+        address: FrameAddress,
+        regs: &mut Self::UnwindRegs,
+        cache: &mut Self::Cache,
+        read_stack: &mut F,
+    ) -> Result<Option<FrameAddress>, Error>
+    where
+        F: FnMut(u64) -> Result<u64, ()>,
+    {
+        match self.unwind_frame(address, regs, cache, read_stack)? {
+            Some(address) => FrameAddress::from_return_address(address)
+                .ok_or(Error::ReturnAddressIsNull)
+                .map(Some),
+            None => Ok(None),
+        }
+    }
 
     /// Return an iterator that unwinds frame by frame until the end of the stack is found.
     fn iter_frames<'u, 'c, 'r, F>(
@@ -90,7 +129,8 @@ pub trait Unwinder: Clone {
 /// An iterator for unwinding the entire stack, starting from the initial register values.
 ///
 /// The first yielded frame is the instruction pointer. Subsequent addresses are return
-/// addresses.
+/// addresses, except for the caller of a signal frame, which is the instruction pointer
+/// that the signal interrupted.
 ///
 /// This iterator attempts to detect if stack unwinding completed successfully, or if the
 /// stack was truncated prematurely. If it thinks that it successfully found the root
@@ -111,7 +151,12 @@ pub struct UnwindIterator<'u, 'c, 'r, U: Unwinder, F: FnMut(u64) -> Result<u64, 
     regs: U::UnwindRegs,
     cache: &'c mut U::Cache,
     read_stack: &'r mut F,
+    interrupted_frames: usize,
 }
+
+/// The most interrupted frames that an [`UnwindIterator`] yields. The stack pointer may move
+/// backwards across a signal frame, so this is what ends a walk that goes in circles.
+const MAX_INTERRUPTED_FRAMES: usize = 64;
 
 enum UnwindIteratorState {
     Initial(u64),
@@ -134,6 +179,7 @@ impl<'u, 'c, 'r, U: Unwinder, F: FnMut(u64) -> Result<u64, ()>> UnwindIterator<'
             regs,
             cache,
             read_stack,
+            interrupted_frames: 0,
         }
     }
 }
@@ -142,7 +188,9 @@ impl<U: Unwinder, F: FnMut(u64) -> Result<u64, ()>> UnwindIterator<'_, '_, '_, U
     /// Yield the next frame in the stack.
     ///
     /// The first frame is `Ok(Some(FrameAddress::InstructionPointer(...)))`.
-    /// Subsequent frames are `Ok(Some(FrameAddress::ReturnAddress(...)))`.
+    /// Subsequent frames are `Ok(Some(FrameAddress::ReturnAddress(...)))`, except for a
+    /// frame that a signal interrupted, which is again an instruction pointer.
+    /// The 65th interrupted frame is an error.
     ///
     /// If a root function has been reached, this iterator completes with `Ok(None)`.
     /// Otherwise it completes with `Err(...)`, usually indicating that a certain stack
@@ -154,18 +202,25 @@ impl<U: Unwinder, F: FnMut(u64) -> Result<u64, ()>> UnwindIterator<'_, '_, '_, U
                 self.state = UnwindIteratorState::Unwinding(FrameAddress::InstructionPointer(pc));
                 return Ok(Some(FrameAddress::InstructionPointer(pc)));
             }
-            UnwindIteratorState::Unwinding(address) => {
-                self.unwinder
-                    .unwind_frame(address, &mut self.regs, self.cache, self.read_stack)?
-            }
+            UnwindIteratorState::Unwinding(address) => self.unwinder.unwind_frame_signal_aware(
+                address,
+                &mut self.regs,
+                self.cache,
+                self.read_stack,
+            )?,
             UnwindIteratorState::Done => return Ok(None),
         };
         match next {
-            Some(return_address) => {
-                let return_address = FrameAddress::from_return_address(return_address)
-                    .ok_or(Error::ReturnAddressIsNull)?;
-                self.state = UnwindIteratorState::Unwinding(return_address);
-                Ok(Some(return_address))
+            Some(address) => {
+                if !address.is_return_address() {
+                    if self.interrupted_frames == MAX_INTERRUPTED_FRAMES {
+                        self.state = UnwindIteratorState::Done;
+                        return Err(Error::DidNotAdvance);
+                    }
+                    self.interrupted_frames += 1;
+                }
+                self.state = UnwindIteratorState::Unwinding(address);
+                Ok(Some(address))
             }
             None => {
                 self.state = UnwindIteratorState::Done;
@@ -340,6 +395,7 @@ impl<D: Deref<Target = [u8]>, A: Unwinding, P: AllocationPolicy> UnwinderInterna
         cache: &mut Cache<A::UnwindRule, P>,
         read_stack: &mut F,
         callback: G,
+        interrupted: Option<&mut bool>,
     ) -> Result<Option<u64>, Error>
     where
         F: FnMut(u64) -> Result<u64, ()>,
@@ -350,6 +406,7 @@ impl<D: Deref<Target = [u8]>, A: Unwinding, P: AllocationPolicy> UnwinderInterna
             &mut A::UnwindRegs,
             &mut Cache<A::UnwindRule, P>,
             &mut F,
+            bool,
         ) -> Result<UnwindResult<A::UnwindRule>, UnwinderError>,
     {
         let lookup_address = address.address_for_lookup();
@@ -375,10 +432,20 @@ impl<D: Deref<Target = [u8]>, A: Unwinding, P: AllocationPolicy> UnwinderInterna
                     regs,
                     cache,
                     read_stack,
+                    interrupted.is_some(),
                 ) {
                     Ok(UnwindResult::ExecRule(rule)) => rule,
+                    Ok(UnwindResult::ExecRuleUncached(rule)) => {
+                        return rule.exec(is_first_frame, regs, read_stack)
+                    }
                     Ok(UnwindResult::Uncacheable(return_address)) => {
                         return Ok(Some(return_address))
+                    }
+                    Ok(UnwindResult::Interrupted(address)) => {
+                        if let Some(interrupted) = interrupted {
+                            *interrupted = true;
+                        }
+                        return Ok(Some(address));
                     }
                     Err(_err) => {
                         // eprintln!("Unwinder error: {}", err);
@@ -401,7 +468,42 @@ impl<D: Deref<Target = [u8]>, A: Unwinding, P: AllocationPolicy> UnwinderInterna
     where
         F: FnMut(u64) -> Result<u64, ()>,
     {
-        self.with_cache(address, regs, cache, read_stack, Self::unwind_frame_impl)
+        self.with_cache(
+            address,
+            regs,
+            cache,
+            read_stack,
+            Self::unwind_frame_impl,
+            None,
+        )
+    }
+
+    pub fn unwind_frame_signal_aware<F>(
+        &self,
+        address: FrameAddress,
+        regs: &mut A::UnwindRegs,
+        cache: &mut Cache<A::UnwindRule, P>,
+        read_stack: &mut F,
+    ) -> Result<Option<FrameAddress>, Error>
+    where
+        F: FnMut(u64) -> Result<u64, ()>,
+    {
+        let mut interrupted = false;
+        let address = self.with_cache(
+            address,
+            regs,
+            cache,
+            read_stack,
+            Self::unwind_frame_impl,
+            Some(&mut interrupted),
+        )?;
+        match address {
+            Some(address) if interrupted => Ok(Some(FrameAddress::InstructionPointer(address))),
+            Some(address) => FrameAddress::from_return_address(address)
+                .ok_or(Error::ReturnAddressIsNull)
+                .map(Some),
+            None => Ok(None),
+        }
     }
 
     fn unwind_frame_impl<F>(
@@ -411,6 +513,7 @@ impl<D: Deref<Target = [u8]>, A: Unwinding, P: AllocationPolicy> UnwinderInterna
         regs: &mut A::UnwindRegs,
         cache: &mut Cache<A::UnwindRule, P>,
         read_stack: &mut F,
+        signal_aware: bool,
     ) -> Result<UnwindResult<A::UnwindRule>, UnwinderError>
     where
         F: FnMut(u64) -> Result<u64, ()>,
@@ -472,6 +575,7 @@ impl<D: Deref<Target = [u8]>, A: Unwinding, P: AllocationPolicy> UnwinderInterna
                         dwarf_unwinder.unwind_frame_with_fde::<_, P::GimliEvaluationStorage<_>>(
                             regs,
                             is_first_frame,
+                            signal_aware,
                             rel_lookup_address,
                             fde_offset,
                             read_stack,
@@ -499,6 +603,7 @@ impl<D: Deref<Target = [u8]>, A: Unwinding, P: AllocationPolicy> UnwinderInterna
                 dwarf_unwinder.unwind_frame_with_fde::<_, P::GimliEvaluationStorage<_>>(
                     regs,
                     is_first_frame,
+                    signal_aware,
                     rel_lookup_address,
                     fde_offset,
                     read_stack,
@@ -523,6 +628,7 @@ impl<D: Deref<Target = [u8]>, A: Unwinding, P: AllocationPolicy> UnwinderInterna
                 dwarf_unwinder.unwind_frame_with_fde::<_, P::GimliEvaluationStorage<_>>(
                     regs,
                     is_first_frame,
+                    signal_aware,
                     rel_lookup_address,
                     fde_offset,
                     read_stack,
@@ -547,6 +653,7 @@ impl<D: Deref<Target = [u8]>, A: Unwinding, P: AllocationPolicy> UnwinderInterna
                 dwarf_unwinder.unwind_frame_with_fde::<_, P::GimliEvaluationStorage<_>>(
                     regs,
                     is_first_frame,
+                    signal_aware,
                     rel_lookup_address,
                     fde_offset,
                     read_stack,

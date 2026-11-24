@@ -30,6 +30,8 @@ impl DwarfUnwinding for ArchAarch64 {
         encoding: Encoding,
         regs: &mut Self::UnwindRegs,
         is_first_frame: bool,
+        _is_signal_frame: bool,
+        _signal_aware: bool,
         read_stack: &mut F,
     ) -> Result<UnwindResult<Self::UnwindRule>, DwarfUnwinderError>
     where
