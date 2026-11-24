@@ -253,7 +253,7 @@ impl UnwindRule for UnwindRuleX86_64 {
             return Err(Error::DidNotAdvance);
         }
         regs.clear_unrestored_caller_registers();
-        for (reg, value) in restored_regs {
+        for &(reg, value) in &restored_regs {
             regs.set(reg, value);
         }
         regs.set_ip(return_address);
