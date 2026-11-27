@@ -5,7 +5,7 @@ use crate::error::Error;
 use crate::unwind_rule::UnwindRule;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum UnwindRuleAarch64 {
+pub enum FrameRuleAarch64 {
     /// (sp, fp, lr) = (sp, fp, lr)
     /// Only possible for the first frame. Subsequent frames must get the
     /// return address from somewhere other than the lr register to avoid
@@ -45,17 +45,17 @@ pub enum UnwindRuleAarch64 {
     },
 }
 
-impl UnwindRule for UnwindRuleAarch64 {
+impl UnwindRule for FrameRuleAarch64 {
     type UnwindRegs = UnwindRegsAarch64;
 
     fn rule_for_stub_functions() -> Self {
-        UnwindRuleAarch64::NoOp
+        FrameRuleAarch64::NoOp
     }
     fn rule_for_function_start() -> Self {
-        UnwindRuleAarch64::NoOp
+        FrameRuleAarch64::NoOp
     }
     fn fallback_rule() -> Self {
-        UnwindRuleAarch64::UseFramePointer
+        FrameRuleAarch64::UseFramePointer
     }
 
     fn exec<F>(
@@ -72,13 +72,13 @@ impl UnwindRule for UnwindRuleAarch64 {
         let fp = regs.fp();
 
         let (new_lr, new_sp, new_fp) = match self {
-            UnwindRuleAarch64::NoOp => {
+            FrameRuleAarch64::NoOp => {
                 if !is_first_frame {
                     return Err(Error::DidNotAdvance);
                 }
                 (lr, sp, fp)
             }
-            UnwindRuleAarch64::NoOpIfFirstFrameOtherwiseFp => {
+            FrameRuleAarch64::NoOpIfFirstFrameOtherwiseFp => {
                 if is_first_frame {
                     (lr, sp, fp)
                 } else {
@@ -96,7 +96,7 @@ impl UnwindRule for UnwindRuleAarch64 {
                     (new_lr, new_sp, new_fp)
                 }
             }
-            UnwindRuleAarch64::OffsetSpIfFirstFrameOtherwiseStackEndsHere { sp_offset_by_16 } => {
+            FrameRuleAarch64::OffsetSpIfFirstFrameOtherwiseStackEndsHere { sp_offset_by_16 } => {
                 if !is_first_frame {
                     return Ok(None);
                 }
@@ -104,7 +104,7 @@ impl UnwindRule for UnwindRuleAarch64 {
                 let new_sp = sp.checked_add(sp_offset).ok_or(Error::IntegerOverflow)?;
                 (lr, new_sp, fp)
             }
-            UnwindRuleAarch64::OffsetSp { sp_offset_by_16 } => {
+            FrameRuleAarch64::OffsetSp { sp_offset_by_16 } => {
                 if !is_first_frame {
                     return Err(Error::DidNotAdvance);
                 }
@@ -112,7 +112,7 @@ impl UnwindRule for UnwindRuleAarch64 {
                 let new_sp = sp.checked_add(sp_offset).ok_or(Error::IntegerOverflow)?;
                 (lr, new_sp, fp)
             }
-            UnwindRuleAarch64::OffsetSpAndRestoreLr {
+            FrameRuleAarch64::OffsetSpAndRestoreLr {
                 sp_offset_by_16,
                 lr_storage_offset_from_sp_by_8,
             } => {
@@ -125,7 +125,7 @@ impl UnwindRule for UnwindRuleAarch64 {
                     read_stack(lr_location).map_err(|_| Error::CouldNotReadStack(lr_location))?;
                 (new_lr, new_sp, fp)
             }
-            UnwindRuleAarch64::OffsetSpAndRestoreFpAndLr {
+            FrameRuleAarch64::OffsetSpAndRestoreFpAndLr {
                 sp_offset_by_16,
                 fp_storage_offset_from_sp_by_8,
                 lr_storage_offset_from_sp_by_8,
@@ -144,7 +144,7 @@ impl UnwindRule for UnwindRuleAarch64 {
                     read_stack(fp_location).map_err(|_| Error::CouldNotReadStack(fp_location))?;
                 (new_lr, new_sp, new_fp)
             }
-            UnwindRuleAarch64::UseFramePointer => {
+            FrameRuleAarch64::UseFramePointer => {
                 // Do a frame pointer stack walk. Frame-based aarch64 functions store the caller's fp and lr
                 // on the stack and then set fp to the address where the caller's fp is stored.
                 //
@@ -199,7 +199,7 @@ impl UnwindRule for UnwindRuleAarch64 {
                 // know which one it is, so we leave new_fp unchecked, like on x86_64.
                 (new_lr, new_sp, new_fp)
             }
-            UnwindRuleAarch64::UseFramepointerWithOffsets {
+            FrameRuleAarch64::UseFramepointerWithOffsets {
                 sp_offset_from_fp_by_8,
                 fp_storage_offset_from_fp_by_8,
                 lr_storage_offset_from_fp_by_8,
@@ -251,26 +251,26 @@ mod test {
         ];
         let mut read_stack = |addr| Ok(stack[(addr / 8) as usize]);
         let mut regs = UnwindRegsAarch64::new(0x100300, 0x10, 0x20);
-        let res = UnwindRuleAarch64::NoOp.exec(true, &mut regs, &mut read_stack);
+        let res = FrameRuleAarch64::NoOp.exec(true, &mut regs, &mut read_stack);
         assert_eq!(res, Ok(Some(0x100300)));
         assert_eq!(regs.sp(), 0x10);
-        let res = UnwindRuleAarch64::UseFramePointer.exec(false, &mut regs, &mut read_stack);
+        let res = FrameRuleAarch64::UseFramePointer.exec(false, &mut regs, &mut read_stack);
         assert_eq!(res, Ok(Some(0x100200)));
         assert_eq!(regs.sp(), 0x30);
         assert_eq!(regs.fp(), 0x40);
-        let res = UnwindRuleAarch64::UseFramePointer.exec(false, &mut regs, &mut read_stack);
+        let res = FrameRuleAarch64::UseFramePointer.exec(false, &mut regs, &mut read_stack);
         assert_eq!(res, Ok(Some(0x100100)));
         assert_eq!(regs.sp(), 0x50);
         assert_eq!(regs.fp(), 0x70);
-        let res = UnwindRuleAarch64::UseFramePointer.exec(false, &mut regs, &mut read_stack);
+        let res = FrameRuleAarch64::UseFramePointer.exec(false, &mut regs, &mut read_stack);
         assert_eq!(res, Ok(None));
     }
 
     #[test]
     fn test_zero_fp_ends_stack_without_reading() {
         for rule in [
-            UnwindRuleAarch64::NoOpIfFirstFrameOtherwiseFp,
-            UnwindRuleAarch64::UseFramePointer,
+            FrameRuleAarch64::NoOpIfFirstFrameOtherwiseFp,
+            FrameRuleAarch64::UseFramePointer,
         ] {
             let mut regs = UnwindRegsAarch64::new(0x100300, 0x1000, 0);
             let original_regs = regs;
@@ -293,7 +293,7 @@ mod test {
         let stack = [1, 2, 3, 4, 5, 6, 0x8, 0x100200, 7, 8, 9, 10];
         let mut read_stack = |addr| Ok(stack[(addr / 8) as usize]);
         let mut regs = UnwindRegsAarch64::new(0x100300, 0x10, 0x30);
-        let rule = UnwindRuleAarch64::UseFramepointerWithOffsets {
+        let rule = FrameRuleAarch64::UseFramepointerWithOffsets {
             sp_offset_from_fp_by_8: 4,
             fp_storage_offset_from_fp_by_8: 0,
             lr_storage_offset_from_fp_by_8: 1,
@@ -307,7 +307,7 @@ mod test {
         let stack = [1, 2, 3, 4, 5, 6, 0x0, 0x100200, 7, 8];
         let mut read_stack = |addr| Ok(stack[(addr / 8) as usize]);
         let mut regs = UnwindRegsAarch64::new(0x100300, 0x10, 0x30);
-        let res = UnwindRuleAarch64::UseFramePointer.exec(false, &mut regs, &mut read_stack);
+        let res = FrameRuleAarch64::UseFramePointer.exec(false, &mut regs, &mut read_stack);
         assert_eq!(res, Ok(Some(0x100200)));
         assert_eq!(regs.sp(), 0x40);
         assert_eq!(regs.fp(), 0x0);

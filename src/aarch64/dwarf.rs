@@ -3,7 +3,7 @@ use gimli::{
     UnwindContextStorage, UnwindSection, UnwindTableRow,
 };
 
-use super::{arch::ArchAarch64, unwind_rule::UnwindRuleAarch64, unwindregs::UnwindRegsAarch64};
+use super::{arch::ArchAarch64, unwind_rule::FrameRuleAarch64, unwindregs::UnwindRegsAarch64};
 
 use crate::unwind_result::UnwindResult;
 
@@ -60,7 +60,7 @@ impl DwarfUnwinding for ArchAarch64 {
     }
 
     fn rule_if_uncovered_by_fde() -> Self::UnwindRule {
-        UnwindRuleAarch64::NoOpIfFirstFrameOtherwiseFp
+        FrameRuleAarch64::NoOpIfFirstFrameOtherwiseFp
     }
 }
 
@@ -139,21 +139,21 @@ fn register_rule_to_cfa_offset<RO: ReaderOffset>(
 
 fn translate_into_unwind_rule<RO, UCS>(
     unwind_info: &UnwindTableRow<RO, UCS>,
-) -> Result<UnwindRuleAarch64, ConversionError>
+) -> Result<FrameRuleAarch64, ConversionError>
 where
     RO: ReaderOffset,
     UCS: UnwindContextStorage<RO>,
 {
     let fp_rule = unwind_info.register(AArch64::X29);
     let lr_rule = unwind_info.register(AArch64::X30);
-    translate_into_base_unwind_rule(unwind_info.cfa(), fp_rule.as_ref(), lr_rule.as_ref())
+    translate_into_frame_rule(unwind_info.cfa(), fp_rule.as_ref(), lr_rule.as_ref())
 }
 
-fn translate_into_base_unwind_rule<RO: ReaderOffset>(
+fn translate_into_frame_rule<RO: ReaderOffset>(
     cfa_rule: &CfaRule<RO>,
     fp_rule: Option<&RegisterRule<RO>>,
     lr_rule: Option<&RegisterRule<RO>>,
-) -> Result<UnwindRuleAarch64, ConversionError> {
+) -> Result<FrameRuleAarch64, ConversionError> {
     match cfa_rule {
         CfaRule::RegisterAndOffset { register, offset } => match *register {
             AArch64::SP => {
@@ -170,26 +170,26 @@ fn translate_into_base_unwind_rule<RO: ReaderOffset>(
                                 // Per spec (at least as of DWARF >= 3), this means that it should be treated
                                 // as undefined. However, in practice, it seems that compilers often omit the rule
                                 // to say "same value", see https://github.com/gimli-rs/gimli/issues/857 .
-                                Ok(UnwindRuleAarch64::OffsetSp { sp_offset_by_16 })
+                                Ok(FrameRuleAarch64::OffsetSp { sp_offset_by_16 })
                             }
                             Some(RegisterRule::Undefined) => {
                                 // The column for the return address was manually set to "undefined"
                                 // using DW_CFA_undefined. This usually means that the function never returns
                                 // and can be treated as the root of the stack.
                                 Ok(
-                                    UnwindRuleAarch64::OffsetSpIfFirstFrameOtherwiseStackEndsHere {
+                                    FrameRuleAarch64::OffsetSpIfFirstFrameOtherwiseStackEndsHere {
                                         sp_offset_by_16,
                                     },
                                 )
                             }
-                            _ => Ok(UnwindRuleAarch64::OffsetSp { sp_offset_by_16 }),
+                            _ => Ok(FrameRuleAarch64::OffsetSp { sp_offset_by_16 }),
                         }
                     }
                     (Some(lr_cfa_offset), None) => {
                         let lr_storage_offset_from_sp_by_8 =
                             i16::try_from((offset + lr_cfa_offset) / 8)
                                 .map_err(|_| ConversionError::LrStorageOffsetDoesNotFit)?;
-                        Ok(UnwindRuleAarch64::OffsetSpAndRestoreLr {
+                        Ok(FrameRuleAarch64::OffsetSpAndRestoreLr {
                             sp_offset_by_16,
                             lr_storage_offset_from_sp_by_8,
                         })
@@ -201,7 +201,7 @@ fn translate_into_base_unwind_rule<RO: ReaderOffset>(
                         let fp_storage_offset_from_sp_by_8 =
                             i16::try_from((offset + fp_cfa_offset) / 8)
                                 .map_err(|_| ConversionError::FpStorageOffsetDoesNotFit)?;
-                        Ok(UnwindRuleAarch64::OffsetSpAndRestoreFpAndLr {
+                        Ok(FrameRuleAarch64::OffsetSpAndRestoreFpAndLr {
                             sp_offset_by_16,
                             fp_storage_offset_from_sp_by_8,
                             lr_storage_offset_from_sp_by_8,
@@ -215,7 +215,7 @@ fn translate_into_base_unwind_rule<RO: ReaderOffset>(
                 let fp_cfa_offset = register_rule_to_cfa_offset(fp_rule)?
                     .ok_or(ConversionError::FramePointerRuleDoesNotRestoreFp)?;
                 if *offset == 16 && fp_cfa_offset == -16 && lr_cfa_offset == -8 {
-                    Ok(UnwindRuleAarch64::UseFramePointer)
+                    Ok(FrameRuleAarch64::UseFramePointer)
                 } else {
                     let sp_offset_from_fp_by_8 = u16::try_from(offset / 8)
                         .map_err(|_| ConversionError::SpOffsetFromFpDoesNotFit)?;
@@ -225,7 +225,7 @@ fn translate_into_base_unwind_rule<RO: ReaderOffset>(
                     let fp_storage_offset_from_fp_by_8 =
                         i16::try_from((offset + fp_cfa_offset) / 8)
                             .map_err(|_| ConversionError::FpStorageOffsetDoesNotFit)?;
-                    Ok(UnwindRuleAarch64::UseFramepointerWithOffsets {
+                    Ok(FrameRuleAarch64::UseFramepointerWithOffsets {
                         sp_offset_from_fp_by_8,
                         fp_storage_offset_from_fp_by_8,
                         lr_storage_offset_from_fp_by_8,

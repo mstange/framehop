@@ -1,4 +1,4 @@
-use super::super::unwind_rule::UnwindRuleAarch64;
+use super::super::unwind_rule::FrameRuleAarch64;
 
 struct PrologueDetectorAarch64 {
     sp_offset: i32,
@@ -203,16 +203,16 @@ impl PrologueDetectorAarch64 {
 pub fn unwind_rule_from_detected_prologue(
     slice_from_start: &[u8],
     slice_to_end: &[u8],
-) -> Option<UnwindRuleAarch64> {
+) -> Option<FrameRuleAarch64> {
     let mut detector = PrologueDetectorAarch64::new();
     match detector.analyze_slices(slice_from_start, slice_to_end) {
         PrologueResult::ProbablyAlreadyInBody(_) => None,
         PrologueResult::FoundFunctionStart { sp_offset } => {
             let sp_offset_by_16 = u16::try_from(sp_offset / 16).ok()?;
             let rule = if sp_offset_by_16 == 0 {
-                UnwindRuleAarch64::NoOp
+                FrameRuleAarch64::NoOp
             } else {
-                UnwindRuleAarch64::OffsetSp { sp_offset_by_16 }
+                FrameRuleAarch64::OffsetSp { sp_offset_by_16 }
             };
             Some(rule)
         }
@@ -240,23 +240,23 @@ mod test {
         ];
         assert_eq!(
             unwind_rule_from_detected_prologue(&bytes[..0], &bytes[0..]),
-            Some(UnwindRuleAarch64::NoOp)
+            Some(FrameRuleAarch64::NoOp)
         );
         assert_eq!(
             unwind_rule_from_detected_prologue(&bytes[..4], &bytes[4..]),
-            Some(UnwindRuleAarch64::OffsetSp { sp_offset_by_16: 5 })
+            Some(FrameRuleAarch64::OffsetSp { sp_offset_by_16: 5 })
         );
         assert_eq!(
             unwind_rule_from_detected_prologue(&bytes[..8], &bytes[8..]),
-            Some(UnwindRuleAarch64::OffsetSp { sp_offset_by_16: 5 })
+            Some(FrameRuleAarch64::OffsetSp { sp_offset_by_16: 5 })
         );
         assert_eq!(
             unwind_rule_from_detected_prologue(&bytes[..12], &bytes[12..]),
-            Some(UnwindRuleAarch64::OffsetSp { sp_offset_by_16: 5 })
+            Some(FrameRuleAarch64::OffsetSp { sp_offset_by_16: 5 })
         );
         assert_eq!(
             unwind_rule_from_detected_prologue(&bytes[..16], &bytes[16..]),
-            Some(UnwindRuleAarch64::OffsetSp { sp_offset_by_16: 5 })
+            Some(FrameRuleAarch64::OffsetSp { sp_offset_by_16: 5 })
         );
         assert_eq!(
             unwind_rule_from_detected_prologue(&bytes[..20], &bytes[20..]),
@@ -301,27 +301,27 @@ mod test {
         );
         assert_eq!(
             unwind_rule_from_detected_prologue(&bytes[..8], &bytes[8..]),
-            Some(UnwindRuleAarch64::NoOp)
+            Some(FrameRuleAarch64::NoOp)
         );
         assert_eq!(
             unwind_rule_from_detected_prologue(&bytes[..12], &bytes[12..]),
-            Some(UnwindRuleAarch64::NoOp)
+            Some(FrameRuleAarch64::NoOp)
         );
         assert_eq!(
             unwind_rule_from_detected_prologue(&bytes[..16], &bytes[16..]),
-            Some(UnwindRuleAarch64::OffsetSp { sp_offset_by_16: 4 })
+            Some(FrameRuleAarch64::OffsetSp { sp_offset_by_16: 4 })
         );
         assert_eq!(
             unwind_rule_from_detected_prologue(&bytes[..20], &bytes[20..]),
-            Some(UnwindRuleAarch64::OffsetSp { sp_offset_by_16: 4 })
+            Some(FrameRuleAarch64::OffsetSp { sp_offset_by_16: 4 })
         );
         assert_eq!(
             unwind_rule_from_detected_prologue(&bytes[..24], &bytes[24..]),
-            Some(UnwindRuleAarch64::OffsetSp { sp_offset_by_16: 4 })
+            Some(FrameRuleAarch64::OffsetSp { sp_offset_by_16: 4 })
         );
         assert_eq!(
             unwind_rule_from_detected_prologue(&bytes[..28], &bytes[28..]),
-            Some(UnwindRuleAarch64::OffsetSp { sp_offset_by_16: 4 })
+            Some(FrameRuleAarch64::OffsetSp { sp_offset_by_16: 4 })
         );
         assert_eq!(
             unwind_rule_from_detected_prologue(&bytes[..32], &bytes[32..]),
@@ -343,15 +343,15 @@ mod test {
         ];
         assert_eq!(
             unwind_rule_from_detected_prologue(&bytes[..0], &bytes[0..]),
-            Some(UnwindRuleAarch64::NoOp)
+            Some(FrameRuleAarch64::NoOp)
         );
         assert_eq!(
             unwind_rule_from_detected_prologue(&bytes[..4], &bytes[4..]),
-            Some(UnwindRuleAarch64::NoOp)
+            Some(FrameRuleAarch64::NoOp)
         );
         assert_eq!(
             unwind_rule_from_detected_prologue(&bytes[..8], &bytes[8..]),
-            Some(UnwindRuleAarch64::OffsetSp { sp_offset_by_16: 1 })
+            Some(FrameRuleAarch64::OffsetSp { sp_offset_by_16: 1 })
         );
         assert_eq!(
             unwind_rule_from_detected_prologue(&bytes[..12], &bytes[12..]),
