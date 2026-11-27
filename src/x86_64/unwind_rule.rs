@@ -88,6 +88,7 @@ impl UnwindRuleX86_64 {
 
 impl UnwindRule for UnwindRuleX86_64 {
     type UnwindRegs = UnwindRegsX86_64;
+    type RuleTable = ();
 
     fn rule_for_stub_functions() -> Self {
         UnwindRuleX86_64::JustReturn
@@ -99,7 +100,24 @@ impl UnwindRule for UnwindRuleX86_64 {
         UnwindRuleX86_64::UseFramePointer
     }
 
+    #[inline]
     fn exec<F>(
+        self,
+        _table: &(),
+        is_first_frame: bool,
+        regs: &mut UnwindRegsX86_64,
+        read_stack: &mut F,
+    ) -> Result<Option<u64>, Error>
+    where
+        F: FnMut(u64) -> Result<u64, ()>,
+    {
+        UnwindRuleX86_64::exec(self, is_first_frame, regs, read_stack)
+    }
+}
+
+impl UnwindRuleX86_64 {
+    /// Execute the rule. Rules on x86_64 don't use a rule table.
+    pub fn exec<F>(
         self,
         is_first_frame: bool,
         regs: &mut UnwindRegsX86_64,

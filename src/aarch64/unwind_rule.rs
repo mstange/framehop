@@ -60,20 +60,9 @@ pub enum FrameRuleAarch64 {
     },
 }
 
-impl UnwindRule for FrameRuleAarch64 {
-    type UnwindRegs = UnwindRegsAarch64;
-
-    fn rule_for_stub_functions() -> Self {
-        FrameRuleAarch64::NoOp
-    }
-    fn rule_for_function_start() -> Self {
-        FrameRuleAarch64::NoOp
-    }
-    fn fallback_rule() -> Self {
-        FrameRuleAarch64::UseFramePointer
-    }
-
-    fn exec<F>(
+impl FrameRuleAarch64 {
+    /// Execute the rule for sp, fp and lr.
+    pub fn exec<F>(
         self,
         is_first_frame: bool,
         regs: &mut UnwindRegsAarch64,
@@ -461,20 +450,22 @@ impl From<FrameRuleAarch64> for UnwindRuleAarch64 {
 
 impl UnwindRule for UnwindRuleAarch64 {
     type UnwindRegs = UnwindRegsAarch64;
+    type RuleTable = ();
 
     fn rule_for_stub_functions() -> Self {
-        FrameRuleAarch64::rule_for_stub_functions().into()
+        FrameRuleAarch64::NoOp.into()
     }
     fn rule_for_function_start() -> Self {
-        FrameRuleAarch64::rule_for_function_start().into()
+        FrameRuleAarch64::NoOp.into()
     }
     fn fallback_rule() -> Self {
-        FrameRuleAarch64::fallback_rule().into()
+        FrameRuleAarch64::UseFramePointer.into()
     }
 
     #[inline]
     fn exec<F>(
         self,
+        _table: &(),
         is_first_frame: bool,
         regs: &mut UnwindRegsAarch64,
         read_stack: &mut F,
@@ -530,7 +521,7 @@ mod test {
         let rule = UnwindRuleAarch64::from(FrameRuleAarch64::NoOpIfFirstFrameOtherwiseFp);
 
         assert_eq!(
-            rule.exec(true, &mut regs, &mut read_stack),
+            rule.exec(&(), true, &mut regs, &mut read_stack),
             Ok(Some(0x1000))
         );
         for reg in FIRST_CALLEE_SAVED..FIRST_CALLEE_SAVED + CALLEE_SAVED_COUNT as u16 {

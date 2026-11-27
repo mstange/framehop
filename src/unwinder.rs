@@ -373,7 +373,7 @@ impl<D: Deref<Target = [u8]>, A: Unwinding, P: AllocationPolicy> UnwinderInterna
         };
         let cache_handle = match cache.rule_cache.lookup(lookup_address, cache_key) {
             CacheResult::Hit(unwind_rule) => {
-                return unwind_rule.exec(is_first_frame, regs, read_stack);
+                return unwind_rule.exec(&cache.rule_table, is_first_frame, regs, read_stack);
             }
             CacheResult::Miss(handle) => handle,
         };
@@ -403,7 +403,7 @@ impl<D: Deref<Target = [u8]>, A: Unwinding, P: AllocationPolicy> UnwinderInterna
             }
         };
         cache.rule_cache.insert(cache_handle, unwind_rule);
-        unwind_rule.exec(is_first_frame, regs, read_stack)
+        unwind_rule.exec(&cache.rule_table, is_first_frame, regs, read_stack)
     }
 
     pub fn unwind_frame<F>(
@@ -481,6 +481,7 @@ impl<D: Deref<Target = [u8]>, A: Unwinding, P: AllocationPolicy> UnwinderInterna
                             UnwindSectionType::EhFrame,
                             None,
                             &mut cache.gimli_unwind_context,
+                            &mut cache.rule_table,
                             base_addresses.clone(),
                             module.base_svma,
                         );
@@ -505,6 +506,7 @@ impl<D: Deref<Target = [u8]>, A: Unwinding, P: AllocationPolicy> UnwinderInterna
                     UnwindSectionType::EhFrame,
                     Some(eh_frame_hdr_data),
                     &mut cache.gimli_unwind_context,
+                    &mut cache.rule_table,
                     base_addresses.clone(),
                     module.base_svma,
                 );
@@ -529,6 +531,7 @@ impl<D: Deref<Target = [u8]>, A: Unwinding, P: AllocationPolicy> UnwinderInterna
                     UnwindSectionType::EhFrame,
                     None,
                     &mut cache.gimli_unwind_context,
+                    &mut cache.rule_table,
                     base_addresses.clone(),
                     module.base_svma,
                 );
@@ -553,6 +556,7 @@ impl<D: Deref<Target = [u8]>, A: Unwinding, P: AllocationPolicy> UnwinderInterna
                     UnwindSectionType::DebugFrame,
                     None,
                     &mut cache.gimli_unwind_context,
+                    &mut cache.rule_table,
                     base_addresses.clone(),
                     module.base_svma,
                 );

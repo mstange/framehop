@@ -66,6 +66,7 @@ pub struct Cache<R: UnwindRule, P: AllocationPolicy = MayAllocateDuringUnwind> {
     pub(crate) gimli_unwind_context:
         Box<gimli::UnwindContext<usize, P::GimliUnwindContextStorage<usize>>>,
     pub(crate) rule_cache: RuleCache<R>,
+    pub(crate) rule_table: R::RuleTable,
 }
 
 impl<R: UnwindRule, P: AllocationPolicy> Cache<R, P> {
@@ -73,6 +74,7 @@ impl<R: UnwindRule, P: AllocationPolicy> Cache<R, P> {
         Self {
             gimli_unwind_context: Box::new(gimli::UnwindContext::new_in()),
             rule_cache: RuleCache::new(),
+            rule_table: Default::default(),
         }
     }
 }
