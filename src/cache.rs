@@ -55,7 +55,9 @@ impl AllocationPolicy for MayAllocateDuringUnwind {
 /// The unwinder cache. This needs to be created upfront before unwinding. During
 /// unwinding, the unwinder needs exclusive access to this cache.
 ///
-/// A single unwinder cache can be used with multiple unwinders alternatingly.
+/// A single unwinder cache can be used with multiple unwinders alternatingly. Unwinders
+/// which have clones of the same [`Module`](crate::Module) share the cached rules for
+/// that module's addresses.
 ///
 /// The cache stores unwind rules for addresses it has seen before, and it stores the
 /// unwind context which gimli needs for DWARF CFI evaluation.
