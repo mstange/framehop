@@ -60,7 +60,8 @@ impl AllocationPolicy for MayAllocateDuringUnwind {
 /// that module's addresses.
 ///
 /// The cache stores unwind rules for addresses it has seen before, and it stores the
-/// unwind context which gimli needs for DWARF CFI evaluation.
+/// unwind context which gimli needs for DWARF CFI evaluation. The rule cache has
+/// 16381 slots of 24 bytes each, 384 KiB in total.
 pub struct Cache<R: UnwindRule, P: AllocationPolicy = MayAllocateDuringUnwind> {
     pub(crate) gimli_unwind_context:
         Box<gimli::UnwindContext<usize, P::GimliUnwindContextStorage<usize>>>,

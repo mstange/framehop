@@ -2,7 +2,7 @@ use alloc::boxed::Box;
 
 use crate::unwind_rule::UnwindRule;
 
-const CACHE_ENTRY_COUNT: usize = 509;
+const CACHE_ENTRY_COUNT: usize = 16381;
 
 pub struct RuleCache<R: UnwindRule> {
     entries: Box<[Option<CacheEntry<R>>; CACHE_ENTRY_COUNT]>,
@@ -12,7 +12,11 @@ pub struct RuleCache<R: UnwindRule> {
 impl<R: UnwindRule> RuleCache<R> {
     pub fn new() -> Self {
         Self {
-            entries: Box::new([None; CACHE_ENTRY_COUNT]),
+            // Box::new would build the 384 KiB array on the stack first in debug builds.
+            entries: alloc::vec![None; CACHE_ENTRY_COUNT]
+                .into_boxed_slice()
+                .try_into()
+                .unwrap_or_else(|_| unreachable!()),
             stats: CacheStats::new(),
         }
     }
