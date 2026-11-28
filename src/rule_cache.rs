@@ -2,7 +2,7 @@ use alloc::boxed::Box;
 
 use crate::unwind_rule::UnwindRule;
 
-const CACHE_ENTRY_COUNT: usize = 509;
+const CACHE_ENTRY_COUNT: usize = 16381;
 
 pub struct RuleCache<R: UnwindRule> {
     entries: Box<[Option<CacheEntry<R>>; CACHE_ENTRY_COUNT]>,
@@ -12,19 +12,25 @@ pub struct RuleCache<R: UnwindRule> {
 impl<R: UnwindRule> RuleCache<R> {
     pub fn new() -> Self {
         Self {
-            entries: Box::new([None; CACHE_ENTRY_COUNT]),
+            // Box::new would build the 384 KiB array on the stack first in debug builds.
+            entries: alloc::vec![None; CACHE_ENTRY_COUNT]
+                .into_boxed_slice()
+                .try_into()
+                .unwrap_or_else(|_| unreachable!()),
             stats: CacheStats::new(),
         }
     }
 
-    pub fn lookup(&mut self, address: u64, modules_generation: u64) -> CacheResult<R> {
+    /// `key` is the module's cache key, or the unwinder's modules generation for
+    /// addresses outside of all modules.
+    pub fn lookup(&mut self, address: u64, key: u64) -> CacheResult<R> {
         let slot = (address % (CACHE_ENTRY_COUNT as u64)) as u16;
         match &self.entries[slot as usize] {
             None => {
                 self.stats.miss_empty_slot_count += 1;
             }
             Some(entry) => {
-                if entry.modules_generation == modules_generation {
+                if entry.key == key {
                     if entry.address == address {
                         self.stats.hit_count += 1;
                         return CacheResult::Hit(entry.unwind_rule);
@@ -36,22 +42,14 @@ impl<R: UnwindRule> RuleCache<R> {
                 }
             }
         }
-        CacheResult::Miss(CacheHandle {
-            slot,
-            address,
-            modules_generation,
-        })
+        CacheResult::Miss(CacheHandle { slot, address, key })
     }
 
     pub fn insert(&mut self, handle: CacheHandle, unwind_rule: R) {
-        let CacheHandle {
-            slot,
-            address,
-            modules_generation,
-        } = handle;
+        let CacheHandle { slot, address, key } = handle;
         self.entries[slot as usize] = Some(CacheEntry {
             address,
-            modules_generation,
+            key,
             unwind_rule,
         });
     }
@@ -70,7 +68,7 @@ pub enum CacheResult<R: UnwindRule> {
 pub struct CacheHandle {
     slot: u16,
     address: u64,
-    modules_generation: u64,
+    key: u64,
 }
 
 const _: () = assert!(
@@ -81,7 +79,7 @@ const _: () = assert!(
 #[derive(Clone, Copy, Debug)]
 struct CacheEntry<R: UnwindRule> {
     address: u64,
-    modules_generation: u64,
+    key: u64,
     unwind_rule: R,
 }
 
@@ -92,11 +90,12 @@ pub struct CacheStats {
     pub hit_count: u64,
     /// The number of cache misses that were due to an empty slot.
     pub miss_empty_slot_count: u64,
-    /// The number of cache misses that were due to a filled slot whose module
-    /// generation didn't match the unwinder's current module generation.
-    /// (This means that either the unwinder's modules have changed since the
-    /// rule in this slot was stored, or the same cache is used with multiple
-    /// unwinders and the unwinders are stomping on each other's cache slots.)
+    /// The number of cache misses that were due to a filled slot whose rule was
+    /// stored for a different module. (For addresses outside of all modules, rules
+    /// are stored for the unwinder's current set of modules instead.) This means that
+    /// either the slot holds a rule for the same address in a different module, for
+    /// example from another unwinder which shares the cache, or the modules have
+    /// changed since the rule was stored.
     pub miss_wrong_modules_count: u64,
     /// The number of cache misses that were due to cache slot collisions of
     /// different addresses.
@@ -140,7 +139,7 @@ mod tests {
         );
         assert_eq!(
             core::mem::size_of::<Option<CacheEntry<UnwindRuleAarch64>>>(),
-            24 // <-- larger than we'd like
+            32
         );
     }
 }

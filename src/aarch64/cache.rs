@@ -1,3 +1,4 @@
+use super::rule_table::RuleTableAarch64;
 use super::unwind_rule::*;
 use crate::cache::*;
 
@@ -22,6 +23,11 @@ impl<P: AllocationPolicy> CacheAarch64<P> {
     /// Returns a snapshot of the cache usage statistics.
     pub fn stats(&self) -> CacheStats {
         self.0.rule_cache.stats()
+    }
+
+    /// The table of val_expression rules which the cached rules refer to.
+    pub fn rule_table(&self) -> &RuleTableAarch64 {
+        &self.0.rule_table
     }
 }
 

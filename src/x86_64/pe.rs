@@ -232,7 +232,6 @@ mod tests {
     use super::super::unwindregs::UnwindRegsX86_64;
     use super::*;
     use crate::pe::DataAtRvaRange;
-    use crate::unwind_rule::UnwindRule;
     use alloc::{vec, vec::Vec};
     use std::alloc::{GlobalAlloc, Layout, System};
     use std::cell::Cell;
@@ -370,6 +369,7 @@ mod tests {
                     (true, ra.unwrap(), regs)
                 }
                 UnwindResult::Uncacheable(ra) => (false, ra, regs),
+                UnwindResult::UncacheableError(err) => panic!("unexpected error: {err}"),
             })
         })
     }

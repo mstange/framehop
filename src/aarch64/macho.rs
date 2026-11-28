@@ -1,5 +1,5 @@
 use super::arch::ArchAarch64;
-use super::unwind_rule::UnwindRuleAarch64;
+use super::unwind_rule::{FrameRuleAarch64, UnwindRuleAarch64};
 use crate::instruction_analysis::InstructionAnalysis;
 use crate::macho::{CompactUnwindInfoUnwinderError, CompactUnwindInfoUnwinding, CuiUnwindResult};
 use macho_unwind_info::opcodes::OpcodeArm64;
@@ -15,7 +15,7 @@ impl CompactUnwindInfoUnwinding for ArchAarch64 {
         let opcode = OpcodeArm64::parse(function.opcode);
         if is_first_frame {
             if opcode == OpcodeArm64::Null {
-                return Ok(CuiUnwindResult::ExecRule(UnwindRuleAarch64::NoOp));
+                return Ok(CuiUnwindResult::ExecRule(FrameRuleAarch64::NoOp.into()));
             }
             // The pc might be in a prologue or an epilogue. The compact unwind info format ignores
             // prologues and epilogues; the opcodes only describe the function body. So we do some
@@ -42,11 +42,14 @@ impl CompactUnwindInfoUnwinding for ArchAarch64 {
             } => {
                 if is_first_frame {
                     if stack_size_in_bytes == 0 {
-                        CuiUnwindResult::ExecRule(UnwindRuleAarch64::NoOp)
+                        CuiUnwindResult::ExecRule(FrameRuleAarch64::NoOp.into())
                     } else {
-                        CuiUnwindResult::ExecRule(UnwindRuleAarch64::OffsetSp {
-                            sp_offset_by_16: stack_size_in_bytes / 16,
-                        })
+                        CuiUnwindResult::ExecRule(
+                            FrameRuleAarch64::OffsetSp {
+                                sp_offset_by_16: stack_size_in_bytes / 16,
+                            }
+                            .into(),
+                        )
                     }
                 } else {
                     return Err(CompactUnwindInfoUnwinderError::CallerCannotBeFrameless);
@@ -54,7 +57,7 @@ impl CompactUnwindInfoUnwinding for ArchAarch64 {
             }
             OpcodeArm64::Dwarf { eh_frame_fde } => CuiUnwindResult::NeedDwarf(eh_frame_fde),
             OpcodeArm64::FrameBased { .. } => {
-                CuiUnwindResult::ExecRule(UnwindRuleAarch64::UseFramePointer)
+                CuiUnwindResult::ExecRule(FrameRuleAarch64::UseFramePointer.into())
             }
             OpcodeArm64::UnrecognizedKind(kind) => {
                 return Err(CompactUnwindInfoUnwinderError::BadOpcodeKind(kind))
@@ -83,14 +86,14 @@ impl CompactUnwindInfoUnwinding for ArchAarch64 {
         // +0x2c  1d30c8  00 00 00 00        (padding)
         let rule = if offset < 0xc {
             // Stack pointer hasn't been touched, just follow lr
-            UnwindRuleAarch64::NoOp
+            FrameRuleAarch64::NoOp
         } else if offset < 0x18 {
             // Add 0x10 to the stack pointer and follow lr
-            UnwindRuleAarch64::OffsetSp { sp_offset_by_16: 1 }
+            FrameRuleAarch64::OffsetSp { sp_offset_by_16: 1 }
         } else {
             // Stack pointer hasn't been touched, just follow lr
-            UnwindRuleAarch64::NoOp
+            FrameRuleAarch64::NoOp
         };
-        Ok(CuiUnwindResult::ExecRule(rule))
+        Ok(CuiUnwindResult::ExecRule(rule.into()))
     }
 }

@@ -1,4 +1,4 @@
-use super::super::unwind_rule::UnwindRuleAarch64;
+use super::super::unwind_rule::FrameRuleAarch64;
 
 struct EpilogueDetectorAarch64 {
     sp_offset: i32,
@@ -400,7 +400,7 @@ impl EpilogueDetectorAarch64 {
 pub fn unwind_rule_from_detected_epilogue(
     bytes: &[u8],
     pc_offset: usize,
-) -> Option<UnwindRuleAarch64> {
+) -> Option<FrameRuleAarch64> {
     let mut detector = EpilogueDetectorAarch64::new();
     match detector.analyze_slice(bytes, pc_offset) {
         EpilogueResult::ProbablyStillInBody(_)
@@ -412,20 +412,18 @@ pub fn unwind_rule_from_detected_epilogue(
         } => {
             let sp_offset_by_16 = u16::try_from(sp_offset / 16).ok()?;
             let rule = match (fp_offset_from_initial_sp, lr_offset_from_initial_sp) {
-                (None, None) if sp_offset_by_16 == 0 => UnwindRuleAarch64::NoOp,
-                (None, None) => UnwindRuleAarch64::OffsetSp { sp_offset_by_16 },
-                (None, Some(lr_offset)) => UnwindRuleAarch64::OffsetSpAndRestoreLr {
+                (None, None) if sp_offset_by_16 == 0 => FrameRuleAarch64::NoOp,
+                (None, None) => FrameRuleAarch64::OffsetSp { sp_offset_by_16 },
+                (None, Some(lr_offset)) => FrameRuleAarch64::OffsetSpAndRestoreLr {
                     sp_offset_by_16,
                     lr_storage_offset_from_sp_by_8: i16::try_from(lr_offset / 8).ok()?,
                 },
                 (Some(_), None) => return None,
-                (Some(fp_offset), Some(lr_offset)) => {
-                    UnwindRuleAarch64::OffsetSpAndRestoreFpAndLr {
-                        sp_offset_by_16,
-                        fp_storage_offset_from_sp_by_8: i16::try_from(fp_offset / 8).ok()?,
-                        lr_storage_offset_from_sp_by_8: i16::try_from(lr_offset / 8).ok()?,
-                    }
-                }
+                (Some(fp_offset), Some(lr_offset)) => FrameRuleAarch64::OffsetSpAndRestoreFpAndLr {
+                    sp_offset_by_16,
+                    fp_storage_offset_from_sp_by_8: i16::try_from(fp_offset / 8).ok()?,
+                    lr_storage_offset_from_sp_by_8: i16::try_from(lr_offset / 8).ok()?,
+                },
             };
             Some(rule)
         }
@@ -450,7 +448,7 @@ mod test {
         ];
         assert_eq!(
             unwind_rule_from_detected_epilogue(bytes, 0),
-            Some(UnwindRuleAarch64::OffsetSpAndRestoreFpAndLr {
+            Some(FrameRuleAarch64::OffsetSpAndRestoreFpAndLr {
                 sp_offset_by_16: 5,
                 fp_storage_offset_from_sp_by_8: 8,
                 lr_storage_offset_from_sp_by_8: 9,
@@ -458,19 +456,19 @@ mod test {
         );
         assert_eq!(
             unwind_rule_from_detected_epilogue(bytes, 4),
-            Some(UnwindRuleAarch64::OffsetSp { sp_offset_by_16: 5 })
+            Some(FrameRuleAarch64::OffsetSp { sp_offset_by_16: 5 })
         );
         assert_eq!(
             unwind_rule_from_detected_epilogue(bytes, 8),
-            Some(UnwindRuleAarch64::OffsetSp { sp_offset_by_16: 5 })
+            Some(FrameRuleAarch64::OffsetSp { sp_offset_by_16: 5 })
         );
         assert_eq!(
             unwind_rule_from_detected_epilogue(bytes, 12),
-            Some(UnwindRuleAarch64::OffsetSp { sp_offset_by_16: 5 })
+            Some(FrameRuleAarch64::OffsetSp { sp_offset_by_16: 5 })
         );
         assert_eq!(
             unwind_rule_from_detected_epilogue(bytes, 16),
-            Some(UnwindRuleAarch64::NoOp)
+            Some(FrameRuleAarch64::NoOp)
         );
         assert_eq!(unwind_rule_from_detected_epilogue(bytes, 20), None);
     }
@@ -495,7 +493,7 @@ mod test {
         assert_eq!(unwind_rule_from_detected_epilogue(bytes, 0), None);
         assert_eq!(
             unwind_rule_from_detected_epilogue(bytes, 4),
-            Some(UnwindRuleAarch64::OffsetSpAndRestoreFpAndLr {
+            Some(FrameRuleAarch64::OffsetSpAndRestoreFpAndLr {
                 sp_offset_by_16: 4,
                 fp_storage_offset_from_sp_by_8: 6,
                 lr_storage_offset_from_sp_by_8: 7
@@ -503,19 +501,19 @@ mod test {
         );
         assert_eq!(
             unwind_rule_from_detected_epilogue(bytes, 8),
-            Some(UnwindRuleAarch64::OffsetSp { sp_offset_by_16: 4 })
+            Some(FrameRuleAarch64::OffsetSp { sp_offset_by_16: 4 })
         );
         assert_eq!(
             unwind_rule_from_detected_epilogue(bytes, 12),
-            Some(UnwindRuleAarch64::OffsetSp { sp_offset_by_16: 4 })
+            Some(FrameRuleAarch64::OffsetSp { sp_offset_by_16: 4 })
         );
         assert_eq!(
             unwind_rule_from_detected_epilogue(bytes, 16),
-            Some(UnwindRuleAarch64::OffsetSp { sp_offset_by_16: 4 })
+            Some(FrameRuleAarch64::OffsetSp { sp_offset_by_16: 4 })
         );
         assert_eq!(
             unwind_rule_from_detected_epilogue(bytes, 20),
-            Some(UnwindRuleAarch64::NoOp)
+            Some(FrameRuleAarch64::NoOp)
         );
         assert_eq!(unwind_rule_from_detected_epilogue(bytes, 24), None);
     }
@@ -538,7 +536,7 @@ mod test {
         assert_eq!(unwind_rule_from_detected_epilogue(bytes, 0), None);
         assert_eq!(
             unwind_rule_from_detected_epilogue(bytes, 4),
-            Some(UnwindRuleAarch64::OffsetSpAndRestoreFpAndLr {
+            Some(FrameRuleAarch64::OffsetSpAndRestoreFpAndLr {
                 sp_offset_by_16: 1,
                 fp_storage_offset_from_sp_by_8: 0,
                 lr_storage_offset_from_sp_by_8: 1
@@ -546,7 +544,7 @@ mod test {
         );
         assert_eq!(
             unwind_rule_from_detected_epilogue(bytes, 8),
-            Some(UnwindRuleAarch64::NoOp)
+            Some(FrameRuleAarch64::NoOp)
         );
         assert_eq!(unwind_rule_from_detected_epilogue(bytes, 12), None);
         assert_eq!(unwind_rule_from_detected_epilogue(bytes, 16), None);
@@ -562,7 +560,7 @@ mod test {
         let bytes = &[0xfc, 0x6f, 0xc6, 0xa8, 0xbc, 0xba, 0xff, 0x17];
         assert_eq!(
             unwind_rule_from_detected_epilogue(bytes, 0),
-            Some(UnwindRuleAarch64::OffsetSp { sp_offset_by_16: 6 })
+            Some(FrameRuleAarch64::OffsetSp { sp_offset_by_16: 6 })
         );
     }
 
@@ -582,7 +580,7 @@ mod test {
         let bytes = &[0xfa, 0x67, 0xc5, 0xa8, 0x60, 0x00, 0x1f, 0xd6];
         assert_eq!(
             unwind_rule_from_detected_epilogue(bytes, 4),
-            Some(UnwindRuleAarch64::NoOp)
+            Some(FrameRuleAarch64::NoOp)
         );
     }
 
@@ -613,7 +611,7 @@ mod test {
         assert_eq!(unwind_rule_from_detected_epilogue(bytes, 0), None);
         assert_eq!(
             unwind_rule_from_detected_epilogue(bytes, 4),
-            Some(UnwindRuleAarch64::OffsetSpAndRestoreFpAndLr {
+            Some(FrameRuleAarch64::OffsetSpAndRestoreFpAndLr {
                 sp_offset_by_16: 3,
                 fp_storage_offset_from_sp_by_8: 4,
                 lr_storage_offset_from_sp_by_8: 5
@@ -621,27 +619,27 @@ mod test {
         );
         assert_eq!(
             unwind_rule_from_detected_epilogue(bytes, 8),
-            Some(UnwindRuleAarch64::OffsetSp { sp_offset_by_16: 3 })
+            Some(FrameRuleAarch64::OffsetSp { sp_offset_by_16: 3 })
         );
         assert_eq!(
             unwind_rule_from_detected_epilogue(bytes, 12),
-            Some(UnwindRuleAarch64::OffsetSp { sp_offset_by_16: 3 })
+            Some(FrameRuleAarch64::OffsetSp { sp_offset_by_16: 3 })
         );
         assert_eq!(
             unwind_rule_from_detected_epilogue(bytes, 16),
-            Some(UnwindRuleAarch64::NoOp)
+            Some(FrameRuleAarch64::NoOp)
         );
         assert_eq!(
             unwind_rule_from_detected_epilogue(bytes, 20),
-            Some(UnwindRuleAarch64::NoOp)
+            Some(FrameRuleAarch64::NoOp)
         );
         assert_eq!(
             unwind_rule_from_detected_epilogue(bytes, 24),
-            Some(UnwindRuleAarch64::NoOp)
+            Some(FrameRuleAarch64::NoOp)
         );
         assert_eq!(
             unwind_rule_from_detected_epilogue(bytes, 28),
-            Some(UnwindRuleAarch64::NoOp)
+            Some(FrameRuleAarch64::NoOp)
         );
     }
 
@@ -668,7 +666,7 @@ mod test {
         assert_eq!(unwind_rule_from_detected_epilogue(bytes, 0), None);
         assert_eq!(
             unwind_rule_from_detected_epilogue(bytes, 4),
-            Some(UnwindRuleAarch64::OffsetSpAndRestoreFpAndLr {
+            Some(FrameRuleAarch64::OffsetSpAndRestoreFpAndLr {
                 sp_offset_by_16: 2,
                 fp_storage_offset_from_sp_by_8: 2,
                 lr_storage_offset_from_sp_by_8: 3
@@ -676,27 +674,27 @@ mod test {
         );
         assert_eq!(
             unwind_rule_from_detected_epilogue(bytes, 8),
-            Some(UnwindRuleAarch64::OffsetSp { sp_offset_by_16: 2 })
+            Some(FrameRuleAarch64::OffsetSp { sp_offset_by_16: 2 })
         );
         assert_eq!(
             unwind_rule_from_detected_epilogue(bytes, 12),
-            Some(UnwindRuleAarch64::NoOp)
+            Some(FrameRuleAarch64::NoOp)
         );
         assert_eq!(
             unwind_rule_from_detected_epilogue(bytes, 16),
-            Some(UnwindRuleAarch64::NoOp)
+            Some(FrameRuleAarch64::NoOp)
         );
         assert_eq!(
             unwind_rule_from_detected_epilogue(bytes, 20),
-            Some(UnwindRuleAarch64::NoOp)
+            Some(FrameRuleAarch64::NoOp)
         );
         assert_eq!(
             unwind_rule_from_detected_epilogue(bytes, 24),
-            Some(UnwindRuleAarch64::NoOp)
+            Some(FrameRuleAarch64::NoOp)
         );
         assert_eq!(
             unwind_rule_from_detected_epilogue(bytes, 28),
-            Some(UnwindRuleAarch64::NoOp)
+            Some(FrameRuleAarch64::NoOp)
         );
     }
 }

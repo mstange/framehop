@@ -10,7 +10,7 @@ use gimli::{
 
 pub(crate) use gimli::BaseAddresses;
 
-use crate::{arch::Arch, unwind_result::UnwindResult, ModuleSectionInfo};
+use crate::{arch::Arch, unwind_result::UnwindResult, unwind_rule::UnwindRule, ModuleSectionInfo};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DwarfUnwinderError {
@@ -21,6 +21,8 @@ pub enum DwarfUnwinderError {
     CouldNotRecoverCfa,
     CouldNotRecoverReturnAddress,
     CouldNotRecoverFramePointer,
+    /// A rule needed a register whose value is unknown in this walk.
+    RegisterValueUnknown,
 }
 
 impl core::fmt::Display for DwarfUnwinderError {
@@ -38,6 +40,9 @@ impl core::fmt::Display for DwarfUnwinderError {
             Self::CouldNotRecoverCfa => write!(f, "Could not recover the CFA"),
             Self::CouldNotRecoverReturnAddress => write!(f, "Could not recover the return address"),
             Self::CouldNotRecoverFramePointer => write!(f, "Could not recover the frame pointer"),
+            Self::RegisterValueUnknown => {
+                write!(f, "A rule needed a register whose value is unknown")
+            }
         }
     }
 }
@@ -69,13 +74,27 @@ pub enum ConversionError {
     FramePointerRuleDoesNotRestoreFp,
     FramePointerRuleDoesNotRestoreBp,
     FramePointerRuleHasStrangeBpOffset,
+    CalleeSavedRuleNotCacheable,
+    CalleeSavedRuleDoesNotFit,
+    RuleTableFull,
+    TooManyValExpressions,
+    CfaExpressionRuleDoesNotRestoreLrAndFp,
+    CfaExpressionOffsetDoesNotFit,
 }
 
 pub trait DwarfUnwinding: Arch {
+    /// The vendor for gimli's CFI parsing. On aarch64, this makes gimli
+    /// understand `DW_CFA_AARCH64_negate_ra_state`, which code compiled with
+    /// return address signing (for example on Android) has in every FDE.
+    const VENDOR: gimli::Vendor = gimli::Vendor::Default;
+
+    /// `rule_table` is where rules derived from this row may store decoded rules
+    /// which don't fit into the rule itself.
     fn unwind_frame<F, R, UCS, ES>(
         section: &impl UnwindSection<R>,
         unwind_info: &UnwindTableRow<R::Offset, UCS>,
         encoding: Encoding,
+        rule_table: &mut RuleTable<Self>,
         regs: &mut Self::UnwindRegs,
         is_first_frame: bool,
         read_stack: &mut F,
@@ -88,6 +107,9 @@ pub trait DwarfUnwinding: Arch {
 
     fn rule_if_uncovered_by_fde() -> Self::UnwindRule;
 }
+
+/// The rule table of the arch's unwind rules.
+pub type RuleTable<A> = <<A as Arch>::UnwindRule as UnwindRule>::RuleTable;
 
 pub enum UnwindSectionType {
     EhFrame,
@@ -104,6 +126,7 @@ where
     unwind_section_type: UnwindSectionType,
     eh_frame_hdr: Option<ParsedEhFrameHdr<EndianSlice<'a, R::Endian>>>,
     unwind_context: &'a mut UnwindContext<R::Offset, UCS>,
+    rule_table: &'a mut RuleTable<A>,
     base_svma: u64,
     bases: BaseAddresses,
     _arch: PhantomData<A>,
@@ -120,6 +143,7 @@ where
         unwind_section_type: UnwindSectionType,
         eh_frame_hdr_data: Option<&'a [u8]>,
         unwind_context: &'a mut UnwindContext<R::Offset, UCS>,
+        rule_table: &'a mut RuleTable<A>,
         bases: BaseAddresses,
         base_svma: u64,
     ) -> Self {
@@ -135,6 +159,7 @@ where
             unwind_section_type,
             eh_frame_hdr,
             unwind_context,
+            rule_table,
             bases,
             base_svma,
             _arch: PhantomData,
@@ -168,7 +193,14 @@ where
             UnwindSectionType::EhFrame => {
                 let mut eh_frame = EhFrame::from(unwind_section_data);
                 eh_frame.set_address_size(8);
-                let unwind_info = self.unwind_info_for_fde(&eh_frame, lookup_svma, fde_offset);
+                eh_frame.set_vendor(A::VENDOR);
+                let unwind_info = Self::unwind_info_for_fde(
+                    &self.bases,
+                    self.unwind_context,
+                    &eh_frame,
+                    lookup_svma,
+                    fde_offset,
+                );
                 if let Err(DwarfUnwinderError::UnwindInfoForAddressFailed(_)) = unwind_info {
                     return Ok(UnwindResult::ExecRule(A::rule_if_uncovered_by_fde()));
                 }
@@ -177,6 +209,7 @@ where
                     &eh_frame,
                     unwind_info,
                     encoding,
+                    self.rule_table,
                     regs,
                     is_first_frame,
                     read_stack,
@@ -185,7 +218,14 @@ where
             UnwindSectionType::DebugFrame => {
                 let mut debug_frame = DebugFrame::from(unwind_section_data);
                 debug_frame.set_address_size(8);
-                let unwind_info = self.unwind_info_for_fde(&debug_frame, lookup_svma, fde_offset);
+                debug_frame.set_vendor(A::VENDOR);
+                let unwind_info = Self::unwind_info_for_fde(
+                    &self.bases,
+                    self.unwind_context,
+                    &debug_frame,
+                    lookup_svma,
+                    fde_offset,
+                );
                 if let Err(DwarfUnwinderError::UnwindInfoForAddressFailed(_)) = unwind_info {
                     return Ok(UnwindResult::ExecRule(A::rule_if_uncovered_by_fde()));
                 }
@@ -194,6 +234,7 @@ where
                     &debug_frame,
                     unwind_info,
                     encoding,
+                    self.rule_table,
                     regs,
                     is_first_frame,
                     read_stack,
@@ -202,26 +243,22 @@ where
         }
     }
 
-    fn unwind_info_for_fde<US: UnwindSection<R>>(
-        &mut self,
+    fn unwind_info_for_fde<'c, US: UnwindSection<R>>(
+        bases: &BaseAddresses,
+        unwind_context: &'c mut UnwindContext<R::Offset, UCS>,
         unwind_section: &US,
         lookup_svma: u64,
         fde_offset: u32,
-    ) -> Result<(&UnwindTableRow<R::Offset, UCS>, Encoding), DwarfUnwinderError> {
+    ) -> Result<(&'c UnwindTableRow<R::Offset, UCS>, Encoding), DwarfUnwinderError> {
         let fde = unwind_section.fde_from_offset(
-            &self.bases,
+            bases,
             US::Offset::from(R::Offset::from_u32(fde_offset)),
             US::cie_from_offset,
         );
         let fde = fde.map_err(DwarfUnwinderError::FdeFromOffsetFailed)?;
         let encoding = fde.cie().encoding();
         let unwind_info: &UnwindTableRow<_, _> = fde
-            .unwind_info_for_address(
-                unwind_section,
-                &self.bases,
-                self.unwind_context,
-                lookup_svma,
-            )
+            .unwind_info_for_address(unwind_section, bases, unwind_context, lookup_svma)
             .map_err(DwarfUnwinderError::UnwindInfoForAddressFailed)?;
         Ok((unwind_info, encoding))
     }
@@ -386,6 +423,7 @@ pub trait DwarfUnwindRegs {
     fn get(&self, register: Register) -> Option<u64>;
 }
 
+/// Evaluate the CFA rule. `read_stack` is used for memory reads in DWARF expressions.
 pub fn eval_cfa_rule<R, F, UR, S>(
     section: &impl UnwindSection<R>,
     rule: &CfaRule<R::Offset>,

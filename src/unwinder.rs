@@ -175,6 +175,44 @@ impl<U: Unwinder, F: FnMut(u64) -> Result<u64, ()>> UnwindIterator<'_, '_, '_, U
     }
 }
 
+impl<U: Unwinder, F: FnMut(u64) -> Result<u64, ()>> UnwindIterator<'_, '_, '_, U, F> {
+    /// The current register values. After `next()` has returned a frame, these are the
+    /// (recovered) register values of that frame.
+    pub fn regs(&self) -> &U::UnwindRegs {
+        &self.regs
+    }
+}
+
+impl<U, F> UnwindIterator<'_, '_, '_, U, F>
+where
+    U: Unwinder<UnwindRegs = crate::aarch64::UnwindRegsAarch64>,
+    F: FnMut(u64) -> Result<u64, ()>,
+{
+    /// The val_expression values of the frame that was stepped by the most recent call
+    /// to `next()`, for example the dex pc of an Android ART interpreter frame.
+    ///
+    /// When `next()` returns frame `n + 1` (a return address), the unwinder has just
+    /// stepped out of frame `n`, and this method returns the values of frame `n`.
+    /// It returns nothing after the first call to `next()` (which returns the
+    /// instruction pointer without stepping). If `next()` returned `Ok(None)`, these
+    /// are the values of the last frame, i.e. the one whose step ended the iteration.
+    ///
+    /// See [`UnwindRegsAarch64::val_expression_values`](crate::aarch64::UnwindRegsAarch64::val_expression_values).
+    pub fn last_val_expression_values(
+        &self,
+    ) -> impl Iterator<Item = crate::aarch64::ValExpressionValue> + '_ {
+        let stepped = !matches!(
+            self.state,
+            UnwindIteratorState::Initial(_)
+                | UnwindIteratorState::Unwinding(FrameAddress::InstructionPointer(_))
+        );
+        stepped
+            .then_some(&self.regs)
+            .into_iter()
+            .flat_map(|regs| regs.val_expression_values())
+    }
+}
+
 impl<U: Unwinder, F: FnMut(u64) -> Result<u64, ()>> FallibleIterator
     for UnwindIterator<'_, '_, '_, U, F>
 {
@@ -187,7 +225,8 @@ impl<U: Unwinder, F: FnMut(u64) -> Result<u64, ()>> FallibleIterator
 }
 
 /// This global generation counter makes it so that the cache can be shared
-/// between multiple unwinders.
+/// between multiple unwinders. It also hands out the modules' cache keys, so a
+/// module's key never equals an unwinder's generation.
 /// A generation is never reused, because a cache can outlive any number of module
 /// changes, and a reused generation could make it apply a rule from an old module.
 /// When the counter runs out, changing modules panics instead. Targets without
@@ -354,17 +393,22 @@ impl<D: Deref<Target = [u8]>, A: Unwinding, P: AllocationPolicy> UnwinderInterna
     {
         let lookup_address = address.address_for_lookup();
         let is_first_frame = !address.is_return_address();
-        let cache_handle = match cache
-            .rule_cache
-            .lookup(lookup_address, self.modules_generation)
-        {
+        // Rules for addresses in a module only depend on that module, so they are cached
+        // under the module's key and shared by all unwinders which have this module.
+        // Rules for other addresses depend on the whole set of modules.
+        let module = self.find_module_for_address(lookup_address);
+        let cache_key = match module {
+            Some((module_index, _)) => self.modules[module_index].cache_key,
+            None => self.modules_generation,
+        };
+        let cache_handle = match cache.rule_cache.lookup(lookup_address, cache_key) {
             CacheResult::Hit(unwind_rule) => {
-                return unwind_rule.exec(is_first_frame, regs, read_stack);
+                return unwind_rule.exec(&cache.rule_table, is_first_frame, regs, read_stack);
             }
             CacheResult::Miss(handle) => handle,
         };
 
-        let unwind_rule = match self.find_module_for_address(lookup_address) {
+        let unwind_rule = match module {
             None => A::UnwindRule::fallback_rule(),
             Some((module_index, relative_lookup_address)) => {
                 let module = &self.modules[module_index];
@@ -380,6 +424,7 @@ impl<D: Deref<Target = [u8]>, A: Unwinding, P: AllocationPolicy> UnwinderInterna
                     Ok(UnwindResult::Uncacheable(return_address)) => {
                         return Ok(Some(return_address))
                     }
+                    Ok(UnwindResult::UncacheableError(err)) => return Err(err),
                     Err(_err) => {
                         // eprintln!("Unwinder error: {}", err);
                         A::UnwindRule::fallback_rule()
@@ -388,7 +433,7 @@ impl<D: Deref<Target = [u8]>, A: Unwinding, P: AllocationPolicy> UnwinderInterna
             }
         };
         cache.rule_cache.insert(cache_handle, unwind_rule);
-        unwind_rule.exec(is_first_frame, regs, read_stack)
+        unwind_rule.exec(&cache.rule_table, is_first_frame, regs, read_stack)
     }
 
     pub fn unwind_frame<F>(
@@ -466,6 +511,7 @@ impl<D: Deref<Target = [u8]>, A: Unwinding, P: AllocationPolicy> UnwinderInterna
                             UnwindSectionType::EhFrame,
                             None,
                             &mut cache.gimli_unwind_context,
+                            &mut cache.rule_table,
                             base_addresses.clone(),
                             module.base_svma,
                         );
@@ -490,6 +536,7 @@ impl<D: Deref<Target = [u8]>, A: Unwinding, P: AllocationPolicy> UnwinderInterna
                     UnwindSectionType::EhFrame,
                     Some(eh_frame_hdr_data),
                     &mut cache.gimli_unwind_context,
+                    &mut cache.rule_table,
                     base_addresses.clone(),
                     module.base_svma,
                 );
@@ -514,6 +561,7 @@ impl<D: Deref<Target = [u8]>, A: Unwinding, P: AllocationPolicy> UnwinderInterna
                     UnwindSectionType::EhFrame,
                     None,
                     &mut cache.gimli_unwind_context,
+                    &mut cache.rule_table,
                     base_addresses.clone(),
                     module.base_svma,
                 );
@@ -538,6 +586,7 @@ impl<D: Deref<Target = [u8]>, A: Unwinding, P: AllocationPolicy> UnwinderInterna
                     UnwindSectionType::DebugFrame,
                     None,
                     &mut cache.gimli_unwind_context,
+                    &mut cache.rule_table,
                     base_addresses.clone(),
                     module.base_svma,
                 );
@@ -763,6 +812,12 @@ struct TextByteData<D> {
 /// absolute address to the right module, and so that it can find that module's unwind
 /// information.
 ///
+/// The unwinder cache stores the rules for a module's addresses under a key which
+/// [`Module::new`] creates and which clones keep. If several unwinders share a cache,
+/// for example one unwinder per process, add clones of the same `Module` to them for
+/// a library which is mapped at the same address in several processes. They then share
+/// the cached rules for that library.
+///
 /// Type arguments:
 ///
 ///  - `D`: The type for unwind section data. This allows carrying owned data on the
@@ -782,6 +837,9 @@ pub struct Module<D> {
     base_svma: u64,
     /// The unwind data that should be used for unwinding addresses from this module.
     unwind_data: Arc<ModuleUnwindDataInternal<D>>,
+    /// The key for this module's rules in the unwinder cache. Unique per [`Module::new`]
+    /// call; clones keep it, because they have the same unwind data and addresses.
+    cache_key: u64,
 }
 
 impl<D> Clone for Module<D> {
@@ -792,6 +850,7 @@ impl<D> Clone for Module<D> {
             base_avma: self.base_avma,
             base_svma: self.base_svma,
             unwind_data: self.unwind_data.clone(),
+            cache_key: self.cache_key,
         }
     }
 }
@@ -961,6 +1020,7 @@ impl<D: Deref<Target = [u8]>> Module<D> {
             base_avma,
             base_svma: section_info.base_svma(),
             unwind_data: Arc::new(unwind_data),
+            cache_key: next_global_modules_generation(),
         }
     }
 
@@ -996,5 +1056,86 @@ mod generation_tests {
         assert!(std::panic::catch_unwind(|| next_modules_generation(&counter)).is_err());
         assert_eq!(counter.load(Ordering::Relaxed), u64::MAX);
         assert!(std::panic::catch_unwind(|| next_modules_generation(&counter)).is_err());
+    }
+}
+
+#[cfg(test)]
+mod cache_key_tests {
+    use super::*;
+    use crate::aarch64::{CacheAarch64, UnwindRegsAarch64, UnwinderAarch64};
+    use crate::rule_cache::CacheStats;
+
+    fn module(start: u64) -> Module<Vec<u8>> {
+        Module::new(
+            "lib".into(),
+            start..start + 0x1000,
+            start,
+            ExplicitModuleSectionInfo::default(),
+        )
+    }
+
+    fn unwinder(modules: &[&Module<Vec<u8>>]) -> UnwinderAarch64<Vec<u8>> {
+        let mut unwinder = UnwinderAarch64::new();
+        for module in modules {
+            unwinder.add_module((*module).clone());
+        }
+        unwinder
+    }
+
+    /// Unwinds one frame at `pc` and returns the change in (hits, misses because of
+    /// another module).
+    fn unwind(
+        unwinder: &UnwinderAarch64<Vec<u8>>,
+        cache: &mut CacheAarch64,
+        pc: u64,
+    ) -> (u64, u64) {
+        let before: CacheStats = cache.stats();
+        let mut read_stack = |_| Err(());
+        let mut regs = UnwindRegsAarch64::new(0x1234, 0x100, 0x200);
+        let _ = unwinder.unwind_frame(
+            FrameAddress::from_instruction_pointer(pc),
+            &mut regs,
+            cache,
+            &mut read_stack,
+        );
+        let after = cache.stats();
+        (
+            after.hit_count - before.hit_count,
+            after.miss_wrong_modules_count - before.miss_wrong_modules_count,
+        )
+    }
+
+    #[test]
+    fn clones_of_a_module_share_cached_rules() {
+        let lib = module(0x1000);
+        let a = unwinder(&[&lib]);
+        let mut b = unwinder(&[&lib]);
+        let c = unwinder(&[&module(0x1000)]);
+        let mut cache = CacheAarch64::new();
+
+        assert_eq!(unwind(&a, &mut cache, 0x1100), (0, 0));
+        assert_eq!(unwind(&b, &mut cache, 0x1100), (1, 0));
+        // Other modules don't affect the rules for this module's addresses.
+        b.add_module(module(0x8000));
+        assert_eq!(unwind(&b, &mut cache, 0x1100), (1, 0));
+        // A module created separately has its own rules, even with the same addresses.
+        assert_eq!(unwind(&c, &mut cache, 0x1100), (0, 1));
+        assert_eq!(unwind(&a, &mut cache, 0x1100), (0, 1));
+    }
+
+    #[test]
+    fn addresses_outside_of_modules_are_cached_per_unwinder() {
+        let lib = module(0x1000);
+        let mut a = unwinder(&[&lib]);
+        let b = unwinder(&[&lib]);
+        let mut cache = CacheAarch64::new();
+
+        assert_eq!(unwind(&a, &mut cache, 0x5000), (0, 0));
+        assert_eq!(unwind(&a, &mut cache, 0x5000), (1, 0));
+        assert_eq!(unwind(&b, &mut cache, 0x5000), (0, 1));
+        assert_eq!(unwind(&a, &mut cache, 0x5000), (0, 1));
+        // Adding a module may change the rule for an address outside of all modules.
+        a.add_module(module(0x5000));
+        assert_eq!(unwind(&a, &mut cache, 0x5000), (0, 1));
     }
 }

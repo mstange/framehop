@@ -55,14 +55,18 @@ impl AllocationPolicy for MayAllocateDuringUnwind {
 /// The unwinder cache. This needs to be created upfront before unwinding. During
 /// unwinding, the unwinder needs exclusive access to this cache.
 ///
-/// A single unwinder cache can be used with multiple unwinders alternatingly.
+/// A single unwinder cache can be used with multiple unwinders alternatingly. Unwinders
+/// which have clones of the same [`Module`](crate::Module) share the cached rules for
+/// that module's addresses.
 ///
 /// The cache stores unwind rules for addresses it has seen before, and it stores the
-/// unwind context which gimli needs for DWARF CFI evaluation.
+/// unwind context which gimli needs for DWARF CFI evaluation. The rule cache has
+/// 16381 slots of 24 bytes each, 384 KiB in total.
 pub struct Cache<R: UnwindRule, P: AllocationPolicy = MayAllocateDuringUnwind> {
     pub(crate) gimli_unwind_context:
         Box<gimli::UnwindContext<usize, P::GimliUnwindContextStorage<usize>>>,
     pub(crate) rule_cache: RuleCache<R>,
+    pub(crate) rule_table: R::RuleTable,
 }
 
 impl<R: UnwindRule, P: AllocationPolicy> Cache<R, P> {
@@ -70,6 +74,7 @@ impl<R: UnwindRule, P: AllocationPolicy> Cache<R, P> {
         Self {
             gimli_unwind_context: Box::new(gimli::UnwindContext::new_in()),
             rule_cache: RuleCache::new(),
+            rule_table: Default::default(),
         }
     }
 }

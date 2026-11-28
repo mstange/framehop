@@ -45,6 +45,7 @@ impl DwarfUnwinding for ArchX86_64 {
         section: &impl UnwindSection<R>,
         unwind_info: &UnwindTableRow<R::Offset, UCS>,
         encoding: Encoding,
+        _rule_table: &mut (),
         regs: &mut Self::UnwindRegs,
         is_first_frame: bool,
         read_stack: &mut F,

@@ -6,12 +6,14 @@ mod instruction_analysis;
 mod macho;
 #[cfg(feature = "pe")]
 mod pe;
+mod rule_table;
 mod unwind_rule;
 mod unwinder;
 mod unwindregs;
 
 pub use arch::*;
 pub use cache::*;
+pub use rule_table::*;
 pub use unwind_rule::*;
 pub use unwinder::*;
 pub use unwindregs::*;
